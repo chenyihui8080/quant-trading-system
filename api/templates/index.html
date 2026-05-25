@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>量化回测系统</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+.header { background: #161b22; padding: 16px 24px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 12px; }
+.header h1 { font-size: 20px; color: #58a6ff; }
+.header .tag { background: #238636; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+
+/* 标签页导航 */
+.tabs { display: flex; gap: 0; background: #161b22; padding: 0 24px; border-bottom: 1px solid #30363d; }
+.tab { padding: 12px 20px; cursor: pointer; color: #8b949e; font-size: 14px; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.tab:hover { color: #c9d1d9; }
+.tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+.container { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
+.grid-2 { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+.grid-full { display: grid; grid-template-columns: 1fr; gap: 20px; }
+
+.panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+.panel h2 { font-size: 15px; color: #8b949e; margin-bottom: 12px; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+.strategy-item { padding: 10px 12px; border: 1px solid #30363d; border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+.strategy-item:hover, .strategy-item.active { border-color: #58a6ff; background: #1f2937; }
+.strategy-item .name { font-weight: 600; color: #e6edf3; }
+.strategy-item .desc { font-size: 12px; color: #8b949e; margin-top: 4px; }
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 4px; }
+.form-row input, .form-row select { width: 100%; padding: 8px 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 14px; }
+.form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn { width: 100%; padding: 10px; background: #238636; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+.btn:hover { background: #2ea043; }
+.btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+.btn-blue { background: #1f6feb; }
+.btn-blue:hover { background: #388bfd; }
+.btn-outline { background: transparent; border: 1px solid #30363d; color: #c9d1d9; }
+.btn-outline:hover { border-color: #58a6ff; color: #58a6ff; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.stat-card { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; }
+.stat-card .label { font-size: 11px; color: #8b949e; text-transform: uppercase; }
+.stat-card .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+.stat-card .value.positive { color: #3fb950; }
+.stat-card .value.negative { color: #f85149; }
+.stat-card .value.neutral { color: #e6edf3; }
+
+/* 对比表格 */
+.compare-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.compare-table th, .compare-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #30363d; font-size: 13px; }
+.compare-table th { color: #8b949e; font-weight: 600; background: #0d1117; position: sticky; top: 0; }
+.compare-table td { color: #c9d1d9; }
+.compare-table tr:hover { background: #1f2937; }
+.compare-table .best { color: #3fb950; font-weight: 700; }
+.compare-table .worst { color: #f85149; }
+
+/* 优化结果表格 */
+.optimize-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.optimize-table th, .optimize-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #30363d; font-size: 13px; }
+.optimize-table th { color: #8b949e; font-weight: 600; background: #0d1117; }
+.optimize-table td { color: #c9d1d9; }
+.optimize-table tr:hover { background: #1f2937; }
+.rank-1 { background: #23863620 !important; }
+.rank-2 { background: #1f6feb15 !important; }
+.rank-3 { background: #1f6feb10 !important; }
+
+/* 风控配置 */
+.risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.risk-item { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; }
+.risk-item label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 6px; }
+.risk-item input { width: 100%; padding: 6px 8px; background: #161b22; border: 1px solid #30363d; border-radius: 4px; color: #e6edf3; font-size: 14px; }
+.risk-item .hint { font-size: 11px; color: #484f58; margin-top: 4px; }
+
+.loading { text-align: center; padding: 40px; color: #8b949e; }
+.loading .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #30363d; border-top: 2px solid #58a6ff; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 6px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.3s; }
+.toast.show { opacity: 1; }
+.toast.success { background: #238636; color: #fff; }
+.toast.error { background: #da3633; color: #fff; }
+.hidden { display: none; }
+.section-title { font-size: 16px; color: #e6edf3; margin-bottom: 16px; font-weight: 600; }
+.chart-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; margin-top: 12px; }
+.chart-box h3 { font-size: 13px; color: #8b949e; margin-bottom: 8px; }
+
+/* 登录页面 */
+.login-overlay { position: fixed; inset: 0; background: #0d1117; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.login-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 40px; width: 380px; }
+.login-box h2 { text-align: center; color: #58a6ff; margin-bottom: 8px; font-size: 24px; }
+.login-box .subtitle { text-align: center; color: #8b949e; font-size: 13px; margin-bottom: 28px; }
+.login-box .form-row { margin-bottom: 16px; }
+.login-box .form-row label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+.login-box .form-row input { width: 100%; padding: 10px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 14px; }
+.login-box .form-row input:focus { border-color: #58a6ff; outline: none; }
+.login-box .btn { margin-top: 8px; }
+.login-box .switch { text-align: center; margin-top: 16px; font-size: 13px; color: #8b949e; }
+.login-box .switch a { color: #58a6ff; cursor: pointer; text-decoration: none; }
+.login-box .switch a:hover { text-decoration: underline; }
+.login-box .error-msg { color: #f85149; font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+.header .user-info { display: flex; align-items: center; gap: 10px; }
+.header .user-info .username { color: #e6edf3; font-size: 13px; }
+.header .user-info .logout-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.header .user-info .logout-btn:hover { border-color: #f85149; color: #f85149; }
+</style>
+</head>
+<body>
+
+<!-- 登录页面 -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>量化回测系统</h2>
+    <div class="subtitle">Quantitative Trading System</div>
+    <div id="loginForm">
+      <div class="form-row">
+        <label>用户名</label>
+        <input type="text" id="loginUsername" placeholder="请输入用户名" autocomplete="username">
+      </div>
+      <div class="form-row">
+        <label>密码</label>
+        <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
+      </div>
+      <div class="error-msg" id="loginError"></div>
+      <button class="btn" onclick="doLogin()">登 录</button>
+      <div class="switch">还没有账号？<a onclick="showRegister()">立即注册</a></div>
+    </div>
+    <div id="registerForm" class="hidden">
+      <div class="form-row">
+        <label>用户名</label>
+        <input type="text" id="regUsername" placeholder="至少3位" autocomplete="username">
+      </div>
+      <div class="form-row">
+        <label>密码</label>
+        <input type="password" id="regPassword" placeholder="至少6位" autocomplete="new-password">
+      </div>
+      <div class="form-row">
+        <label>确认密码</label>
+        <input type="password" id="regPassword2" placeholder="再次输入密码" autocomplete="new-password">
+      </div>
+      <div class="error-msg" id="registerError"></div>
+      <button class="btn" onclick="doRegister()">注 册</button>
+      <div class="switch">已有账号？<a onclick="showLogin()">返回登录</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="header">
+  <h1>量化回测系统</h1>
+  <span class="tag">v2.0</span>
+  <span style="flex:1"></span>
+  <div class="user-info" id="userInfo" style="display:none">
+    <span class="username" id="displayUser"></span>
+    <button class="logout-btn" onclick="doLogout()">退出</button>
+  </div>
+  <span style="font-size:12px;color:#8b949e" id="statusText">就绪</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('backtest', this)">回测</div>
+  <div class="tab" onclick="switchTab('live', this)">实时行情</div>
+  <div class="tab" onclick="switchTab('compare', this)">策略对比</div>
+  <div class="tab" onclick="switchTab('optimize', this)">参数优化</div>
+  <div class="tab" onclick="switchTab('risk', this)">风控配置</div>
+</div>
+
+<!-- ==================== 回测页 ==================== -->
+<div class="container tab-content" id="tab-backtest">
+  <div class="grid-2">
+    <div>
+      <div class="panel">
+        <h2>选择策略</h2>
+        <div id="strategyList"></div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <h2>回测配置</h2>
+        <div class="form-row">
+          <label>股票代码</label>
+          <select id="symbolSelect"><option value="">模拟数据</option></select>
+        </div>
+        <div class="form-row">
+          <label>初始资金</label>
+          <input type="number" id="capital" value="1000000" step="100000">
+        </div>
+        <div class="form-row">
+          <label>模拟天数（无真实数据时）</label>
+          <input type="number" id="days" value="500">
+        </div>
+        <button class="btn" id="runBtn" onclick="runBacktest()">开始回测</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>回测结果</h2>
+      <div id="resultArea">
+        <div class="loading">选择策略后点击「开始回测」</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 策略对比页 ==================== -->
+  <div class="grid-full">
+    <div class="panel">
+      <h2>策略对比</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">同时运行所有策略，横向对比收益、夏普比率、最大回撤等核心指标</p>
+      <div class="form-row-inline">
+        <div class="form-row">
+          <label>股票代码</label>
+          <select id="compareSymbol"><option value="">模拟数据</option></select>
+        </div>
+        <div class="form-row">
+          <label>模拟天数</label>
+          <input type="number" id="compareDays" value="500">
+        </div>
+      </div>
+      <button class="btn btn-blue" onclick="runCompare()" id="compareBtn">运行对比</button>
+    </div>
+    <div class="panel">
+      <h2>对比结果</h2>
+      <div id="compareArea">
+        <div class="loading">点击「运行对比」开始</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 参数优化页 ==================== -->
+<!-- ==================== 实时行情页 ==================== -->
+<div class="container tab-content hidden" id="tab-live">
+  <div class="grid-full">
+    <div class="panel">
+      <h2>实时行情查看</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">查看最新行情 K 线图，支持缩放拖拽查看任意时间段</p>
+      <div class="form-row-inline">
+        <div class="form-row">
+          <label>股票</label>
+          <select id="liveSymbol"></select>
+        </div>
+        <div class="form-row">
+          <label>查看范围</label>
+          <select id="liveRange">
+            <option value="60">最近 60 天</option>
+            <option value="120">最近 120 天</option>
+            <option value="250" selected>最近 1 年</option>
+            <option value="500">最近 2 年</option>
+            <option value="0">全部</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-blue" style="width:auto;padding:10px 24px" onclick="loadLiveKline()" id="liveBtn">查看行情</button>
+        <button class="btn btn-outline" style="width:auto;padding:10px 24px" onclick="refreshData()" id="refreshBtn">刷新数据</button>
+      </div>
+      <div id="refreshMsg" style="margin-top:8px;font-size:13px;color:#3fb950"></div>
+    </div>
+
+    <!-- 股票管理 -->
+    <div class="panel" style="margin-top:12px">
+      <h2>添加股票</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">输入 A 股代码，支持沪市（600xxx）、深市（000xxx/002xxx）、创业板（300xxx）、科创板（688xxx）</p>
+      <div style="display:flex;gap:10px;align-items:end">
+        <div class="form-row" style="flex:1;margin-bottom:0">
+          <label>股票代码（多个用逗号或空格分隔）</label>
+          <input type="text" id="addStockInput" placeholder="例如：601398,600000,000858" style="font-size:14px">
+        </div>
+        <button class="btn" style="width:auto;padding:10px 24px;margin-top:0" onclick="addStocks()" id="addStockBtn">下载添加</button>
+      </div>
+      <div id="addStockMsg" style="margin-top:10px;font-size:13px;min-height:20px"></div>
+      <div id="stockListArea" style="margin-top:12px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>K 线图 + 均线 + 成交量</h2>
+      <div id="liveKlineChart" style="height:500px">
+        <div class="loading">选择股票后点击「查看行情」</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 策略对比页 ==================== -->
+<div class="container tab-content hidden" id="tab-compare">
+  <div class="grid-full">
+    <div class="panel">
+      <h2>策略对比</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">同时运行所有策略，横向对比收益、夏普比率、最大回撤等核心指标</p>
+      <div class="form-row-inline">
+        <div class="form-row">
+          <label>股票代码</label>
+          <select id="compareSymbol"><option value="">模拟数据</option></select>
+        </div>
+        <div class="form-row">
+          <label>模拟天数</label>
+          <input type="number" id="compareDays" value="500">
+        </div>
+      </div>
+      <button class="btn btn-blue" onclick="runCompare()" id="compareBtn">运行对比</button>
+    </div>
+    <div class="panel">
+      <h2>对比结果</h2>
+      <div id="compareArea">
+        <div class="loading">点击「运行对比」开始</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 参数优化页 ==================== -->
+<div class="container tab-content hidden" id="tab-optimize">
+  <div class="grid-full">
+    <div class="panel">
+      <h2>参数优化（网格搜索）</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">对策略参数进行网格搜索，找到最优参数组合</p>
+      <div class="form-row-inline">
+        <div class="form-row">
+          <label>策略</label>
+          <select id="optimizeStrategy">
+            <option value="dual_ma">双均线</option>
+            <option value="macd">MACD</option>
+            <option value="bollinger">布林带</option>
+            <option value="rsi">RSI</option>
+            <option value="kdj">KDJ</option>
+            <option value="turtle">海龟</option>
+            <option value="grid">网格交易</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>股票代码</label>
+          <select id="optimizeSymbol"><option value="">模拟数据</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>模拟天数</label>
+        <input type="number" id="optimizeDays" value="500" style="width:200px">
+      </div>
+      <button class="btn btn-blue" onclick="runOptimize()" id="optimizeBtn">开始优化</button>
+    </div>
+    <div class="panel">
+      <h2>优化结果（Top 10）</h2>
+      <div id="optimizeArea">
+        <div class="loading">选择策略后点击「开始优化」</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 风控配置页 ==================== -->
+<div class="container tab-content hidden" id="tab-risk">
+  <div class="grid-full">
+    <div class="panel">
+      <h2>风控参数配置</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:16px">配置全局风控参数，所有策略共用。修改后需重新运行回测生效。</p>
+      <div class="risk-grid">
+        <div class="risk-item">
+          <label>止损比例 (%)</label>
+          <input type="number" id="riskStopLoss" value="-5" step="0.5">
+          <div class="hint">价格下跌超过此比例触发止损卖出</div>
+        </div>
+        <div class="risk-item">
+          <label>止盈比例 (%)</label>
+          <input type="number" id="riskTakeProfit" value="15" step="1">
+          <div class="hint">价格上涨超过此比例触发止盈卖出</div>
+        </div>
+        <div class="risk-item">
+          <label>移动止损 (%)</label>
+          <input type="number" id="riskTrailingStop" value="-8" step="0.5">
+          <div class="hint">从最高点回落超过此比例触发移动止损</div>
+        </div>
+        <div class="risk-item">
+          <label>最大回撤 (%)</label>
+          <input type="number" id="riskMaxDrawdown" value="-20" step="1">
+          <div class="hint">账户回撤超过此比例触发全部平仓</div>
+        </div>
+        <div class="risk-item">
+          <label>每笔仓位（手）</label>
+          <input type="number" id="riskPositionSize" value="100" step="10">
+          <div class="hint">每次开仓的手数（1手=100股）</div>
+        </div>
+        <div class="risk-item">
+          <label>初始资金（元）</label>
+          <input type="number" id="riskCapital" value="1000000" step="100000">
+          <div class="hint">风控仓位计算基于的资金量</div>
+        </div>
+      </div>
+      <button class="btn" style="margin-top:16px" onclick="saveRiskConfig()">保存配置</button>
+      <div id="riskSaveMsg" style="margin-top:8px;font-size:13px;color:#3fb950"></div>
+    </div>
+
+    <div class="panel">
+      <h2>当前风控规则说明</h2>
+      <div style="font-size:13px;line-height:2;color:#8b949e">
+        <p><b style="color:#e6edf3">止损</b>：当持仓浮亏达到止损比例时，立即全部卖出，防止进一步亏损</p>
+        <p><b style="color:#e6edf3">止盈</b>：当持仓浮盈达到止盈比例时，立即全部卖出，锁定利润</p>
+        <p><b style="color:#e6edf3">移动止损</b>：以持仓期间最高价为基准，回落超过比例时卖出，适合趋势行情</p>
+        <p><b style="color:#e6edf3">最大回撤</b>：账户总资产从峰值回撤超过比例时，强制全部平仓</p>
+        <p><b style="color:#e6edf3">仓位管理</b>：根据风控参数自动计算每次开仓数量，避免过度集中</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 推送通知配置 -->
+  <div class="grid-full" style="margin-top:20px">
+    <div class="panel">
+      <h2>推送通知配置</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:16px">配置消息推送渠道，价格告警和交易信号将同时推送到所有已配置渠道。<b style="color:#58a6ff">飞书推荐优先配置</b>，最稳定。</p>
+      <div class="risk-grid">
+        <div class="risk-item">
+          <label>飞书 Webhook（推荐）</label>
+          <input type="text" id="cfgFeishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx">
+          <div class="hint">飞书群 → 设置 → 群机器人 → 自定义机器人 → 复制 Webhook 地址</div>
+        </div>
+        <div class="risk-item">
+          <label>飞书签名密钥（可选）</label>
+          <input type="password" id="cfgFeishuSecret" placeholder="开启签名校验后填写">
+          <div class="hint">飞书机器人设置中开启「签名校验」后获取的密钥</div>
+        </div>
+        <div class="risk-item">
+          <label>Server酱 SendKey</label>
+          <input type="text" id="cfgServerchan" placeholder="SCTxxxxxxxxx">
+          <div class="hint"><a href="https://sct.ftqq.com/" target="_blank" style="color:#58a6ff">sct.ftqq.com</a> 获取，推送到微信</div>
+        </div>
+        <div class="risk-item">
+          <label>钉钉机器人 Webhook</label>
+          <input type="text" id="cfgDingtalk" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx">
+        </div>
+        <div class="risk-item">
+          <label>企业微信 Webhook</label>
+          <input type="text" id="cfgWechat" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx">
+        </div>
+        <div class="risk-item">
+          <label>SMTP 发件服务器</label>
+          <input type="text" id="cfgSmtpHost" placeholder="smtp.qq.com">
+        </div>
+        <div class="risk-item">
+          <label>发件邮箱</label>
+          <input type="text" id="cfgSmtpUser" placeholder="your@qq.com">
+        </div>
+        <div class="risk-item">
+          <label>邮箱授权码</label>
+          <input type="password" id="cfgSmtpPass" placeholder="QQ邮箱设置中获取">
+        </div>
+        <div class="risk-item">
+          <label>收件邮箱</label>
+          <input type="text" id="cfgEmailTo" placeholder="target@qq.com">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn" onclick="saveNotifyConfig()">保存推送配置</button>
+        <button class="btn" style="background:#238636" onclick="testNotify()">发送测试消息</button>
+      </div>
+      <div id="notifySaveMsg" style="margin-top:8px;font-size:13px;color:#3fb950"></div>
+    </div>
+
+    <div class="panel">
+      <h2>推送配置说明</h2>
+      <div style="font-size:13px;line-height:2;color:#8b949e">
+        <p><b style="color:#e6edf3">飞书（推荐）</b>：创建飞书群 → 添加自定义机器人 → 复制 Webhook 地址。支持富文本卡片消息，稳定可靠</p>
+        <p><b style="color:#e6edf3">Server酱</b>：注册 <a href="https://sct.ftqq.com/" target="_blank" style="color:#58a6ff">sct.ftqq.com</a> → 获取 SendKey → 免费推送到微信</p>
+        <p><b style="color:#e6edf3">钉钉</b>：钉钉群 → 智能群助手 → 添加自定义机器人 → 复制 Webhook</p>
+        <p><b style="color:#e6edf3">企业微信</b>：企业微信群 → 群机器人 → 添加 → 复制 Webhook 地址</p>
+        <p><b style="color:#e6edf3">邮件</b>：需填写 SMTP 服务器、发件邮箱和授权码（QQ邮箱在 设置→账户 中获取）</p>
+        <p style="margin-top:8px;color:#f0883e">配置完成后点击「发送测试消息」验证是否正常接收</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let selectedStrategy = null;
+const strategyKeys = [];
+
+// ==================== 认证管理 ====================
+function getToken() { return localStorage.getItem('quant_token'); }
+function setToken(token) { localStorage.setItem('quant_token', token); }
+function clearToken() { localStorage.removeItem('quant_token'); localStorage.removeItem('quant_user'); }
+
+async function authFetch(url, options = {}) {
+  const token = getToken();
+  if (!options.headers) options.headers = {};
+  if (token) options.headers['Authorization'] = 'Bearer ' + token;
+  const resp = await fetch(url, options);
+  if (resp.status === 401) {
+    clearToken();
+    showLoginOverlay();
+    throw new Error('认证过期，请重新登录');
+  }
+  return resp;
+}
+
+function showLoginOverlay() { document.getElementById('loginOverlay').style.display = 'flex'; }
+function hideLoginOverlay() { document.getElementById('loginOverlay').style.display = 'none'; }
+function showLogin() { document.getElementById('loginForm').classList.remove('hidden'); document.getElementById('registerForm').classList.add('hidden'); document.getElementById('loginError').textContent = ''; }
+function showRegister() { document.getElementById('loginForm').classList.add('hidden'); document.getElementById('registerForm').classList.remove('hidden'); document.getElementById('registerError').textContent = ''; }
+
+async function doLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!username || !password) { document.getElementById('loginError').textContent = '请输入用户名和密码'; return; }
+  try {
+    const resp = await fetch('/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
+    const data = await resp.json();
+    if (!resp.ok) { document.getElementById('loginError').textContent = data.detail || '登录失败'; return; }
+    setToken(data.token);
+    localStorage.setItem('quant_user', data.username);
+    onLoginSuccess(data.username);
+  } catch(e) { document.getElementById('loginError').textContent = '网络错误'; }
+}
+
+async function doRegister() {
+  const username = document.getElementById('regUsername').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const password2 = document.getElementById('regPassword2').value;
+  if (!username || !password) { document.getElementById('registerError').textContent = '请填写完整信息'; return; }
+  if (password !== password2) { document.getElementById('registerError').textContent = '两次密码不一致'; return; }
+  try {
+    const resp = await fetch('/auth/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
+    const data = await resp.json();
+    if (!resp.ok) { document.getElementById('registerError').textContent = data.detail || '注册失败'; return; }
+    setToken(data.token);
+    localStorage.setItem('quant_user', data.username);
+    onLoginSuccess(data.username);
+  } catch(e) { document.getElementById('registerError').textContent = '网络错误'; }
+}
+
+function onLoginSuccess(username) {
+  hideLoginOverlay();
+  document.getElementById('userInfo').style.display = 'flex';
+  document.getElementById('displayUser').textContent = username;
+  init();
+}
+
+function doLogout() {
+  clearToken();
+  document.getElementById('userInfo').style.display = 'none';
+  showLoginOverlay();
+  showLogin();
+}
+
+// 回车键支持
+document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('regPassword2').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+
+// ==================== 初始化 ====================
+async function init() {
+  const [strategies, data] = await Promise.all([
+    authFetch('/strategies').then(r => r.json()),
+    authFetch('/data').then(r => r.json()),
+  ]);
+
+  const container = document.getElementById('strategyList');
+  for (const [key, info] of Object.entries(strategies.strategies)) {
+    strategyKeys.push(key);
+    const div = document.createElement('div');
+    div.className = 'strategy-item';
+    div.dataset.key = key;
+    div.innerHTML = `<div class="name">${info.name}</div><div class="desc">${info.desc}</div>`;
+    div.onclick = () => selectStrategy(key, div);
+    container.appendChild(div);
+  }
+
+  // 同步数据到所有下拉框
+  const selects = ['symbolSelect', 'compareSymbol', 'optimizeSymbol', 'liveSymbol'];
+  selects.forEach(id => {
+    const sel = document.getElementById(id);
+    data.data.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.symbol;
+      opt.textContent = `${d.symbol}（${d.start} ~ ${d.end}，${d.rows}条）`;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ==================== 标签页切换 ====================
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+}
+
+// ==================== 回测 ====================
+function selectStrategy(key, el) {
+  document.querySelectorAll('.strategy-item').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  selectedStrategy = key;
+}
+
+async function runBacktest() {
+  if (!selectedStrategy) { showToast('请先选择一个策略', 'error'); return; }
+  const btn = document.getElementById('runBtn');
+  const result = document.getElementById('resultArea');
+  btn.disabled = true; btn.textContent = '回测中...';
+  result.innerHTML = '<div class="loading"><span class="spinner"></span>正在运行回测...</div>';
+
+  const symbol = document.getElementById('symbolSelect').value || null;
+  const capital = parseInt(document.getElementById('capital').value) || 1000000;
+  const days = parseInt(document.getElementById('days').value) || 500;
+
+  // 读取本地保存的风控配置
+  let risk = null;
+  const savedRisk = localStorage.getItem('risk_config');
+  if (savedRisk) {
+    try {
+      const c = JSON.parse(savedRisk);
+      risk = {
+        stop_loss_pct: c.stop_loss_pct,
+        take_profit_pct: c.take_profit_pct,
+        trailing_stop_pct: c.trailing_stop_pct,
+        max_drawdown_pct: c.max_drawdown_pct,
+        position_size: c.position_size,
+      };
+    } catch(e) {}
+  }
+
+  try {
+    const res = await authFetch('/backtest-detail', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ strategy: selectedStrategy, symbol, capital, days, risk }),
+    });
+    const data = await res.json();
+    if (res.ok) { renderResult(data); showToast('回测完成', 'success'); }
+    else { result.innerHTML = `<div style="color:#f85149">${data.detail || '回测失败'}</div>`; }
+  } catch (e) { result.innerHTML = `<div style="color:#f85149">请求失败: ${e.message}</div>`; }
+
+  btn.disabled = false; btn.textContent = '开始回测';
+}
+
+function renderResult(data) {
+  const s = data.stats;
+  if (!s || Object.keys(s).length === 0) {
+    document.getElementById('resultArea').innerHTML = '<div style="color:#8b949e">无交易记录</div>';
+    return;
+  }
+  const pnl = s.total_net_pnl, ret = s.total_return;
+  const pnlC = pnl >= 0 ? 'positive' : 'negative', retC = ret >= 0 ? 'positive' : 'negative';
+  document.getElementById('resultArea').innerHTML = `
+    <div style="margin-bottom:12px;font-size:13px;color:#8b949e">
+      策略: <b style="color:#e6edf3">${data.strategy}</b> &nbsp;|&nbsp;
+      数据: <b style="color:#e6edf3">${data.symbol}</b>（${data.data_count}条） &nbsp;|&nbsp;
+      周期: ${s.start_date} ~ ${s.end_date}
+    </div>
+    <div class="stats-grid">
+      ${statCard('总收益', ret.toFixed(2) + '%', retC)}
+      ${statCard('总盈亏', '¥' + fmtN(pnl), pnlC)}
+      ${statCard('最终资金', '¥' + fmtN(s.end_balance), 'neutral')}
+      ${statCard('年化收益', s.annual_return.toFixed(2) + '%', s.annual_return >= 0 ? 'positive' : 'negative')}
+      ${statCard('夏普比率', s.sharpe_ratio.toFixed(2), s.sharpe_ratio >= 1 ? 'positive' : s.sharpe_ratio >= 0 ? 'neutral' : 'negative')}
+      ${statCard('最大回撤', s.max_ddpercent.toFixed(2) + '%', 'negative')}
+      ${statCard('回撤天数', s.max_drawdown_duration + '天', 'neutral')}
+      ${statCard('交易次数', s.total_trade_count, 'neutral')}
+      ${statCard('盈利天数', s.profit_days, 'positive')}
+      ${statCard('亏损天数', s.loss_days, 'negative')}
+      ${statCard('日均盈亏', '¥' + s.daily_net_pnl.toFixed(2), s.daily_net_pnl >= 0 ? 'positive' : 'negative')}
+      ${statCard('手续费', '¥' + s.total_commission.toFixed(2), 'neutral')}
+    </div>
+    <div class="chart-box"><h3>资金曲线</h3><div id="equityChart" style="height:300px"></div></div>
+    <div class="chart-box" style="margin-top:12px"><h3>K线图 + 买卖点</h3><div id="klineChart" style="height:400px"></div></div>
+  `;
+
+  // 渲染图表
+  setTimeout(() => {
+    if (data.daily && data.daily.length > 0) renderEquityChart(data.daily);
+    if (data.kline && data.kline.length > 0) renderKlineChart(data.kline, data.trades || []);
+  }, 100);
+}
+
+// ==================== 策略对比 ====================
+async function runCompare() {
+  const btn = document.getElementById('compareBtn');
+  const area = document.getElementById('compareArea');
+  btn.disabled = true; btn.textContent = '对比中...';
+  area.innerHTML = '<div class="loading"><span class="spinner"></span>正在运行所有策略...</div>';
+
+  const symbol = document.getElementById('compareSymbol').value || null;
+  const days = parseInt(document.getElementById('compareDays').value) || 500;
+
+  try {
+    const res = await authFetch('/compare', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ symbol, days }),
+    });
+    const data = await res.json();
+    if (res.ok) { renderCompare(data.results); showToast('对比完成', 'success'); }
+    else { area.innerHTML = `<div style="color:#f85149">${data.detail || '对比失败'}</div>`; }
+  } catch (e) { area.innerHTML = `<div style="color:#f85149">请求失败: ${e.message}</div>`; }
+
+  btn.disabled = false; btn.textContent = '运行对比';
+}
+
+function renderCompare(results) {
+  if (!results || results.length === 0) {
+    document.getElementById('compareArea').innerHTML = '<div style="color:#8b949e">无对比数据</div>';
+    return;
+  }
+
+  // 找最优/最差
+  const bestReturn = Math.max(...results.map(r => r.stats?.total_return || -Infinity));
+  const bestSharpe = Math.max(...results.map(r => r.stats?.sharpe_ratio || -Infinity));
+  const bestDD = Math.max(...results.map(r => r.stats?.max_ddpercent || -Infinity)); // 回撤是负数，最大=最小绝对值
+
+  let rows = '';
+  results.forEach(r => {
+    const s = r.stats || {};
+    const ret = s.total_return || 0, sharpe = s.sharpe_ratio || 0, dd = s.max_ddpercent || 0;
+    const retCls = ret === bestReturn ? 'best' : (ret < 0 ? 'worst' : '');
+    const sharpeCls = sharpe === bestSharpe ? 'best' : (sharpe < 0 ? 'worst' : '');
+    const ddCls = dd === bestDD ? 'best' : '';
+
+    rows += `<tr>
+      <td style="font-weight:600;color:#e6edf3">${r.name}</td>
+      <td class="${retCls}">${ret.toFixed(2)}%</td>
+      <td class="${sharpeCls}">${sharpe.toFixed(2)}</td>
+      <td class="${ddCls}">${dd.toFixed(2)}%</td>
+      <td>${fmtN(s.end_balance || 0)}</td>
+      <td>${s.total_trade_count || 0}</td>
+      <td>${(s.annual_return || 0).toFixed(2)}%</td>
+    </tr>`;
+  });
+
+  document.getElementById('compareArea').innerHTML = `
+    <div style="overflow-x:auto">
+      <table class="compare-table">
+        <thead><tr>
+          <th>策略</th><th>总收益</th><th>夏普比率</th><th>最大回撤</th><th>最终资金</th><th>交易次数</th><th>年化收益</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;font-size:12px;color:#8b949e">
+      <span style="color:#3fb950">绿色</span> = 最优 &nbsp;|&nbsp; <span style="color:#f85149">红色</span> = 最差
+    </div>`;
+}
+
+// ==================== 参数优化 ====================
+async function runOptimize() {
+  const btn = document.getElementById('optimizeBtn');
+  const area = document.getElementById('optimizeArea');
+  btn.disabled = true; btn.textContent = '优化中...';
+  area.innerHTML = '<div class="loading"><span class="spinner"></span>正在搜索最优参数（可能需要较长时间）...</div>';
+
+  const strategy = document.getElementById('optimizeStrategy').value;
+  const symbol = document.getElementById('optimizeSymbol').value || null;
+  const days = parseInt(document.getElementById('optimizeDays').value) || 500;
+
+  try {
+    const res = await authFetch('/optimize', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ strategy, symbol, days }),
+    });
+    const data = await res.json();
+    if (res.ok) { renderOptimize(data); showToast(`优化完成，共${data.total_combos}种组合`, 'success'); }
+    else { area.innerHTML = `<div style="color:#f85149">${data.detail || '优化失败'}</div>`; }
+  } catch (e) { area.innerHTML = `<div style="color:#f85149">请求失败: ${e.message}</div>`; }
+
+  btn.disabled = false; btn.textContent = '开始优化';
+}
+
+function renderOptimize(data) {
+  const results = data.results;
+  if (!results || results.length === 0) {
+    document.getElementById('optimizeArea').innerHTML = '<div style="color:#8b949e">无优化结果</div>';
+    return;
+  }
+
+  let rows = '';
+  results.forEach((r, i) => {
+    const rank = i + 1;
+    const cls = rank <= 3 ? `rank-${rank}` : '';
+    const s = r.stats || {};
+    const paramsStr = Object.entries(r.params || {}).map(([k,v]) => `${k}=${v}`).join(', ');
+    rows += `<tr class="${cls}">
+      <td style="font-weight:700;color:${rank===1?'#3fb950':rank<=3?'#58a6ff':'#e6edf3'}">#${rank}</td>
+      <td style="font-size:12px;font-family:monospace">${paramsStr}</td>
+      <td style="color:${(s.total_return||0)>=0?'#3fb950':'#f85149'}">${(s.total_return||0).toFixed(2)}%</td>
+      <td>${(s.sharpe_ratio||0).toFixed(2)}</td>
+      <td style="color:#f85149">${(s.max_ddpercent||0).toFixed(2)}%</td>
+      <td>${s.total_trade_count||0}</td>
+    </tr>`;
+  });
+
+  document.getElementById('optimizeArea').innerHTML = `
+    <div style="margin-bottom:8px;font-size:13px;color:#8b949e">
+      策略: <b style="color:#e6edf3">${data.strategy}</b> &nbsp;|&nbsp;
+      共测试 <b style="color:#e6edf3">${data.total_combos}</b> 种参数组合
+    </div>
+    <div style="overflow-x:auto">
+      <table class="optimize-table">
+        <thead><tr>
+          <th>排名</th><th>参数</th><th>总收益</th><th>夏普比率</th><th>最大回撤</th><th>交易次数</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ==================== 风控配置 ====================
+function saveRiskConfig() {
+  const config = {
+    stop_loss_pct: parseFloat(document.getElementById('riskStopLoss').value),
+    take_profit_pct: parseFloat(document.getElementById('riskTakeProfit').value),
+    trailing_stop_pct: parseFloat(document.getElementById('riskTrailingStop').value),
+    max_drawdown_pct: parseFloat(document.getElementById('riskMaxDrawdown').value),
+    position_size: parseInt(document.getElementById('riskPositionSize').value),
+    capital: parseInt(document.getElementById('riskCapital').value),
+  };
+  localStorage.setItem('risk_config', JSON.stringify(config));
+  document.getElementById('riskSaveMsg').textContent = '已保存到本地，回测时自动应用';
+  setTimeout(() => { document.getElementById('riskSaveMsg').textContent = ''; }, 3000);
+  showToast('风控配置已保存', 'success');
+}
+
+// 启动时加载已保存的风控配置
+function loadRiskConfig() {
+  const saved = localStorage.getItem('risk_config');
+  if (!saved) return;
+  try {
+    const c = JSON.parse(saved);
+    if (c.stop_loss_pct != null) document.getElementById('riskStopLoss').value = c.stop_loss_pct;
+    if (c.take_profit_pct != null) document.getElementById('riskTakeProfit').value = c.take_profit_pct;
+    if (c.trailing_stop_pct != null) document.getElementById('riskTrailingStop').value = c.trailing_stop_pct;
+    if (c.max_drawdown_pct != null) document.getElementById('riskMaxDrawdown').value = c.max_drawdown_pct;
+    if (c.position_size != null) document.getElementById('riskPositionSize').value = c.position_size;
+    if (c.capital != null) document.getElementById('riskCapital').value = c.capital;
+  } catch(e) {}
+}
+
+// ==================== 推送通知配置 ====================
+async function saveNotifyConfig() {
+  const cfg = {
+    feishu_webhook: document.getElementById('cfgFeishuWebhook').value.trim(),
+    feishu_secret: document.getElementById('cfgFeishuSecret').value.trim(),
+    serverchan_key: document.getElementById('cfgServerchan').value.trim(),
+    dingtalk_url: document.getElementById('cfgDingtalk').value.trim(),
+    wechat_url: document.getElementById('cfgWechat').value.trim(),
+    smtp_host: document.getElementById('cfgSmtpHost').value.trim(),
+    smtp_port: 465,
+    smtp_user: document.getElementById('cfgSmtpUser').value.trim(),
+    smtp_pass: document.getElementById('cfgSmtpPass').value.trim(),
+    email_to: document.getElementById('cfgEmailTo').value.trim(),
+  };
+  try {
+    const resp = await authFetch('/notify-config', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(cfg),
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      localStorage.setItem('notify_config', JSON.stringify(cfg));
+      const channels = data.channels || {};
+      const enabled = Object.entries(channels).filter(([,v]) => v).map(([k]) => k);
+      document.getElementById('notifySaveMsg').textContent = enabled.length > 0
+        ? '已启用: ' + enabled.join(', ')
+        : '已保存（未启用任何渠道）';
+      showToast('推送配置已保存', 'success');
+    } else {
+      showToast(data.detail || '保存失败', 'error');
+    }
+  } catch(e) { showToast('保存失败: ' + e.message, 'error'); }
+}
+
+async function testNotify() {
+  try {
+    const resp = await authFetch('/notify/test', { method: 'POST' });
+    const data = await resp.json();
+    const channels = Object.entries(data).filter(([,v]) => typeof v === 'boolean');
+    const success = channels.filter(([,v]) => v).map(([k]) => k);
+    const failed = channels.filter(([,v]) => !v).map(([k]) => k);
+    let msg = '';
+    if (success.length) msg += '成功: ' + success.join(', ');
+    if (failed.length) msg += (msg ? ' | ' : '') + '失败: ' + failed.join(', ');
+    if (!channels.length) msg = '未配置任何推送渠道';
+    document.getElementById('notifySaveMsg').textContent = msg;
+    showToast(success.length ? '测试消息已发送' : '发送失败', success.length ? 'success' : 'error');
+  } catch(e) { showToast('测试失败: ' + e.message, 'error'); }
+}
+
+function loadNotifyConfig() {
+  const saved = localStorage.getItem('notify_config');
+  if (!saved) return;
+  try {
+    const c = JSON.parse(saved);
+    if (c.feishu_webhook) document.getElementById('cfgFeishuWebhook').value = c.feishu_webhook;
+    if (c.feishu_secret) document.getElementById('cfgFeishuSecret').value = c.feishu_secret;
+    if (c.serverchan_key) document.getElementById('cfgServerchan').value = c.serverchan_key;
+    if (c.dingtalk_url) document.getElementById('cfgDingtalk').value = c.dingtalk_url;
+    if (c.wechat_url) document.getElementById('cfgWechat').value = c.wechat_url;
+    if (c.smtp_host) document.getElementById('cfgSmtpHost').value = c.smtp_host;
+    if (c.smtp_user) document.getElementById('cfgSmtpUser').value = c.smtp_user;
+    if (c.smtp_pass) document.getElementById('cfgSmtpPass').value = c.smtp_pass;
+    if (c.email_to) document.getElementById('cfgEmailTo').value = c.email_to;
+  } catch(e) {}
+}
+
+// ==================== 工具函数 ====================
+function statCard(label, value, cls) {
+  return `<div class="stat-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
+}
+function fmtN(n) { return Number(n).toLocaleString('zh-CN', {maximumFractionDigits: 0}); }
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast show ${type}`;
+  setTimeout(() => t.className = 'toast', 2000);
+}
+
+// ==================== ECharts 图表 ====================
+function renderEquityChart(daily) {
+  const el = document.getElementById('equityChart');
+  if (!el) return;
+  const chart = echarts.init(el, 'dark');
+  const dates = daily.map(d => d.date);
+  const balances = daily.map(d => d.balance);
+  const pnls = daily.map(d => d.net_pnl);
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['资金', '日盈亏'], textStyle: { color: '#8b949e' }, top: 0 },
+    grid: { left: 60, right: 20, top: 40, bottom: 60 },
+    dataZoom: [{ type: 'inside', start: 80, end: 100 }, { type: 'slider', bottom: 10, height: 20, borderColor: '#30363d', textStyle: { color: '#484f58' } }],
+    xAxis: { type: 'category', data: dates, axisLabel: { color: '#484f58', fontSize: 10 } },
+    yAxis: [
+      { type: 'value', name: '资金', axisLabel: { color: '#484f58', formatter: v => (v/10000).toFixed(0)+'万' }, splitLine: { lineStyle: { color: '#21262d' } } },
+      { type: 'value', name: '日盈亏', axisLabel: { color: '#484f58' }, splitLine: { show: false } },
+    ],
+    series: [
+      { name: '资金', type: 'line', data: balances, smooth: true, lineStyle: { color: '#58a6ff', width: 2 }, itemStyle: { color: '#58a6ff' }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#58a6ff33' }, { offset: 1, color: '#58a6ff05' }] } }, showSymbol: false },
+      { name: '日盈亏', type: 'bar', yAxisIndex: 1, data: pnls, itemStyle: { color: p => p.value >= 0 ? '#3fb950' : '#f85149' }, barMaxWidth: 4 },
+    ],
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+function renderKlineChart(kline, trades) {
+  const el = document.getElementById('klineChart');
+  if (!el) return;
+  const chart = echarts.init(el, 'dark');
+
+  const dates = kline.map(k => k[0]);
+  const ohlc = kline.map(k => [k[1], k[2], k[3], k[4]]); // open, close, low, high
+
+  // 计算 MA
+  function calcMA(data, n) {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < n - 1) { result.push('-'); continue; }
+      let sum = 0;
+      for (let j = 0; j < n; j++) sum += data[i - j][1]; // close
+      result.push((sum / n).toFixed(2));
+    }
+    return result;
+  }
+  const ma5 = calcMA(kline, 5);
+  const ma20 = calcMA(kline, 20);
+
+  // 买卖点标记
+  const buyPoints = [], sellPoints = [];
+  trades.forEach(t => {
+    const date = t.datetime.split(' ')[0];
+    const idx = dates.indexOf(date);
+    if (idx < 0) return;
+    const y = kline[idx][3]; // high
+    if (t.offset === '开' || t.direction === '多') {
+      buyPoints.push({ name: '买入', coord: [date, kline[idx][3] * 1.01], value: t.price.toFixed(2),
+        symbol: 'triangle', symbolSize: 12, symbolRotate: 0, itemStyle: { color: '#3fb950' },
+        label: { show: false } });
+    } else {
+      sellPoints.push({ name: '卖出', coord: [date, kline[idx][4] * 0.99], value: t.price.toFixed(2),
+        symbol: 'triangle', symbolSize: 12, symbolRotate: 180, itemStyle: { color: '#f85149' },
+        label: { show: false } });
+    }
+  });
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    legend: { data: ['K线', 'MA5', 'MA20'], textStyle: { color: '#8b949e' }, top: 0 },
+    grid: { left: 60, right: 20, top: 40, bottom: 80 },
+    xAxis: { type: 'category', data: dates, axisLabel: { color: '#484f58', fontSize: 10 }, boundaryGap: true },
+    yAxis: { type: 'value', scale: true, axisLabel: { color: '#484f58' }, splitLine: { lineStyle: { color: '#21262d' } } },
+    dataZoom: [{ type: 'inside', start: 80, end: 100 }, { type: 'slider', bottom: 10, height: 20, borderColor: '#30363d', textStyle: { color: '#484f58' } }],
+    series: [
+      { name: 'K线', type: 'candlestick', data: ohlc,
+        itemStyle: { color: '#f85149', color0: '#3fb950', borderColor: '#f85149', borderColor0: '#3fb950' },
+        markPoint: { data: [...buyPoints, ...sellPoints] } },
+      { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ffa657', width: 1 }, showSymbol: false },
+      { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { color: '#bc8cff', width: 1 }, showSymbol: false },
+    ],
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+// ==================== 实时行情 ====================
+async function loadLiveKline() {
+  const symbol = document.getElementById('liveSymbol').value;
+  const range = parseInt(document.getElementById('liveRange').value);
+  if (!symbol) { showToast('请选择股票', 'error'); return; }
+
+  const btn = document.getElementById('liveBtn');
+  btn.disabled = true; btn.textContent = '加载中...';
+
+  try {
+    // 用 baostock 实时 K 线接口（数据最新）
+    const res = await authFetch(`/realtime-kline/${symbol}?period=d&count=${range || 250}`);
+    const data = await res.json();
+    if (!res.ok) { showToast(data.detail || '加载失败', 'error'); return; }
+
+    // 同时获取实时行情
+    let quote = null;
+    try {
+      const qr = await authFetch(`/realtime/${symbol}`);
+      if (qr.ok) quote = await qr.json();
+    } catch(e) {}
+
+    const kline = data.kline || [];
+    const quoteInfo = quote ? `<div style="margin-bottom:8px;font-size:14px">
+      <b style="color:#e6edf3">${quote.name}</b> &nbsp;
+      <span style="color:${quote.change_pct>=0?'#3fb950':'#f85149'};font-size:18px;font-weight:700">¥${quote.price.toFixed(2)}</span> &nbsp;
+      <span style="color:${quote.change_pct>=0?'#3fb950':'#f85149'}">${quote.change_pct>=0?'+':''}${quote.change_pct.toFixed(2)}%</span>
+      &nbsp;<span style="color:#8b949e;font-size:12px">开:${quote.open.toFixed(2)} 高:${quote.high.toFixed(2)} 低:${quote.low.toFixed(2)} 更新:${quote.updated}</span>
+    </div>` : '';
+
+    renderLiveKline(kline, [], symbol, kline.length, quoteInfo);
+    showToast('行情加载完成', 'success');
+  } catch(e) { showToast('请求失败: ' + e.message, 'error'); }
+
+  btn.disabled = false; btn.textContent = '查看行情';
+}
+
+function renderLiveKline(kline, trades, symbol, total, quoteInfo) {
+  const el = document.getElementById('liveKlineChart');
+  el.innerHTML = (quoteInfo || '') + '<div id="liveChartInner" style="height:500px"></div>';
+  const chart = echarts.init(document.getElementById('liveChartInner'), 'dark');
+
+  const dates = kline.map(k => k[0]);
+  const ohlc = kline.map(k => [k[1], k[2], k[3], k[4]]);
+  const volumes = kline.map(k => k[5]);
+
+  function calcMA(data, n) {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < n - 1) { result.push('-'); continue; }
+      let sum = 0;
+      for (let j = 0; j < n; j++) sum += data[i - j][1];
+      result.push((sum / n).toFixed(2));
+    }
+    return result;
+  }
+
+  const ma5 = calcMA(kline, 5);
+  const ma10 = calcMA(kline, 10);
+  const ma20 = calcMA(kline, 20);
+
+  const buyPoints = [], sellPoints = [];
+  trades.forEach(t => {
+    const date = t.datetime.split(' ')[0];
+    const idx = dates.indexOf(date);
+    if (idx < 0) return;
+    if (t.offset === '开' || t.direction === '多') {
+      buyPoints.push({ coord: [date, kline[idx][4] * 0.98], value: t.price.toFixed(2),
+        symbol: 'triangle', symbolSize: 14, symbolRotate: 0, itemStyle: { color: '#3fb950' },
+        label: { show: true, formatter: 'B', color: '#3fb950', fontSize: 10, position: 'bottom' } });
+    } else {
+      sellPoints.push({ coord: [date, kline[idx][3] * 1.02], value: t.price.toFixed(2),
+        symbol: 'triangle', symbolSize: 14, symbolRotate: 180, itemStyle: { color: '#f85149' },
+        label: { show: true, formatter: 'S', color: '#f85149', fontSize: 10, position: 'top' } });
+    }
+  });
+
+  // 默认显示最近 60 根 K 线
+  const startPct = kline.length > 60 ? Math.round((1 - 60 / kline.length) * 100) : 0;
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    legend: { data: ['K线', 'MA5', 'MA10', 'MA20', '成交量'], textStyle: { color: '#8b949e' }, top: 0 },
+    grid: [
+      { left: 60, right: 20, top: 40, bottom: '25%' },
+      { left: 60, right: 20, top: '78%', bottom: 40 },
+    ],
+    xAxis: [
+      { type: 'category', data: dates, axisLabel: { color: '#484f58', fontSize: 10 }, boundaryGap: true, gridIndex: 0 },
+      { type: 'category', data: dates, axisLabel: { show: false }, gridIndex: 1 },
+    ],
+    yAxis: [
+      { type: 'value', scale: true, axisLabel: { color: '#484f58' }, splitLine: { lineStyle: { color: '#21262d' } }, gridIndex: 0 },
+      { type: 'value', scale: true, axisLabel: { color: '#484f58', formatter: v => (v/10000).toFixed(0)+'万' }, splitLine: { show: false }, gridIndex: 1 },
+    ],
+    dataZoom: [
+      { type: 'inside', xAxisIndex: [0, 1], start: startPct, end: 100 },
+      { type: 'slider', bottom: 10, height: 25, borderColor: '#30363d', textStyle: { color: '#484f58' }, xAxisIndex: [0, 1] },
+    ],
+    series: [
+      { name: 'K线', type: 'candlestick', data: ohlc, xAxisIndex: 0, yAxisIndex: 0,
+        itemStyle: { color: '#f85149', color0: '#3fb950', borderColor: '#f85149', borderColor0: '#3fb950' },
+        markPoint: { data: [...buyPoints, ...sellPoints] } },
+      { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ffa657', width: 1 }, showSymbol: false, xAxisIndex: 0, yAxisIndex: 0 },
+      { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { color: '#58a6ff', width: 1 }, showSymbol: false, xAxisIndex: 0, yAxisIndex: 0 },
+      { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { color: '#bc8cff', width: 1 }, showSymbol: false, xAxisIndex: 0, yAxisIndex: 0 },
+      { name: '成交量', type: 'bar', data: volumes.map((v, i) => ({
+          value: v,
+          itemStyle: { color: kline[i][2] >= kline[i][1] ? '#3fb95088' : '#f8514988' }
+        })), xAxisIndex: 1, yAxisIndex: 1 },
+    ],
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+// ==================== 股票管理 ====================
+async function addStocks() {
+  const input = document.getElementById('addStockInput').value.trim();
+  if (!input) { showToast('请输入股票代码', 'error'); return; }
+
+  // 支持逗号、空格、换行分隔
+  const symbols = input.split(/[,，\s\n]+/).map(s => s.trim()).filter(s => s.length === 6);
+  if (symbols.length === 0) { showToast('请输入有效的6位股票代码', 'error'); return; }
+
+  const btn = document.getElementById('addStockBtn');
+  const msg = document.getElementById('addStockMsg');
+  btn.disabled = true; btn.textContent = '下载中...';
+  msg.innerHTML = `<span style="color:#58a6ff">正在下载 ${symbols.length} 只股票数据，请稍候...</span>`;
+
+  try {
+    const res = await authFetch('/stocks/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({symbols}),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      let html = '<div style="font-size:13px;margin-top:8px">';
+      data.results.forEach(r => {
+        if (r.status === 'ok') {
+          html += `<div style="color:#3fb950">✓ ${r.symbol} 下载成功 (${r.rows}条，${r.start}~${r.end})</div>`;
+        } else {
+          html += `<div style="color:#f85149">✗ ${r.symbol} 失败: ${r.msg}</div>`;
+        }
+      });
+      html += `<div style="margin-top:8px;color:#8b949e">当前共 ${data.total_stocks} 只股票</div></div>`;
+      msg.innerHTML = html;
+
+      // 刷新所有下拉框
+      const selects = ['symbolSelect', 'compareSymbol', 'optimizeSymbol', 'liveSymbol'];
+      selects.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        data.results.forEach(r => {
+          if (r.status !== 'ok') return;
+          const exists = Array.from(sel.options).some(o => o.value === r.symbol);
+          if (!exists) {
+            const opt = document.createElement('option');
+            opt.value = r.symbol;
+            opt.textContent = `${r.symbol}（${r.start} ~ ${r.end}，${r.rows}条）`;
+            sel.appendChild(opt);
+          }
+        });
+      });
+      showToast(`添加完成`, 'success');
+      document.getElementById('addStockInput').value = '';
+    } else {
+      msg.innerHTML = `<span style="color:#f85149">${data.detail || '添加失败'}</span>`;
+    }
+  } catch(e) {
+    msg.innerHTML = `<span style="color:#f85149">网络错误: ${e.message}</span>`;
+  }
+  btn.disabled = false; btn.textContent = '下载添加';
+}
+
+// 回车键支持
+document.getElementById('addStockInput').addEventListener('keydown', e => { if (e.key === 'Enter') addStocks(); });
+
+async function refreshData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true; btn.textContent = '刷新中...';
+  document.getElementById('refreshMsg').textContent = '正在从 baostock 下载最新数据，可能需要 30 秒...';
+
+  try {
+    const res = await authFetch('/refresh-data', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('refreshMsg').textContent = `已更新 ${data.count} 只股票，数据范围: ${data.start} ~ ${data.end}`;
+      showToast('数据已刷新', 'success');
+      // 刷新下拉框
+      const liveSel = document.getElementById('liveSymbol');
+      liveSel.innerHTML = '';
+      if (data.files) {
+        data.files.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f.symbol;
+          opt.textContent = `${f.symbol}（${f.start} ~ ${f.end}）`;
+          liveSel.appendChild(opt);
+        });
+      }
+    } else {
+      document.getElementById('refreshMsg').textContent = '刷新失败: ' + (data.detail || '未知错误');
+    }
+  } catch(e) {
+    document.getElementById('refreshMsg').textContent = '请求失败: ' + e.message;
+  }
+
+  btn.disabled = false; btn.textContent = '刷新数据';
+}
+
+// 启动：检查认证状态
+(function() {
+  const token = getToken();
+  const user = localStorage.getItem('quant_user');
+  if (token && user) {
+    hideLoginOverlay();
+    document.getElementById('userInfo').style.display = 'flex';
+    document.getElementById('displayUser').textContent = user;
+    init();
+    loadRiskConfig();
+    loadNotifyConfig();
+  } else {
+    showLoginOverlay();
+  }
+})();
+</script>
+</body>
+</html>

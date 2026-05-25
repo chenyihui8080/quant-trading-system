@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  simnow:
+    build: .
+    container_name: simnow-trader
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - SIMNOW_USER=${SIMNOW_USER}
+      - SIMNOW_PASS=${SIMNOW_PASS}
+    stdin_open: true
+    tty: true

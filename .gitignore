@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# 数据库和日志（本地数据不提交）
+data/*.db
+data/*.db-wal
+data/*.db-shm
+logs/
+*.log
+
+# 环境变量（含密钥）
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.bak
+
+# 量化系统
+old/
