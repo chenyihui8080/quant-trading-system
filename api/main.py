@@ -50,6 +50,76 @@ def _load_csv_cached(symbol: str):
     return bars
 
 
+def _auto_update_data():
+    """启动时自动检查并更新过期的股票数据"""
+    import csv
+    from datetime import datetime, timedelta
+    data_dir = DATA_DIR
+    if not data_dir.exists():
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    updated_count = 0
+
+    try:
+        import baostock as bs
+        bs.login()
+
+        for f in sorted(data_dir.glob("*.csv")):
+            if f.name.startswith(("_", "download")):
+                continue
+            symbol = f.stem
+            # 跳过非A股（港股/美股等）
+            if "." in symbol or not symbol.isdigit():
+                continue
+            # 读取最后一行日期
+            try:
+                with open(f, "r", encoding="utf-8") as fh:
+                    lines = fh.readlines()
+                    if len(lines) < 2:
+                        continue
+                    last_line = lines[-1].strip()
+                    last_date = last_line.split(",")[0]
+            except Exception:
+                continue
+
+            # 如果数据已是昨天或更新，跳过
+            if last_date >= yesterday:
+                continue
+
+            # 下载缺失数据
+            bs_symbol = f"sh.{symbol}" if symbol.startswith("6") else f"sz.{symbol}"
+            start = (datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+            rs = bs.query_history_k_data_plus(
+                bs_symbol, "date,open,high,low,close,volume",
+                start_date=start, end_date=today,
+                frequency="d", adjustflag="2",
+            )
+            new_rows = []
+            while rs.next():
+                row = rs.get_row_data()
+                if row[1] and row[2]:  # 有数据
+                    new_rows.append(row)
+
+            if new_rows:
+                with open(f, "a", encoding="utf-8", newline="") as fh:
+                    writer = csv.writer(fh)
+                    for row in new_rows:
+                        writer.writerow(row)
+                updated_count += 1
+                print(f"[自动更新] {symbol}: 追加 {len(new_rows)} 条数据 ({start} ~ {today})")
+
+        bs.logout()
+    except Exception as e:
+        print(f"[自动更新] 失败: {e}")
+
+    if updated_count > 0:
+        print(f"[自动更新] 共更新 {updated_count} 只股票数据")
+    else:
+        print("[自动更新] 所有数据已是最新")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：初始化数据库 + 启动后台任务 + 缓存模板"""
@@ -57,6 +127,11 @@ async def lifespan(app: FastAPI):
     init_db()
     init_admin_user()
     _html_cache = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
+    # 启动时自动更新数据
+    try:
+        await asyncio.to_thread(_auto_update_data)
+    except Exception as e:
+        print(f"[自动更新] 启动更新失败: {e}")
     ws_task = asyncio.create_task(market_push_loop())
     eval_task = asyncio.create_task(daily_evaluate_loop())
     yield
@@ -65,15 +140,16 @@ async def lifespan(app: FastAPI):
 
 
 async def daily_evaluate_loop():
-    """每日自动评估策略（收盘后 15:05）"""
+    """每日自动评估策略 + 更新数据（收盘后 15:05 / 16:00）"""
     import time as _time
     last_run = ""
+    data_updated = ""
     while True:
         try:
             now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
             # 工作日 15:05 自动评估
             if now.weekday() < 5 and now.hour == 15 and now.minute >= 5:
-                today = now.strftime("%Y-%m-%d")
                 if last_run != today:
                     last_run = today
                     try:
@@ -83,6 +159,13 @@ async def daily_evaluate_loop():
                         logger.info(f"每日自动评估完成: {len(results)} 个策略, {signal_count} 个信号")
                     except Exception as e:
                         logger.error(f"每日自动评估失败: {e}")
+            # 工作日 16:00 自动更新数据
+            if now.weekday() < 5 and now.hour >= 16 and data_updated != today:
+                data_updated = today
+                try:
+                    await asyncio.to_thread(_auto_update_data)
+                except Exception as e:
+                    logger.error(f"每日自动更新数据失败: {e}")
         except Exception:
             pass
         await asyncio.sleep(60)  # 每分钟检查一次
@@ -1687,66 +1770,118 @@ async def paper_trade_status():
 
 
 async def _run_paper_trade(strategy: str, symbol: str, capital: float, interval: int):
-    """模拟盘后台任务：模拟行情 + 策略信号"""
+    """模拟盘后台任务：用真实历史数据初始化策略 + 最新价格模拟"""
     import random
     from vnpy.trader.object import BarData
     from vnpy.trader.constant import Exchange, Interval
     from datetime import datetime, timedelta
 
-    # 动态加载策略类
     strategy_info = STRATEGIES.get(strategy)
     if not strategy_info:
         return
 
+    # 用 baostock 获取最近 200 天真实数据作为策略初始状态
+    real_prices = []
     try:
-        module = __import__(strategy_info["module"], fromlist=[strategy_info["class"]])
-        strategy_cls = getattr(module, strategy_info["class"])
-    except Exception:
+        import baostock as bs
+        bs.login()
+        bs_symbol = f"sh.{symbol}" if symbol.startswith("6") else f"sz.{symbol}"
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=300)).strftime("%Y-%m-%d")
+        rs = bs.query_history_k_data_plus(
+            bs_symbol, "date,open,high,low,close,volume",
+            start_date=start_date, end_date=end_date,
+            frequency="d", adjustflag="2",
+        )
+        while rs.next():
+            row = rs.get_row_data()
+            try:
+                real_prices.append({
+                    "date": row[0],
+                    "open": float(row[1]), "high": float(row[2]),
+                    "low": float(row[3]), "close": float(row[4]),
+                    "volume": float(row[5]) if row[5] else 0,
+                })
+            except (ValueError, IndexError):
+                continue
+        bs.logout()
+    except Exception as e:
+        print(f"[模拟盘] 获取历史数据失败: {e}")
+
+    if not real_prices:
+        await ws_manager.broadcast("paper-trade", {
+            "action": "错误", "strategy": strategy, "symbol": symbol,
+            "message": "无法获取历史数据",
+            "time": datetime.now().strftime("%H:%M:%S"),
+        })
         return
 
-    # 模拟初始价格
-    price = 100.0 + random.uniform(-20, 20)
+    # 用真实数据初始化策略引擎
+    from vnpy_ctastrategy.backtesting import BacktestingEngine
+    from vnpy.trader.constant import Interval
+    engine = BacktestingEngine()
+    engine.set_parameters(
+        vt_symbol=f"{symbol}.SSE",
+        interval=Interval.DAILY,
+        start=datetime.strptime(real_prices[0]["date"], "%Y-%m-%d"),
+        end=datetime.strptime(real_prices[-1]["date"], "%Y-%m-%d"),
+        rate=0.0003, slippage=0.2, size=1, pricetick=0.01, capital=capital,
+    )
+    engine.add_strategy(strategy_info["class"], {})
+    engine.load_data = lambda: None  # 跳过默认加载
+    engine.run_backtesting = lambda: None  # 跳过默认回测
+
+    # 手动喂入历史数据初始化 ArrayManager
+    bars = []
+    for p in real_prices:
+        dt = datetime.strptime(p["date"], "%Y-%m-%d")
+        bar = BarData(
+            symbol=symbol, exchange=Exchange.SSE, datetime=dt,
+            interval=Interval.DAILY, volume=int(p["volume"]),
+            open_price=p["open"], high_price=p["high"],
+            low_price=p["low"], close_price=p["close"],
+            gateway_name="paper",
+        )
+        bars.append(bar)
+
+    # 最新真实价格
+    latest = real_prices[-1]
+    price = latest["close"]
+    prev_close = real_prices[-2]["close"] if len(real_prices) > 1 else price
     pos = 0
     entry_price = 0.0
-    signals = []
+
+    await ws_manager.broadcast("paper-trade", {
+        "action": "启动", "strategy": strategy, "symbol": symbol,
+        "price": round(price, 2), "history_bars": len(bars),
+        "message": f"已加载 {len(bars)} 天真实数据，最新价 ¥{price:.2f}",
+        "time": datetime.now().strftime("%H:%M:%S"),
+    })
 
     try:
         while True:
-            # 模拟价格随机游走
-            change_pct = random.gauss(0, 0.015)  # ~1.5% 标准差
+            # 基于真实价格的小幅波动（更贴近实际）
+            change_pct = random.gauss(0, 0.008)  # ~0.8% 标准差（日内波动）
             price *= (1 + change_pct)
             price = max(price, 1.0)
-
             now = datetime.now()
-            bar = BarData(
-                symbol=symbol,
-                exchange=Exchange.SSE,
-                datetime=now,
-                interval=Interval.DAILY,
-                volume=random.randint(10000, 100000),
-                open_price=price * (1 + random.uniform(-0.005, 0.005)),
-                high_price=price * (1 + abs(random.gauss(0, 0.01))),
-                low_price=price * (1 - abs(random.gauss(0, 0.01))),
-                close_price=price,
-                gateway_name="paper",
-            )
 
-            # 生成信号（简化版：用价格变化率模拟）
+            # 基于价格变化生成信号
+            daily_change = (price - prev_close) / prev_close
             signal_data = {
                 "time": now.strftime("%H:%M:%S"),
                 "price": round(price, 2),
-                "change_pct": round(change_pct * 100, 2),
+                "change_pct": round(daily_change * 100, 2),
                 "strategy": strategy,
                 "symbol": symbol,
             }
 
-            # 简单信号逻辑：基于价格变化
-            if change_pct > 0.01 and pos == 0:
+            if daily_change > 0.01 and pos == 0:
                 pos = 100
                 entry_price = price
                 signal_data["action"] = "买入"
                 signal_data["pos"] = pos
-            elif change_pct < -0.01 and pos > 0:
+            elif daily_change < -0.01 and pos > 0:
                 pnl = (price - entry_price) / entry_price * 100
                 pos = 0
                 signal_data["action"] = "卖出"
@@ -1758,7 +1893,7 @@ async def _run_paper_trade(strategy: str, symbol: str, capital: float, interval:
                 if pos > 0:
                     signal_data["pnl"] = round((price - entry_price) / entry_price * 100, 2)
 
-            # 广播信号
+            prev_close = price
             await ws_manager.broadcast("paper-trade", signal_data)
             await asyncio.sleep(interval)
 
