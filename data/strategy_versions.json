@@ -1,0 +1,535 @@
+{
+  "全自动测试策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 11,
+        "name": "全自动测试策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 5
+              }
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 5
+              }
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:35:54",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:35:54.859927"
+    }
+  ],
+  "临时测试策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 13,
+        "name": "临时测试策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 5
+              }
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [],
+        "enabled": true,
+        "created_at": "2026-05-30 19:36:30",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:36:30.858166"
+    }
+  ],
+  "评估测试策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 14,
+        "name": "评估测试策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 5
+              }
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [],
+        "enabled": true,
+        "created_at": "2026-05-30 19:36:35",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:36:35.351113"
+    }
+  ],
+  "E2E全流程策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 15,
+        "name": "E2E全流程策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "return",
+              "params": {
+                "period": 1
+              }
+            },
+            "op": ">",
+            "right": {
+              "type": "fixed",
+              "value": 5
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "return",
+              "params": {
+                "period": 1
+              }
+            },
+            "op": "<",
+            "right": {
+              "type": "fixed",
+              "value": -20
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:39:29",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:39:29.147478"
+    }
+  ],
+  "跨页测试策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 17,
+        "name": "跨页测试策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "close",
+              "params": {}
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "close",
+              "params": {}
+            },
+            "op": "cross_below",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 10
+              }
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:40:47",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:40:47.788349"
+    }
+  ],
+  "复合指标策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 18,
+        "name": "复合指标策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "close",
+              "params": {}
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "rsi",
+              "params": {
+                "period": 14
+              }
+            },
+            "op": ">",
+            "right": {
+              "type": "fixed",
+              "value": 70
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:40:52",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:40:52.305202"
+    }
+  ],
+  "评估回测策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 19,
+        "name": "评估回测策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "return",
+              "params": {
+                "period": 1
+              }
+            },
+            "op": ">",
+            "right": {
+              "type": "fixed",
+              "value": 5
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "return",
+              "params": {
+                "period": 1
+              }
+            },
+            "op": "<",
+            "right": {
+              "type": "fixed",
+              "value": -20
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:41:01",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:41:01.163501"
+    }
+  ],
+  "对比策略A": [
+    {
+      "version": 1,
+      "data": {
+        "id": 20,
+        "name": "对比策略A",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "close",
+              "params": {}
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "close",
+              "params": {}
+            },
+            "op": "cross_below",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 10
+              }
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:41:09",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:41:09.348956"
+    }
+  ],
+  "对比策略B": [
+    {
+      "version": 1,
+      "data": {
+        "id": 21,
+        "name": "对比策略B",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "macd",
+              "params": {
+                "field": "dif"
+              }
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "macd",
+              "params": {
+                "field": "dea"
+              }
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "macd",
+              "params": {
+                "field": "dif"
+              }
+            },
+            "op": "cross_below",
+            "right": {
+              "type": "indicator",
+              "indicator": "macd",
+              "params": {
+                "field": "dea"
+              }
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:41:11",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:41:11.113243"
+    }
+  ],
+  "全链路策略": [
+    {
+      "version": 1,
+      "data": {
+        "id": 22,
+        "name": "全链路策略",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "rsi",
+              "params": {
+                "period": 14
+              }
+            },
+            "op": "<",
+            "right": {
+              "type": "fixed",
+              "value": 30
+            }
+          }
+        ],
+        "sell_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "rsi",
+              "params": {
+                "period": 14
+              }
+            },
+            "op": ">",
+            "right": {
+              "type": "fixed",
+              "value": 70
+            }
+          }
+        ],
+        "enabled": true,
+        "created_at": "2026-05-30 19:41:16",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:41:16.388395"
+    }
+  ],
+  "这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称": [
+    {
+      "version": 1,
+      "data": {
+        "id": 23,
+        "name": "这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称这是一个非常非常长的策略名称",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 5
+              }
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [],
+        "enabled": true,
+        "created_at": "2026-05-30 19:41:52",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:41:52.398802"
+    }
+  ],
+  "<script>alert('xss')</script>": [
+    {
+      "version": 1,
+      "data": {
+        "id": 24,
+        "name": "<script>alert('xss')</script>",
+        "symbol": "600519",
+        "market": "a",
+        "buy_conditions": [
+          {
+            "left": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 5
+              }
+            },
+            "op": "cross_above",
+            "right": {
+              "type": "indicator",
+              "indicator": "ma",
+              "params": {
+                "period": 20
+              }
+            }
+          }
+        ],
+        "sell_conditions": [],
+        "enabled": true,
+        "created_at": "2026-05-30 19:41:54",
+        "last_evaluated": null
+      },
+      "timestamp": "2026-05-30T19:41:54.766754"
+    }
+  ]
+}

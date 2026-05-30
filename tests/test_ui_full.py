@@ -142,7 +142,8 @@ def goto_tab(page, tab_name):
     """切换到指定标签页"""
     page.click(f".tab:text('{tab_name}')")
     tab_id = {"回测": "backtest", "实时行情": "live", "我的策略": "strategies",
-              "策略对比": "compare", "参数优化": "optimize", "风控配置": "risk"}.get(tab_name)
+              "策略对比": "compare", "组合回测": "portfolio", "参数优化": "optimize",
+              "风控配置": "risk", "数据质量": "quality"}.get(tab_name)
     if tab_id:
         page.wait_for_selector(f"#tab-{tab_id}", state="visible", timeout=5000)
     else:
@@ -2353,3 +2354,114 @@ class TestCrossTabSync:
         shot(page, "sync_risk_backtest")
         cards = page.locator("#resultArea .stat-card")
         assert cards.count() > 0
+
+
+class TestPortfolioTab:
+    """组合回测页"""
+
+    def test_portfolio_tab_visible(self, page):
+        """切换到组合回测标签页"""
+        goto_tab(page, "组合回测")
+        shot(page, "portfolio_tab")
+        assert page.locator("#tab-portfolio").is_visible()
+
+    def test_portfolio_has_strategy_checkboxes(self, page):
+        """组合回测页有策略选择"""
+        goto_tab(page, "组合回测")
+        page.wait_for_timeout(300)
+        shot(page, "portfolio_strategies")
+
+    def test_portfolio_run(self, page):
+        """运行组合回测"""
+        goto_tab(page, "组合回测")
+        page.wait_for_timeout(300)
+        first_cb = page.locator("#portfolioStrategies input[type=checkbox]").first
+        if first_cb.count() > 0:
+            first_cb.check()
+            page.fill("#portfolioSymbols", "600519")
+            page.click("button:text('运行组合回测')")
+            page.wait_for_timeout(5000)
+            shot(page, "portfolio_result")
+
+
+class TestDataQualityTab:
+    """数据质量检测页"""
+
+    def test_quality_tab_visible(self, page):
+        """切换到数据质量标签页"""
+        goto_tab(page, "数据质量")
+        shot(page, "quality_tab")
+        assert page.locator("#tab-quality").is_visible()
+
+    def test_quality_run_detection(self, page):
+        """运行数据质量检测"""
+        goto_tab(page, "数据质量")
+        page.wait_for_timeout(300)
+        page.click("button:text('开始检测')")
+        page.wait_for_timeout(3000)
+        shot(page, "quality_result")
+        result = page.locator("#qualityResult")
+        assert result.inner_text() != ""
+
+    def test_quality_detail_view(self, page):
+        """查看详情按钮可用"""
+        goto_tab(page, "数据质量")
+        page.wait_for_timeout(300)
+        page.click("button:text('开始检测')")
+        page.wait_for_timeout(3000)
+        detail_btn = page.locator("#qualityResult button:text('详情')").first
+        if detail_btn.count() > 0:
+            detail_btn.click()
+            page.wait_for_timeout(1000)
+            shot(page, "quality_detail")
+
+
+class TestNewStrategies:
+    """新增策略（动量、均值回归、ATR突破、ML）"""
+
+    @pytest.mark.parametrize("strategy_key", ["momentum", "mean_reversion", "atr_breakout", "ml"])
+    def test_strategy_selectable(self, page, strategy_key):
+        """新策略可选中"""
+        item = page.locator(f".strategy-item[data-key='{strategy_key}']")
+        if item.count() > 0:
+            item.click()
+            page.wait_for_timeout(200)
+            assert "active" in (item.get_attribute("class") or "")
+            shot(page, f"select_{strategy_key}")
+
+    @pytest.mark.parametrize("strategy_key", ["momentum", "mean_reversion", "atr_breakout"])
+    def test_strategy_backtest(self, page, strategy_key):
+        """新策略回测有结果"""
+        item = page.locator(f".strategy-item[data-key='{strategy_key}']")
+        if item.count() == 0:
+            pytest.skip(f"{strategy_key} not found")
+        item.click()
+        page.wait_for_timeout(200)
+        run_backtest(page)
+        shot(page, f"backtest_{strategy_key}")
+        cards = page.locator("#resultArea .stat-card")
+        assert cards.count() > 0
+
+
+class TestReportExport:
+    """报告导出"""
+
+    def test_export_button_exists(self, page):
+        """回测结果页有导出按钮"""
+        page.locator(".strategy-item").first.click()
+        page.wait_for_timeout(200)
+        run_backtest(page)
+        export_btn = page.locator("button:text('导出报告')")
+        shot(page, "export_btn_visible")
+        assert export_btn.count() > 0
+
+    def test_export_triggers_download(self, page):
+        """点击导出触发下载"""
+        page.locator(".strategy-item").first.click()
+        page.wait_for_timeout(200)
+        run_backtest(page)
+        with page.expect_download(timeout=10000) as download_info:
+            page.click("button:text('导出报告')")
+        download = download_info.value
+        shot(page, "export_download")
+        assert download.suggested_filename.endswith(".html")

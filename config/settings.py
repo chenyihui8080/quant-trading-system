@@ -82,6 +82,12 @@ STRATEGIES = {
         "class": "AtrBreakoutStrategy",
         "desc": "ATR通道突破 + 趋势过滤",
     },
+    "ml": {
+        "name": "ML策略",
+        "module": "strategies.ml_strategy",
+        "class": "MlStrategy",
+        "desc": "技术指标特征 + 最近邻分类（FreqAI风格）",
+    },
 }
 
 # LLM 配置（可选，不配置则仅使用正则解析）

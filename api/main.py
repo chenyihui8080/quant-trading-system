@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from vnpy_ctastrategy.backtesting import BacktestingEngine
 from vnpy.trader.constant import Interval
 
-from config.settings import STRATEGIES, BACKTEST_CONFIG
+from config.settings import STRATEGIES, BACKTEST_CONFIG, DATA_DIR
 from utils.data_generator import generate_random_bars, load_csv_bars
 from utils.comparison import compare_strategies, optimize_strategy
 from utils.realtime import get_realtime_quote, get_realtime_kline
@@ -219,7 +219,7 @@ class BacktestRequest(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 def root():
     """管理界面"""
-    return HTMLResponse(content=_html_cache or (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8"))
+    return HTMLResponse(content=(TEMPLATE_DIR / "index.html").read_text(encoding="utf-8"))
 
 
 @app.get("/strategies")
@@ -491,6 +491,7 @@ OPTIMIZE_GRIDS = {
     "momentum": {"lookback": [10, 20, 30, 60], "buy_threshold": [3, 5, 8, 10], "sell_threshold": [-2, -3, -5]},
     "mean_reversion": {"ma_window": [10, 20, 30], "entry_std": [1.5, 2.0, 2.5], "exit_std": [0.3, 0.5, 1.0]},
     "atr_breakout": {"atr_window": [10, 14, 20], "atr_multiplier": [1.5, 2.0, 2.5, 3.0], "ma_filter": [20, 50]},
+    "ml": {"train_window": [60, 120, 180], "predict_window": [3, 5, 10], "confidence_threshold": [0.55, 0.6, 0.65]},
 }
 
 
@@ -645,6 +646,190 @@ def api_notify_config(req: NotifyConfig):
 def api_test_notify():
     """测试推送"""
     return notifier.send("测试推送", "这是一条测试消息，如果你收到了说明推送配置正确！")
+
+
+# ==================== 定时任务 ====================
+import threading
+
+_scheduled_tasks: dict[str, dict] = {}  # task_id -> {config, timer, last_run}
+
+
+class ScheduleRequest(BaseModel):
+    strategy: str
+    symbol: str = "600519"
+    interval_minutes: int = 60
+    notify: bool = True
+
+
+@app.post("/schedule")
+async def api_create_schedule(req: ScheduleRequest):
+    """创建定时回测任务"""
+    import uuid
+    task_id = str(uuid.uuid4())[:8]
+
+    async def _run_task():
+        try:
+            result = await asyncio.to_thread(
+                _execute_backtest,
+                BacktestRequest(strategy=req.strategy, symbol=req.symbol),
+            )
+            engine, info, bars, stats, _ = result
+            _scheduled_tasks[task_id]["last_run"] = datetime.now().isoformat()
+            _scheduled_tasks[task_id]["last_stats"] = {
+                "total_return": stats.get("total_return", 0),
+                "sharpe_ratio": stats.get("sharpe_ratio", 0),
+                "max_ddpercent": stats.get("max_ddpercent", 0),
+            }
+            if req.notify:
+                notifier.send(
+                    f"定时回测 - {info['name']}",
+                    f"策略: {info['name']}\n股票: {req.symbol}\n"
+                    f"收益: {stats.get('total_return', 0):.2f}%\n"
+                    f"Sharpe: {stats.get('sharpe_ratio', 0):.2f}",
+                )
+        except Exception as e:
+            print(f"定时任务 {task_id} 失败: {e}")
+
+    _scheduled_tasks[task_id] = {
+        "strategy": req.strategy,
+        "symbol": req.symbol,
+        "interval_minutes": req.interval_minutes,
+        "notify": req.notify,
+        "created": datetime.now().isoformat(),
+        "last_run": None,
+        "last_stats": None,
+    }
+
+    # 后台定时执行
+    async def _scheduler():
+        while task_id in _scheduled_tasks:
+            await _run_task()
+            await asyncio.sleep(req.interval_minutes * 60)
+
+    asyncio.create_task(_scheduler())
+    return {"task_id": task_id, "message": f"定时任务已创建，每 {req.interval_minutes} 分钟执行一次"}
+
+
+@app.get("/schedules")
+def api_list_schedules():
+    """查看所有定时任务"""
+    return {"tasks": _scheduled_tasks}
+
+
+@app.delete("/schedule/{task_id}")
+def api_delete_schedule(task_id: str):
+    """删除定时任务"""
+    if task_id in _scheduled_tasks:
+        del _scheduled_tasks[task_id]
+        return {"status": "deleted"}
+    raise HTTPException(404, "任务不存在")
+
+
+# ==================== 回测报告导出 ====================
+
+@app.post("/export-report")
+async def api_export_report(req: BacktestRequest):
+    """导出回测报告 HTML"""
+    engine, info, bars, stats, params = await asyncio.to_thread(_execute_backtest, req)
+
+    # 构建交易记录表
+    trades_html = ""
+    try:
+        trades = [
+            {"datetime": t.datetime.strftime("%Y-%m-%d %H:%M"),
+             "direction": str(t.direction.value), "offset": str(t.offset.value),
+             "price": float(t.price), "volume": int(t.volume)}
+            for t in engine.trades.values()
+        ]
+        for t in trades:
+            color = "#3fb950" if t["offset"] == "开" else "#f85149"
+            trades_html += f"""
+            <tr>
+              <td>{t['datetime']}</td>
+              <td style="color:{color}">{t['offset']}{t['direction']}</td>
+              <td>¥{t['price']:.2f}</td>
+              <td>{t['volume']}</td>
+            </tr>"""
+    except Exception:
+        trades_html = "<tr><td colspan='4'>无交易记录</td></tr>"
+
+    # 指标卡片
+    def _card(label, value, color="#e6edf3"):
+        return f'<div class="metric"><div class="label">{label}</div><div class="value" style="color:{color}">{value}</div></div>'
+
+    ret = stats.get("total_return", 0)
+    metrics_html = (
+        _card("总收益", f"{ret:.2f}%", "#3fb950" if ret > 0 else "#f85149")
+        + _card("Sharpe", f"{stats.get('sharpe_ratio', 0):.2f}")
+        + _card("Sortino", f"{stats.get('sortino_ratio', 0):.2f}")
+        + _card("Calmar", f"{stats.get('calmar_ratio', 0):.2f}")
+        + _card("最大回撤", f"{stats.get('max_ddpercent', 0):.2f}%", "#f85149")
+        + _card("胜率", f"{stats.get('win_rate', 0):.1f}%")
+        + _card("盈亏比", f"{stats.get('profit_loss_ratio', 0):.2f}")
+        + _card("交易次数", f"{stats.get('total_trade_count', 0)}")
+    )
+
+    params_html = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in params.items())
+
+    report_html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><title>回测报告 - {info['name']}</title>
+<style>
+body {{ font-family: -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; padding: 40px; max-width: 900px; margin: 0 auto; }}
+h1 {{ color: #e6edf3; border-bottom: 2px solid #238636; padding-bottom: 12px; }}
+h2 {{ color: #58a6ff; margin-top: 32px; }}
+.metrics {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; }}
+.metric {{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }}
+.metric .label {{ font-size: 12px; color: #8b949e; text-transform: uppercase; }}
+.metric .value {{ font-size: 20px; font-weight: 700; margin-top: 4px; }}
+table {{ width: 100%; border-collapse: collapse; margin: 12px 0; }}
+th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid #21262d; font-size: 13px; }}
+th {{ color: #8b949e; background: #161b22; }}
+.footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid #21262d; color: #484f58; font-size: 12px; }}
+</style>
+</head>
+<body>
+<h1>📊 回测报告</h1>
+<p>策略: <b>{info['name']}</b> | 股票: <b>{req.symbol or '模拟数据'}</b> | 资金: <b>¥{req.capital:,.0f}</b></p>
+
+<h2>绩效指标</h2>
+<div class="metrics">{metrics_html}</div>
+
+<h2>策略参数</h2>
+<table><tr><th>参数</th><th>值</th></tr>{params_html}</table>
+
+<h2>交易记录</h2>
+<table><tr><th>时间</th><th>方向</th><th>价格</th><th>数量</th></tr>{trades_html}</table>
+
+<div class="footer">
+  <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 量化交易系统 v3.0</p>
+</div>
+</body></html>"""
+
+    return {"html": report_html, "strategy": info["name"], "symbol": req.symbol or "模拟数据"}
+
+
+# ==================== 数据质量检测 ====================
+
+@app.get("/data/quality")
+async def api_data_quality():
+    """检测所有股票数据质量"""
+    from utils.data_quality import check_all_data
+    results = await asyncio.to_thread(check_all_data, DATA_DIR)
+    avg_score = sum(r["score"] for r in results) / len(results) if results else 0
+    return {"total": len(results), "avg_score": round(avg_score, 1), "results": results}
+
+
+@app.get("/data/quality/{symbol}")
+async def api_data_quality_single(symbol: str):
+    """检测单只股票数据质量"""
+    from utils.data_quality import check_data_quality
+    filepath = DATA_DIR / f"{symbol}.csv"
+    if not filepath.exists():
+        raise HTTPException(404, f"未找到 {symbol} 的数据")
+    result = await asyncio.to_thread(check_data_quality, filepath)
+    return result
 
 
 # ==================== 价格告警接口 ====================
@@ -1254,16 +1439,73 @@ def api_list_user_strategies():
 
 @app.post("/user-strategies")
 def api_create_user_strategy(req: StrategyRequest, user: dict = Depends(get_current_user)):
-    """新增策略"""
-    from utils.strategy_rules import add_strategy
+    """新增策略（自动版本管理）"""
+    from utils.strategy_rules import add_strategy, list_strategies, update_strategy
     strategy = add_strategy(
         name=req.name, symbol=req.symbol,
         buy_conditions=[c.model_dump() for c in req.buy_conditions],
         sell_conditions=[c.model_dump() for c in req.sell_conditions],
         market=req.market,
     )
+    # 保存版本快照
+    _save_strategy_version(strategy)
     log_audit(user["username"], "create_strategy", f"{req.name} → {req.symbol}")
     return strategy
+
+
+# 策略版本管理（内存 + JSON 持久化）
+_strategy_versions: dict[str, list] = {}  # strategy_name -> [{version, data, timestamp}]
+_STRATEGY_VERSIONS_FILE = DATA_DIR / "strategy_versions.json"
+
+def _load_strategy_versions():
+    global _strategy_versions
+    if _STRATEGY_VERSIONS_FILE.exists():
+        import json
+        _strategy_versions = json.loads(_STRATEGY_VERSIONS_FILE.read_text(encoding="utf-8"))
+
+def _save_strategy_versions():
+    import json
+    _STRATEGY_VERSIONS_FILE.write_text(json.dumps(_strategy_versions, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _save_strategy_version(strategy: dict):
+    import json
+    name = strategy.get("name", "")
+    if name not in _strategy_versions:
+        _strategy_versions[name] = []
+    version = len(_strategy_versions[name]) + 1
+    _strategy_versions[name].append({
+        "version": version,
+        "data": strategy,
+        "timestamp": datetime.now().isoformat(),
+    })
+    _save_strategy_versions()
+
+_load_strategy_versions()
+
+
+@app.get("/user-strategies/{name}/versions")
+def api_get_strategy_versions(name: str):
+    """查询策略历史版本"""
+    versions = _strategy_versions.get(name, [])
+    return {"name": name, "versions": versions}
+
+
+@app.post("/user-strategies/{name}/rollback/{version}")
+def api_rollback_strategy(name: str, version: int):
+    """回滚到指定版本"""
+    versions = _strategy_versions.get(name, [])
+    target = next((v for v in versions if v["version"] == version), None)
+    if not target:
+        raise HTTPException(404, f"版本 {version} 不存在")
+    from utils.strategy_rules import update_strategy, list_strategies
+    data = target["data"]
+    # 找到策略 ID
+    strategies = list_strategies()
+    existing = next((s for s in strategies if s["name"] == name), None)
+    if existing:
+        update_strategy(existing["id"], data)
+    _save_strategy_version(data)
+    return {"status": "ok", "message": f"已回滚到版本 {version}"}
 
 
 @app.get("/user-strategies/presets")

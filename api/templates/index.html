@@ -348,6 +348,7 @@ body {
   <div class="tab" onclick="switchTab('portfolio', this)">组合回测</div>
   <div class="tab" onclick="switchTab('optimize', this)">参数优化</div>
   <div class="tab" onclick="switchTab('risk', this)">风控配置</div>
+  <div class="tab" onclick="switchTab('quality', this)">数据质量</div>
 </div>
 
 <!-- ==================== 回测页 ==================== -->
@@ -775,6 +776,18 @@ body {
   </div>
 </div>
 
+<!-- ==================== 数据质量 ==================== -->
+<div class="container tab-content hidden" id="tab-quality">
+  <div class="grid-full">
+    <div class="panel">
+      <h2>数据质量检测</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:16px">自动检测已下载的股票数据质量，包括缺失值、日期连续性、OHLC 逻辑异常等 8 项检查。</p>
+      <button class="btn" onclick="loadDataQuality()">开始检测</button>
+      <div id="qualityResult" style="margin-top:16px"></div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -962,6 +975,7 @@ function renderResult(data) {
       ${statCard('日均盈亏', '¥' + s.daily_net_pnl.toFixed(2), s.daily_net_pnl >= 0 ? 'positive' : 'negative')}
       ${statCard('手续费', '¥' + s.total_commission.toFixed(2), 'neutral')}
     </div>
+    <button class="btn btn-sm" style="margin-bottom:12px" onclick="exportReport()">📥 导出报告</button>
     <div class="chart-box"><h3>资金曲线</h3><div id="equityChart" style="height:300px"></div></div>
     <div class="chart-box" style="margin-top:12px"><h3>K线图 + 买卖点</h3><div id="klineChart" style="height:400px"></div></div>
   `;
@@ -971,6 +985,32 @@ function renderResult(data) {
     if (data.daily && data.daily.length > 0) renderEquityChart(data.daily);
     if (data.kline && data.kline.length > 0) renderKlineChart(data.kline, data.trades || []);
   }, 100);
+}
+
+// ==================== 报告导出 ====================
+async function exportReport() {
+  if (!selectedStrategy) { showToast('请先运行回测', 'error'); return; }
+  const symbol = document.getElementById('symbolSelect').value || null;
+  const capital = parseInt(document.getElementById('capital').value) || 1000000;
+  const days = parseInt(document.getElementById('days').value) || 500;
+  showToast('正在生成报告...', 'success');
+  try {
+    const res = await authFetch('/export-report', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ strategy: selectedStrategy, symbol, capital, days }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      const blob = new Blob([data.html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `回测报告_${data.strategy}_${data.symbol}_${new Date().toISOString().slice(0,10)}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('报告已下载', 'success');
+    } else { showToast(data.detail || '导出失败', 'error'); }
+  } catch (e) { showToast('导出失败: ' + e.message, 'error'); }
 }
 
 // ==================== 策略对比 ====================
@@ -2290,6 +2330,66 @@ document.addEventListener('keydown', e => {
     document.querySelectorAll('[id$="Dropdown"]').forEach(d => d.style.display = 'none');
   }
 });
+
+// ==================== 数据质量 ====================
+async function loadDataQuality() {
+  const container = document.getElementById('qualityResult');
+  container.innerHTML = '<div class="loading"><span class="spinner"></span>正在检测数据质量...</div>';
+  try {
+    const res = await authFetch('/data/quality');
+    if (!res.ok) throw new Error('请求失败');
+    const data = await res.json();
+    if (!data.results || data.results.length === 0) {
+      container.innerHTML = '<p style="color:#8b949e">暂无数据文件，请先下载股票数据。</p>';
+      return;
+    }
+    let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+    html += '<tr style="border-bottom:1px solid #30363d"><th style="text-align:left;padding:8px">股票</th><th>行数</th><th>日期范围</th><th>质量评分</th><th>问题数</th><th>操作</th></tr>';
+    data.results.forEach(r => {
+      const scoreColor = r.score >= 80 ? '#3fb950' : r.score >= 60 ? '#f0883e' : '#f85149';
+      const issueCount = r.issues ? r.issues.length : 0;
+      html += `<tr style="border-bottom:1px solid #21262d">
+        <td style="padding:8px;font-weight:600">${r.symbol}</td>
+        <td style="text-align:center">${r.rows}</td>
+        <td style="text-align:center">${r.date_range ? r.date_range.join(' ~ ') : '-'}</td>
+        <td style="text-align:center;color:${scoreColor};font-weight:700">${r.score}</td>
+        <td style="text-align:center">${issueCount}</td>
+        <td style="text-align:center"><button class="btn" style="padding:4px 10px;font-size:12px" onclick="showQualityDetail('${r.symbol}')">详情</button></td>
+      </tr>`;
+    });
+    html += '</table></div>';
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = `<p style="color:#f85149">检测失败：${e.message}</p>`;
+  }
+}
+
+async function showQualityDetail(symbol) {
+  try {
+    const res = await authFetch(`/data/quality/${symbol}`);
+    if (!res.ok) throw new Error('请求失败');
+    const r = await res.json();
+    const scoreColor = r.score >= 80 ? '#3fb950' : r.score >= 60 ? '#f0883e' : '#f85149';
+    let html = `<div style="margin-top:12px">`;
+    html += `<h3 style="margin-bottom:8px">${r.symbol} — <span style="color:${scoreColor}">评分 ${r.score}</span></h3>`;
+    html += `<p style="color:#8b949e;font-size:13px">${r.rows} 行数据，${r.date_range ? r.date_range.join(' ~ ') : ''}</p>`;
+    if (r.issues && r.issues.length > 0) {
+      html += '<div style="margin-top:10px">';
+      r.issues.forEach(issue => {
+        const icon = issue.type === 'critical' ? '🔴' : issue.type === 'warning' ? '🟡' : '🔵';
+        html += `<div style="padding:6px 0;font-size:13px;border-bottom:1px solid #21262d">${icon} ${issue.message}</div>`;
+      });
+      html += '</div>';
+    } else {
+      html += '<p style="color:#3fb950;margin-top:8px">未发现问题，数据质量良好。</p>';
+    }
+    html += `<button class="btn" style="margin-top:12px;padding:4px 12px;font-size:12px" onclick="loadDataQuality()">返回列表</button>`;
+    html += '</div>';
+    document.getElementById('qualityResult').innerHTML = html;
+  } catch (e) {
+    showToast('加载详情失败：' + e.message, 'error');
+  }
+}
 
 // 启动：检查认证状态
 (function() {
