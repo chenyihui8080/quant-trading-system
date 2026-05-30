@@ -1,4 +1,5 @@
 """项目配置"""
+import os
 from pathlib import Path
 
 # 路径配置
@@ -64,3 +65,8 @@ STRATEGIES = {
         "desc": "固定百分比网格，下跌买上涨卖",
     },
 }
+
+# LLM 配置（可选，不配置则仅使用正则解析）
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_API_URL = os.getenv("LLM_API_URL", "https://api.openai.com/v1/chat/completions")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")

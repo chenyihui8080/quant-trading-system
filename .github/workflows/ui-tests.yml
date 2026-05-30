@@ -1,0 +1,57 @@
+name: UI 自动化测试
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  ui-tests:
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || pip install fastapi uvicorn playwright vnpy pydantic baostock
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Start server
+        run: |
+          python -m uvicorn api.main:app --port 8000 --host 0.0.0.0 &
+          sleep 5
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/
+
+      - name: Run UI tests
+        env:
+          UI_SHOT: "0"
+        run: |
+          python -m pytest tests/test_ui_full.py -v --tb=short -n 4 --dist=loadgroup --html=test-reports/report.html --self-contained-html
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: screenshots/
+          retention-days: 7
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test-reports/
+          retention-days: 30

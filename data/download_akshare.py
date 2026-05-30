@@ -1,46 +1,94 @@
-"""下载 A 股真实行情数据（baostock）"""
+"""下载股票真实行情数据（A 股用 baostock，港股/美股用 yfinance）"""
 import os
 os.environ["NO_PROXY"] = "*"
 
-import baostock as bs
 import pandas as pd
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent
 
 
+def _detect_market(symbol: str) -> str:
+    """识别股票市场：a / hk / us"""
+    if symbol.endswith(".HK"):
+        return "hk"
+    if symbol.endswith((".SS", ".SZ")):
+        return "a"
+    # 6 位纯数字 = A 股
+    if len(symbol) == 6 and symbol.isdigit():
+        return "a"
+    return "us"
+
+
 def download_stock(symbol: str, start: str = "2020-01-01", end: str = "2026-12-31"):
-    """下载单只股票日线数据"""
-    # 转换代码格式：000001 -> sz.000001, 600519 -> sh.600519
+    """下载单只股票日线数据（自动识别市场）"""
+    market = _detect_market(symbol)
+    if market == "a":
+        return _download_a_stock(symbol, start, end)
+    else:
+        return _download_yf_stock(symbol, start, end)
+
+
+def _download_a_stock(symbol: str, start: str, end: str):
+    """A 股下载（baostock）"""
+    import baostock as bs
+
     if symbol.startswith(("6", "9")):
         bs_code = f"sh.{symbol}"
     else:
         bs_code = f"sz.{symbol}"
 
-    print(f"下载 {symbol} ({bs_code})...", end=" ")
+    print(f"下载 A 股 {symbol} ({bs_code})...", end=" ")
+    bs.login()
     rs = bs.query_history_k_data_plus(
         bs_code,
         "date,open,high,low,close,volume",
-        start_date=start,
-        end_date=end,
-        frequency="d",
-        adjustflag="2",  # 前复权
+        start_date=start, end_date=end,
+        frequency="d", adjustflag="2",
     )
 
     rows = []
     while rs.next():
         rows.append(rs.get_row_data())
+    bs.logout()
 
     if not rows:
         print("无数据")
         return None
 
     df = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"])
-    df["close"] = df["close"].astype(float)
-    df["open"] = df["open"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
-    df["volume"] = df["volume"].astype(float)
+    for col in ["open", "high", "low", "close", "volume"]:
+        df[col] = df[col].astype(float)
+
+    save_path = DATA_DIR / f"{symbol}.csv"
+    df.to_csv(save_path, index=False)
+    print(f"成功 ({len(df)} 条)")
+    return df
+
+
+def _download_yf_stock(symbol: str, start: str, end: str):
+    """港股/美股下载（yfinance）"""
+    import yfinance as yf
+
+    market = _detect_market(symbol)
+    label = "港股" if market == "hk" else "美股"
+    print(f"下载 {label} {symbol}...", end=" ")
+
+    ticker = yf.Ticker(symbol)
+    df = ticker.history(start=start, end=end)
+
+    if df.empty:
+        print("无数据")
+        return None
+
+    df = df.reset_index()
+    df = df.rename(columns={"Date": "date", "Open": "open", "High": "high",
+                             "Low": "low", "Close": "close", "Volume": "volume"})
+    # 去掉时区信息，只保留日期
+    df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+    df = df[["date", "open", "high", "low", "close", "volume"]]
+    for col in ["open", "high", "low", "close", "volume"]:
+        df[col] = df[col].astype(float)
 
     save_path = DATA_DIR / f"{symbol}.csv"
     df.to_csv(save_path, index=False)

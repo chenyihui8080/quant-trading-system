@@ -7,103 +7,274 @@
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
-.header { background: #161b22; padding: 16px 24px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 12px; }
-.header h1 { font-size: 20px; color: #58a6ff; }
-.header .tag { background: #238636; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+body { 
+  font-family: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, "PingFang SC", sans-serif; 
+  background: #131722; 
+  color: #d1d4dc; 
+  min-height: 100vh; 
+  line-height: 1.5; 
+}
+
+/* 顶部栏与导航 */
+.header { 
+  background: #1c2030; 
+  padding: 16px 24px; 
+  border-bottom: 1px solid #2a2e39; 
+  display: flex; 
+  align-items: center; 
+  gap: 12px; 
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15); 
+}
+.header h1 { 
+  font-size: 20px; 
+  font-weight: 700; 
+  color: #2962ff; 
+  background: linear-gradient(135deg, #2962ff, #00b0ff); 
+  -webkit-background-clip: text; 
+  -webkit-text-fill-color: transparent; 
+}
+.header .tag { 
+  background: rgba(38, 166, 154, 0.15); 
+  color: #26a69a; 
+  padding: 2px 8px; 
+  border-radius: 4px; 
+  font-size: 11px; 
+  font-weight: 600; 
+  border: 1px solid rgba(38, 166, 154, 0.3); 
+}
 
 /* 标签页导航 */
-.tabs { display: flex; gap: 0; background: #161b22; padding: 0 24px; border-bottom: 1px solid #30363d; }
-.tab { padding: 12px 20px; cursor: pointer; color: #8b949e; font-size: 14px; border-bottom: 2px solid transparent; transition: all 0.2s; }
-.tab:hover { color: #c9d1d9; }
-.tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+.tabs { 
+  display: flex; 
+  gap: 2px; 
+  background: #1c2030; 
+  padding: 0 24px; 
+  border-bottom: 1px solid #2a2e39; 
+}
+.tab { 
+  padding: 12px 18px; 
+  cursor: pointer; 
+  color: #848e9c; 
+  font-size: 13px; 
+  font-weight: 500; 
+  border-bottom: 2px solid transparent; 
+  transition: all 0.15s ease; 
+}
+.tab:hover { 
+  color: #f0f3fa; 
+}
+.tab.active { 
+  color: #2962ff; 
+  border-bottom-color: #2962ff; 
+  font-weight: 600; 
+}
 
-.container { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
-.grid-2 { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+.container { max-width: 1280px; margin: 20px auto; padding: 0 20px; }
+.grid-2 { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
 .grid-full { display: grid; grid-template-columns: 1fr; gap: 20px; }
 
-.panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
-.panel h2 { font-size: 15px; color: #8b949e; margin-bottom: 12px; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
-.strategy-item { padding: 10px 12px; border: 1px solid #30363d; border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
-.strategy-item:hover, .strategy-item.active { border-color: #58a6ff; background: #1f2937; }
-.strategy-item .name { font-weight: 600; color: #e6edf3; }
-.strategy-item .desc { font-size: 12px; color: #8b949e; margin-top: 4px; }
-.form-row { margin-bottom: 12px; }
-.form-row label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 4px; }
-.form-row input, .form-row select { width: 100%; padding: 8px 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 14px; }
-.form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.btn { width: 100%; padding: 10px; background: #238636; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
-.btn:hover { background: #2ea043; }
-.btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
-.btn-blue { background: #1f6feb; }
-.btn-blue:hover { background: #388bfd; }
-.btn-outline { background: transparent; border: 1px solid #30363d; color: #c9d1d9; }
-.btn-outline:hover { border-color: #58a6ff; color: #58a6ff; }
+/* 面板卡片 */
+.panel { 
+  background: #1c2030; 
+  border: 1px solid #2a2e39; 
+  border-radius: 6px; 
+  padding: 20px; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+}
+.panel h2 { 
+  font-size: 14px; 
+  font-weight: 600; 
+  color: #f0f3fa; 
+  margin-bottom: 16px; 
+  border-bottom: 1px solid #2a2e39; 
+  padding-bottom: 8px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.strategy-item { 
+  padding: 12px 14px; 
+  border: 1px solid #2a2e39; 
+  border-radius: 4px; 
+  margin-bottom: 8px; 
+  cursor: pointer; 
+  transition: all 0.15s ease; 
+  background: #131722; 
+}
+.strategy-item:hover, .strategy-item.active { 
+  border-color: #2962ff; 
+  background: rgba(41, 98, 255, 0.08); 
+}
+.strategy-item .name { font-weight: 600; color: #f0f3fa; font-size: 13px; }
+.strategy-item .desc { font-size: 12px; color: #848e9c; margin-top: 4px; line-height: 1.4; }
 
+/* 表单与控件 */
+.form-row { margin-bottom: 16px; }
+.form-row label { display: block; font-size: 12px; font-weight: 500; color: #848e9c; margin-bottom: 6px; }
+.form-row input, .form-row select, select, input[type="number"], input[type="text"] { 
+  width: 100%; 
+  padding: 8px 12px; 
+  background: #131722; 
+  border: 1px solid #2a2e39; 
+  border-radius: 4px; 
+  color: #d1d4dc; 
+  font-size: 13px; 
+  transition: all 0.15s ease;
+}
+.form-row select, select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23848e9c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 32px !important;
+}
+.form-row input:focus, .form-row select:focus, select:focus, input:focus {
+  outline: none;
+  border-color: #2962ff;
+  box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
+  background: #171b26;
+}
+
+.form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* 按钮样式重构（废除100%撑满，采用TradingView风） */
+.btn { 
+  width: auto; 
+  padding: 8px 16px; 
+  background: #2962ff; 
+  color: #ffffff; 
+  border: none; 
+  border-radius: 4px; 
+  font-size: 13px; 
+  font-weight: 600; 
+  cursor: pointer; 
+  margin-top: 8px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(41, 98, 255, 0.2);
+}
+/* 仅主操作大按钮及独立面板按钮采用固定最小宽度 */
+.panel > .btn,
+#runBtn, #compareBtn, #optimizeBtn, #liveBtn, #refreshBtn, #addStockBtn, .login-box .btn {
+  min-width: 130px;
+}
+.btn:hover { 
+  background: #1e53e5; 
+  box-shadow: 0 4px 10px rgba(41, 98, 255, 0.35);
+  transform: translateY(-1px);
+}
+.btn:active { 
+  transform: translateY(0); 
+}
+.btn:disabled { 
+  background: #2a2e39; 
+  color: #475266; 
+  cursor: not-allowed; 
+  box-shadow: none; 
+  transform: none; 
+}
+.btn-blue { background: #2962ff; }
+.btn-blue:hover { background: #1e53e5; }
+.btn-outline { background: transparent; border: 1px solid #2a2e39; color: #d1d4dc; box-shadow: none; }
+.btn-outline:hover { border-color: #2962ff; color: #2962ff; background: rgba(41, 98, 255, 0.05); }
+
+/* 面板底部单独存在的动作按钮，自动靠右对齐，避免占满整行 */
+.panel > .btn,
+.panel > div > .btn:only-child,
+.panel > div > button.btn:not([style*="width:auto"]):not([style*="width: auto"]) {
+  display: flex;
+  margin-left: auto;
+  margin-right: 0;
+  margin-top: 16px;
+  width: fit-content;
+}
+
+/* 策略列表内“全部评估”等按钮，在标题里适当排版 */
+.panel h2 .btn {
+  margin-top: 0;
+  padding: 4px 12px;
+  font-size: 12px;
+  min-width: auto;
+}
+
+/* 数据卡片 */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
-.stat-card { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; }
-.stat-card .label { font-size: 11px; color: #8b949e; text-transform: uppercase; }
-.stat-card .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
-.stat-card .value.positive { color: #3fb950; }
-.stat-card .value.negative { color: #f85149; }
-.stat-card .value.neutral { color: #e6edf3; }
+.stat-card { background: #131722; border: 1px solid #2a2e39; border-radius: 4px; padding: 12px; transition: all 0.15s ease; }
+.stat-card:hover { border-color: #363c4e; }
+.stat-card .label { font-size: 11px; color: #848e9c; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 16px; font-weight: 700; margin-top: 4px; }
+.stat-card .value.positive { color: #26a69a; }
+.stat-card .value.negative { color: #ef5350; }
+.stat-card .value.neutral { color: #d1d4dc; }
 
-/* 对比表格 */
-.compare-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-.compare-table th, .compare-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #30363d; font-size: 13px; }
-.compare-table th { color: #8b949e; font-weight: 600; background: #0d1117; position: sticky; top: 0; }
-.compare-table td { color: #c9d1d9; }
-.compare-table tr:hover { background: #1f2937; }
-.compare-table .best { color: #3fb950; font-weight: 700; }
-.compare-table .worst { color: #f85149; }
-
-/* 优化结果表格 */
-.optimize-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-.optimize-table th, .optimize-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #30363d; font-size: 13px; }
-.optimize-table th { color: #8b949e; font-weight: 600; background: #0d1117; }
-.optimize-table td { color: #c9d1d9; }
-.optimize-table tr:hover { background: #1f2937; }
-.rank-1 { background: #23863620 !important; }
-.rank-2 { background: #1f6feb15 !important; }
-.rank-3 { background: #1f6feb10 !important; }
+/* 表格样式 */
+.compare-table, .optimize-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.compare-table th, .compare-table td, .optimize-table th, .optimize-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #2a2e39; font-size: 13px; }
+.compare-table th, .optimize-table th { color: #848e9c; font-weight: 600; background: #131722; position: sticky; top: 0; }
+.compare-table td, .optimize-table td { color: #d1d4dc; }
+.compare-table tr:hover, .optimize-table tr:hover { background: rgba(30, 41, 59, 0.4); }
+.compare-table .best { color: #26a69a; font-weight: 700; }
+.compare-table .worst { color: #ef5350; }
+.rank-1 { background: rgba(38, 166, 154, 0.08) !important; }
+.rank-2 { background: rgba(41, 98, 255, 0.06) !important; }
+.rank-3 { background: rgba(41, 98, 255, 0.04) !important; }
 
 /* 风控配置 */
 .risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.risk-item { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; }
-.risk-item label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 6px; }
-.risk-item input { width: 100%; padding: 6px 8px; background: #161b22; border: 1px solid #30363d; border-radius: 4px; color: #e6edf3; font-size: 14px; }
-.risk-item .hint { font-size: 11px; color: #484f58; margin-top: 4px; }
+.risk-item { background: #131722; border: 1px solid #2a2e39; border-radius: 4px; padding: 12px; }
+.risk-item label { display: block; font-size: 12px; font-weight: 500; color: #848e9c; margin-bottom: 6px; }
+.risk-item input { 
+  width: 100%; 
+  padding: 6px 10px; 
+  background: #1c2030; 
+  border: 1px solid #2a2e39; 
+  border-radius: 4px; 
+  color: #d1d4dc; 
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+.risk-item input:focus { outline: none; border-color: #2962ff; background: #171b26; }
+.risk-item .hint { font-size: 11px; color: #485266; margin-top: 4px; }
 
-.loading { text-align: center; padding: 40px; color: #8b949e; }
-.loading .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #30363d; border-top: 2px solid #58a6ff; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; vertical-align: middle; }
+.loading { text-align: center; padding: 40px; color: #848e9c; font-size: 13px; }
+.loading .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #2a2e39; border-top: 2px solid #2962ff; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 6px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.3s; }
-.toast.show { opacity: 1; }
-.toast.success { background: #238636; color: #fff; }
-.toast.error { background: #da3633; color: #fff; }
-.hidden { display: none; }
-.section-title { font-size: 16px; color: #e6edf3; margin-bottom: 16px; font-weight: 600; }
-.chart-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; margin-top: 12px; }
-.chart-box h3 { font-size: 13px; color: #8b949e; margin-bottom: 8px; }
 
-/* 登录页面 */
-.login-overlay { position: fixed; inset: 0; background: #0d1117; z-index: 1000; display: flex; align-items: center; justify-content: center; }
-.login-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 40px; width: 380px; }
-.login-box h2 { text-align: center; color: #58a6ff; margin-bottom: 8px; font-size: 24px; }
-.login-box .subtitle { text-align: center; color: #8b949e; font-size: 13px; margin-bottom: 28px; }
+/* Toast提示 */
+.toast { position: fixed; top: 24px; right: 24px; padding: 10px 20px; border-radius: 4px; font-size: 13px; font-weight: 600; z-index: 999; opacity: 0; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); transform: translateY(-8px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: #26a69a; color: #fff; }
+.toast.error { background: #ef5350; color: #fff; }
+.hidden { display: none; }
+.section-title { font-size: 15px; color: #f0f3fa; margin-bottom: 12px; font-weight: 600; }
+.chart-box { background: #131722; border: 1px solid #2a2e39; border-radius: 4px; padding: 14px; margin-top: 14px; }
+.chart-box h3 { font-size: 13px; color: #848e9c; margin-bottom: 10px; font-weight: 600; }
+
+/* 登录面板（保持居中和自适应宽度，但去除臃肿感） */
+.login-overlay { position: fixed; inset: 0; background: #131722; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.login-box { background: #1c2030; border: 1px solid #2a2e39; border-radius: 8px; padding: 32px; width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+.login-box h2 { text-align: center; color: #2962ff; margin-bottom: 6px; font-size: 22px; font-weight: 700; background: linear-gradient(135deg, #2962ff, #00b0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.login-box .subtitle { text-align: center; color: #485266; font-size: 11px; margin-bottom: 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 .login-box .form-row { margin-bottom: 16px; }
-.login-box .form-row label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
-.login-box .form-row input { width: 100%; padding: 10px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 14px; }
-.login-box .form-row input:focus { border-color: #58a6ff; outline: none; }
-.login-box .btn { margin-top: 8px; }
-.login-box .switch { text-align: center; margin-top: 16px; font-size: 13px; color: #8b949e; }
-.login-box .switch a { color: #58a6ff; cursor: pointer; text-decoration: none; }
+.login-box .form-row label { display: block; font-size: 12px; color: #848e9c; margin-bottom: 6px; font-weight: 500; }
+.login-box .form-row input { width: 100%; padding: 10px 12px; background: #131722; border: 1px solid #2a2e39; border-radius: 4px; color: #d1d4dc; font-size: 13px; transition: all 0.15s ease; }
+.login-box .form-row input:focus { border-color: #2962ff; outline: none; background: #171b26; box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2); }
+.login-box .btn { width: 100% !important; margin-top: 12px; padding: 10px; display: flex; margin-left: 0 !important; }
+.login-box .switch { text-align: center; margin-top: 16px; font-size: 12px; color: #848e9c; }
+.login-box .switch a { color: #2962ff; cursor: pointer; text-decoration: none; font-weight: 500; }
 .login-box .switch a:hover { text-decoration: underline; }
-.login-box .error-msg { color: #f85149; font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+.login-box .error-msg { color: #ef5350; font-size: 12px; text-align: center; margin-top: 10px; min-height: 20px; font-weight: 500; }
+
 .header .user-info { display: flex; align-items: center; gap: 10px; }
-.header .user-info .username { color: #e6edf3; font-size: 13px; }
-.header .user-info .logout-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
-.header .user-info .logout-btn:hover { border-color: #f85149; color: #f85149; }
+.header .user-info .username { color: #d1d4dc; font-size: 13px; font-weight: 500; }
+.header .user-info .logout-btn { background: #131722; color: #d1d4dc; border: 1px solid #2a2e39; padding: 5px 12px; border-radius: 4px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.header .user-info .logout-btn:hover { border-color: #ef5350; color: #ef5350; background: rgba(239, 83, 80, 0.05); }
 </style>
 </head>
 <body>
@@ -160,6 +331,7 @@ body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0d111
 <div class="tabs">
   <div class="tab active" onclick="switchTab('backtest', this)">回测</div>
   <div class="tab" onclick="switchTab('live', this)">实时行情</div>
+  <div class="tab" onclick="switchTab('strategies', this)">我的策略</div>
   <div class="tab" onclick="switchTab('compare', this)">策略对比</div>
   <div class="tab" onclick="switchTab('optimize', this)">参数优化</div>
   <div class="tab" onclick="switchTab('risk', this)">风控配置</div>
@@ -177,7 +349,17 @@ body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0d111
         <h2>回测配置</h2>
         <div class="form-row">
           <label>股票代码</label>
-          <select id="symbolSelect"><option value="">模拟数据</option></select>
+          <div style="display:flex;gap:8px;align-items:center;position:relative">
+            <select id="symbolSelect" style="flex:1"><option value="">模拟数据</option></select>
+            <select id="quickMarket" style="width:96px;font-size:12px;padding:6px 4px">
+              <option value="">全部</option>
+              <option value="a">A 股</option>
+              <option value="hk">港股</option>
+              <option value="us">美股</option>
+            </select>
+            <input type="text" id="quickSearch" placeholder="搜索代码或名称..." style="width:160px;font-size:12px;padding:6px 8px" autocomplete="off">
+            <div id="quickDropdown" style="display:none;position:absolute;top:100%;left:0;width:320px;z-index:100;background:#161b22;border:1px solid #30363d;border-radius:8px;max-height:240px;overflow-y:auto;margin-top:4px"></div>
+          </div>
         </div>
         <div class="form-row">
           <label>初始资金</label>
@@ -199,33 +381,6 @@ body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0d111
   </div>
 </div>
 
-<!-- ==================== 策略对比页 ==================== -->
-  <div class="grid-full">
-    <div class="panel">
-      <h2>策略对比</h2>
-      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">同时运行所有策略，横向对比收益、夏普比率、最大回撤等核心指标</p>
-      <div class="form-row-inline">
-        <div class="form-row">
-          <label>股票代码</label>
-          <select id="compareSymbol"><option value="">模拟数据</option></select>
-        </div>
-        <div class="form-row">
-          <label>模拟天数</label>
-          <input type="number" id="compareDays" value="500">
-        </div>
-      </div>
-      <button class="btn btn-blue" onclick="runCompare()" id="compareBtn">运行对比</button>
-    </div>
-    <div class="panel">
-      <h2>对比结果</h2>
-      <div id="compareArea">
-        <div class="loading">点击「运行对比」开始</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ==================== 参数优化页 ==================== -->
 <!-- ==================== 实时行情页 ==================== -->
 <div class="container tab-content hidden" id="tab-live">
   <div class="grid-full">
@@ -258,15 +413,17 @@ body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0d111
     <!-- 股票管理 -->
     <div class="panel" style="margin-top:12px">
       <h2>添加股票</h2>
-      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">输入 A 股代码，支持沪市（600xxx）、深市（000xxx/002xxx）、创业板（300xxx）、科创板（688xxx）</p>
-      <div style="display:flex;gap:10px;align-items:end">
-        <div class="form-row" style="flex:1;margin-bottom:0">
-          <label>股票代码（多个用逗号或空格分隔）</label>
-          <input type="text" id="addStockInput" placeholder="例如：601398,600000,000858" style="font-size:14px">
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">输入股票代码或名称搜索，选中后点击「下载添加」。支持沪市（600xxx）、深市（000xxx/002xxx）、创业板（300xxx）、科创板（688xxx）</p>
+      <div style="display:flex;gap:10px;align-items:end;position:relative">
+        <div class="form-row" style="flex:1;margin-bottom:0;position:relative">
+          <label>搜索股票（输入代码、名称或拼音）</label>
+          <input type="text" id="addStockInput" placeholder="例如：茅台、600519、maotai" style="font-size:14px" autocomplete="off">
+          <div id="searchDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:100;background:#161b22;border:1px solid #30363d;border-radius:8px;max-height:240px;overflow-y:auto;margin-top:4px"></div>
         </div>
         <button class="btn" style="width:auto;padding:10px 24px;margin-top:0" onclick="addStocks()" id="addStockBtn">下载添加</button>
       </div>
-      <div id="addStockMsg" style="margin-top:10px;font-size:13px;min-height:20px"></div>
+      <div id="selectedStocks" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;min-height:24px"></div>
+      <div id="addStockMsg" style="margin-top:6px;font-size:13px;min-height:20px"></div>
       <div id="stockListArea" style="margin-top:12px"></div>
     </div>
 
@@ -275,6 +432,102 @@ body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0d111
       <div id="liveKlineChart" style="height:500px">
         <div class="loading">选择股票后点击「查看行情」</div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 我的策略页 ==================== -->
+<div class="container tab-content hidden" id="tab-strategies">
+  <div class="grid-full">
+    <div class="panel">
+      <h2>创建策略</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:16px">配置日 K 线买卖条件，系统每日收盘后自动评估，有信号时推送通知到飞书/微信</p>
+
+      <!-- 自然语言输入 -->
+      <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="color:#58a6ff;font-size:14px">用大白话说出你的策略</b>
+          <span style="font-size:11px;color:#484f58">看不懂指标没关系，打字就行</span>
+        </div>
+        <textarea id="nlInput" rows="3" placeholder="例如：跌破20%就卖，涨了5%就买&#10;站上20日线买入，跌破10日线卖出&#10;MACD金叉买入，RSI超买卖出"
+          style="width:100%;background:#131722;color:#d1d4dc;border:1px solid #30363d;border-radius:6px;padding:10px;font-size:14px;resize:vertical;font-family:inherit"></textarea>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <button class="btn" style="background:#2962ff;padding:6px 16px;font-size:13px" onclick="parseNLStrategy()">智能翻译</button>
+          <span style="font-size:12px;color:#484f58;margin-left:8px">快捷填入:</span>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('跌破20%就卖，涨了5%就买')">涨跌百分比</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('站上20日线就买，跌破10日线就卖')">均线突破</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('MACD金叉买入，MACD死叉卖出')">MACD金叉死叉</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('RSI超买卖出，RSI超卖买入')">RSI超买超卖</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('放量突破10日高点买入，缩量跌破10日低点卖出')">量价突破</button>
+        </div>
+        <div id="nlResult" style="margin-top:10px;font-size:13px;min-height:20px"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label style="font-size:12px;color:#8b949e">策略名称</label>
+          <input type="text" id="strategyName" placeholder="如：茅台金叉买入" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:12px;color:#8b949e">监控股票</label>
+          <div style="display:flex;gap:6px">
+            <select id="strategyMarket" style="width:100px">
+              <option value="a">A 股</option>
+              <option value="hk">港股</option>
+              <option value="us">美股</option>
+            </select>
+            <input type="text" id="strategySymbol" placeholder="输入代码或名称搜索..." style="flex:1" autocomplete="off">
+          </div>
+          <div id="strategySymbolDropdown" style="display:none;position:absolute;z-index:100;background:#161b22;border:1px solid #30363d;border-radius:8px;max-height:180px;overflow-y:auto;width:300px;margin-top:2px"></div>
+        </div>
+      </div>
+
+      <!-- 买入条件 -->
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="color:#3fb950">买入条件（全部满足才触发）</b>
+          <button class="btn" style="background:#238636;padding:4px 12px;font-size:12px" onclick="addCondition('buy')">+ 添加条件</button>
+        </div>
+        <div id="buyConditions" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+
+      <!-- 卖出条件 -->
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="color:#f85149">卖出条件（全部满足才触发）</b>
+          <button class="btn" style="background:#da3633;padding:4px 12px;font-size:12px" onclick="addCondition('sell')">+ 添加条件</button>
+        </div>
+        <div id="sellConditions" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+
+      <button class="btn" onclick="saveStrategy()">保存策略</button>
+      <div id="strategySaveMsg" style="margin-top:8px;font-size:13px"></div>
+    </div>
+
+    <!-- 预设策略模板 -->
+    <div class="panel">
+      <h2>预设策略模板</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">经典量化策略一键加载，选择股票后点击模板即可自动创建</p>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <select id="presetMarket" style="width:100px">
+          <option value="a">A 股</option>
+          <option value="hk">港股</option>
+          <option value="us">美股</option>
+        </select>
+        <input type="text" id="presetSymbol" placeholder="输入股票代码或名称..." style="flex:1" autocomplete="off">
+      </div>
+      <div id="presetSymbolDropdown" style="display:none;position:absolute;z-index:100;background:#161b22;border:1px solid #30363d;border-radius:8px;max-height:180px;overflow-y:auto;width:300px;margin-top:-8px"></div>
+      <div id="presetList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px"></div>
+      <div id="presetMsg" style="margin-top:8px;font-size:13px;min-height:20px"></div>
+    </div>
+
+    <div class="panel">
+      <h2 style="display:flex;justify-content:space-between;align-items:center">
+        策略列表
+        <button class="btn" style="background:#1f6feb;padding:4px 12px;font-size:12px" onclick="evaluateAllStrategies()">全部评估</button>
+      </h2>
+      <div id="userStrategyList"><div class="loading">加载中...</div></div>
+      <div id="evalAllMsg" style="margin-top:8px;font-size:13px;min-height:20px"></div>
     </div>
   </div>
 </div>
@@ -550,27 +803,23 @@ async function init() {
     authFetch('/data').then(r => r.json()),
   ]);
 
+  // 策略列表：一次性插入
   const container = document.getElementById('strategyList');
-  for (const [key, info] of Object.entries(strategies.strategies)) {
+  const entries = Object.entries(strategies.strategies);
+  container.innerHTML = entries.map(([key, info]) => {
     strategyKeys.push(key);
-    const div = document.createElement('div');
-    div.className = 'strategy-item';
-    div.dataset.key = key;
-    div.innerHTML = `<div class="name">${info.name}</div><div class="desc">${info.desc}</div>`;
-    div.onclick = () => selectStrategy(key, div);
-    container.appendChild(div);
-  }
+    return `<div class="strategy-item" data-key="${key}" onclick="selectStrategy('${key}', this)">
+      <div class="name">${info.name}</div><div class="desc">${info.desc}</div></div>`;
+  }).join('');
 
-  // 同步数据到所有下拉框
-  const selects = ['symbolSelect', 'compareSymbol', 'optimizeSymbol', 'liveSymbol'];
-  selects.forEach(id => {
+  // 同步数据到所有下拉框：一次性插入
+  const optHtml = data.data.map(d => {
+    const name = d.name || d.symbol;
+    return `<option value="${d.symbol}">${name} ${d.symbol}（${d.rows}条）</option>`;
+  }).join('');
+  ['symbolSelect', 'compareSymbol', 'optimizeSymbol', 'liveSymbol'].forEach(id => {
     const sel = document.getElementById(id);
-    data.data.forEach(d => {
-      const opt = document.createElement('option');
-      opt.value = d.symbol;
-      opt.textContent = `${d.symbol}（${d.start} ~ ${d.end}，${d.rows}条）`;
-      sel.appendChild(opt);
-    });
+    sel.innerHTML = sel.innerHTML + optHtml;
   });
 }
 
@@ -907,10 +1156,33 @@ function showToast(msg, type) {
 }
 
 // ==================== ECharts 图表 ====================
+// 图表实例缓存，避免重复初始化和 resize 监听器泄漏
+const _chartInstances = {};
+function getChart(el) {
+  return echarts.getInstanceByDom(el) || echarts.init(el, 'dark');
+}
+// 全局统一 resize（替代每个图表单独监听）
+window.addEventListener('resize', () => {
+  Object.values(_chartInstances).forEach(c => { try { c.resize(); } catch(e){} });
+});
+
+// 共享 MA 计算
+function calcMA(data, n) {
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < n - 1) { result.push('-'); continue; }
+    let sum = 0;
+    for (let j = 0; j < n; j++) sum += data[i - j][1];
+    result.push((sum / n).toFixed(2));
+  }
+  return result;
+}
+
 function renderEquityChart(daily) {
   const el = document.getElementById('equityChart');
   if (!el) return;
-  const chart = echarts.init(el, 'dark');
+  const chart = getChart(el);
+  _chartInstances['equity'] = chart;
   const dates = daily.map(d => d.date);
   const balances = daily.map(d => d.balance);
   const pnls = daily.map(d => d.net_pnl);
@@ -931,28 +1203,17 @@ function renderEquityChart(daily) {
       { name: '日盈亏', type: 'bar', yAxisIndex: 1, data: pnls, itemStyle: { color: p => p.value >= 0 ? '#3fb950' : '#f85149' }, barMaxWidth: 4 },
     ],
   });
-  window.addEventListener('resize', () => chart.resize());
 }
 
 function renderKlineChart(kline, trades) {
   const el = document.getElementById('klineChart');
   if (!el) return;
-  const chart = echarts.init(el, 'dark');
+  const chart = getChart(el);
+  _chartInstances['kline'] = chart;
 
   const dates = kline.map(k => k[0]);
-  const ohlc = kline.map(k => [k[1], k[2], k[3], k[4]]); // open, close, low, high
+  const ohlc = kline.map(k => [k[1], k[2], k[3], k[4]]);
 
-  // 计算 MA
-  function calcMA(data, n) {
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < n - 1) { result.push('-'); continue; }
-      let sum = 0;
-      for (let j = 0; j < n; j++) sum += data[i - j][1]; // close
-      result.push((sum / n).toFixed(2));
-    }
-    return result;
-  }
   const ma5 = calcMA(kline, 5);
   const ma20 = calcMA(kline, 20);
 
@@ -990,7 +1251,6 @@ function renderKlineChart(kline, trades) {
       { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { color: '#bc8cff', width: 1 }, showSymbol: false },
     ],
   });
-  window.addEventListener('resize', () => chart.resize());
 }
 
 // ==================== 实时行情 ====================
@@ -1034,21 +1294,11 @@ function renderLiveKline(kline, trades, symbol, total, quoteInfo) {
   const el = document.getElementById('liveKlineChart');
   el.innerHTML = (quoteInfo || '') + '<div id="liveChartInner" style="height:500px"></div>';
   const chart = echarts.init(document.getElementById('liveChartInner'), 'dark');
+  _chartInstances['live'] = chart;
 
   const dates = kline.map(k => k[0]);
   const ohlc = kline.map(k => [k[1], k[2], k[3], k[4]]);
   const volumes = kline.map(k => k[5]);
-
-  function calcMA(data, n) {
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < n - 1) { result.push('-'); continue; }
-      let sum = 0;
-      for (let j = 0; j < n; j++) sum += data[i - j][1];
-      result.push((sum / n).toFixed(2));
-    }
-    return result;
-  }
 
   const ma5 = calcMA(kline, 5);
   const ma10 = calcMA(kline, 10);
@@ -1106,16 +1356,201 @@ function renderLiveKline(kline, trades, symbol, total, quoteInfo) {
         })), xAxisIndex: 1, yAxisIndex: 1 },
     ],
   });
-  window.addEventListener('resize', () => chart.resize());
 }
+
+// ==================== 通用股票搜索绑定 ====================
+let _searchAbort = null;
+
+function bindStockSearch(inputId, dropdownId, marketId, onSelect, limit = 10) {
+  let timer = null;
+  const input = document.getElementById(inputId);
+  const dd = document.getElementById(dropdownId);
+  if (!input || !dd) return;
+
+  input.addEventListener('input', e => {
+    const q = e.target.value.trim();
+    clearTimeout(timer);
+    if (q.length < 1) { dd.style.display = 'none'; return; }
+    timer = setTimeout(async () => {
+      if (_searchAbort) _searchAbort.abort();
+      _searchAbort = new AbortController();
+      const market = marketId ? document.getElementById(marketId)?.value : '';
+      const url = `/stocks/search?q=${encodeURIComponent(q)}&limit=${limit}` + (market ? `&market=${market}` : '');
+      try {
+        const resp = await authFetch(url, { signal: _searchAbort.signal });
+        const data = await resp.json();
+        const items = data.results || [];
+        if (items.length === 0) { dd.style.display = 'none'; return; }
+        dd.innerHTML = items.map(s =>
+          `<div style="padding:6px 10px;cursor:pointer;border-bottom:1px solid #21262d;font-size:13px"
+            onmouseover="this.style.background='#21262d'" onmouseout="this.style.background='transparent'"
+            onclick="(${onSelect})('${s.code}','${s.name.replace(/'/g, "\\'")}')">
+            <b style="color:#e6edf3">${s.name}</b> <span style="color:#8b949e">${s.code}</span>
+          </div>`
+        ).join('');
+        dd.style.display = 'block';
+      } catch(e) { if (e.name !== 'AbortError') dd.style.display = 'none'; }
+    }, 200);
+  });
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest(`#${inputId}`) && !e.target.closest(`#${dropdownId}`))
+      dd.style.display = 'none';
+  });
+}
+
+// ==================== 回测页快速搜索 ====================
+let _quickTimer = null;
+
+document.getElementById('quickSearch').addEventListener('input', e => {
+  const q = e.target.value.trim();
+  clearTimeout(_quickTimer);
+  if (q.length < 1) { document.getElementById('quickDropdown').style.display = 'none'; return; }
+  _quickTimer = setTimeout(() => quickSearchStocks(q), 300);
+});
+
+document.getElementById('quickSearch').addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('quickDropdown').style.display = 'none';
+});
+
+async function quickSearchStocks(q) {
+  const dropdown = document.getElementById('quickDropdown');
+  const market = document.getElementById('quickMarket').value;
+  try {
+    const resp = await authFetch(`/stocks/search?q=${encodeURIComponent(q)}&limit=30` + (market ? `&market=${market}` : ''));
+    const data = await resp.json();
+    const items = (data.results || []).slice(0, 25);
+    if (items.length === 0) { dropdown.style.display = 'none'; return; }
+    const marketTag = {a: 'A', hk: '港股', us: '美股'};
+    dropdown.innerHTML = items.map(s => {
+      const tag = marketTag[s.market] || '';
+      return `<div style="padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;border-bottom:1px solid #21262d"
+        onmouseover="this.style.background='#21262d'" onmouseout="this.style.background='transparent'"
+        onclick="quickAddStock('${s.code}','${s.name.replace(/'/g, "\\'")}')">
+        <span><b style="color:#e6edf3">${s.name}</b> <span style="color:#8b949e">${s.code}</span></span>
+        <span style="color:${tag === 'A' ? '#3fb950' : tag === '港股' ? '#f0883e' : '#58a6ff'};font-size:11px">${tag}</span>
+      </div>`;
+    }).join('');
+    dropdown.style.display = 'block';
+  } catch(e) { dropdown.style.display = 'none'; }
+}
+
+async function quickAddStock(code, name) {
+  document.getElementById('quickDropdown').style.display = 'none';
+  document.getElementById('quickSearch').value = '';
+  // 检查是否已存在
+  const sel = document.getElementById('symbolSelect');
+  if (Array.from(sel.options).some(o => o.value === code)) {
+    sel.value = code;
+    showToast(`已选择 ${name} ${code}`, 'success');
+    return;
+  }
+  // 下载并添加
+  showToast(`正在下载 ${name}...`, 'success');
+  try {
+    const resp = await authFetch('/stocks/add', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({symbols: [code]}),
+    });
+    const data = await resp.json();
+    if (data.results && data.results[0]?.status === 'ok') {
+      const r = data.results[0];
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = `${name} ${code}（${r.rows}条）`;
+      sel.appendChild(opt);
+      sel.value = code;
+      showToast(`${name} 添加成功`, 'success');
+    } else {
+      showToast(`添加失败: ${data.results?.[0]?.msg || '未知错误'}`, 'error');
+    }
+  } catch(e) { showToast('网络错误', 'error'); }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#quickSearch') && !e.target.closest('#quickDropdown')) {
+    document.getElementById('quickDropdown').style.display = 'none';
+  }
+});
+
+// ==================== 股票搜索联想 ====================
+const _selectedStocks = new Map(); // code -> name
+let _searchTimer = null;
+
+function renderSelectedStocks() {
+  const el = document.getElementById('selectedStocks');
+  if (_selectedStocks.size === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = Array.from(_selectedStocks.entries()).map(([code, name]) =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:#1f6feb22;border:1px solid #1f6feb55;border-radius:6px;padding:2px 8px;font-size:12px;color:#58a6ff;cursor:pointer" onclick="removeStock('${code}')">${name} ${code} ×</span>`
+  ).join('');
+}
+
+function removeStock(code) {
+  _selectedStocks.delete(code);
+  renderSelectedStocks();
+}
+
+document.getElementById('addStockInput').addEventListener('input', e => {
+  const q = e.target.value.trim();
+  clearTimeout(_searchTimer);
+  if (q.length < 1) { document.getElementById('searchDropdown').style.display = 'none'; return; }
+  _searchTimer = setTimeout(() => searchStocks(q), 300);
+});
+
+document.getElementById('addStockInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const dropdown = document.getElementById('searchDropdown');
+    if (dropdown.style.display !== 'none') return; // 有搜索结果时不提交
+    addStocks();
+  }
+});
+
+async function searchStocks(q) {
+  const dropdown = document.getElementById('searchDropdown');
+  try {
+    const resp = await authFetch(`/stocks/search?q=${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    const items = (data.results || []).slice(0, 20);
+    if (items.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = items.map(s => {
+      const selected = _selectedStocks.has(s.code);
+      return `<div style="padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #21262d;${selected ? 'opacity:0.4' : ''}"
+        onmouseover="this.style.background='#21262d'" onmouseout="this.style.background='transparent'"
+        onclick="selectStock('${s.code}','${s.name}')">
+        <span><b style="color:#e6edf3">${s.name}</b> <span style="color:#8b949e">${s.code}</span></span>
+        <span style="color:#484f58;font-size:11px">${s.sector || s.market || ''}</span>
+      </div>`;
+    }).join('');
+    dropdown.style.display = 'block';
+  } catch(e) { dropdown.style.display = 'none'; }
+}
+
+function selectStock(code, name) {
+  if (_selectedStocks.has(code)) return;
+  _selectedStocks.set(code, name);
+  renderSelectedStocks();
+  document.getElementById('addStockInput').value = '';
+  document.getElementById('searchDropdown').style.display = 'none';
+}
+
+// 点击外部关闭下拉
+document.addEventListener('click', e => {
+  if (!e.target.closest('#addStockInput') && !e.target.closest('#searchDropdown')) {
+    document.getElementById('searchDropdown').style.display = 'none';
+  }
+});
 
 // ==================== 股票管理 ====================
 async function addStocks() {
-  const input = document.getElementById('addStockInput').value.trim();
-  if (!input) { showToast('请输入股票代码', 'error'); return; }
-
-  // 支持逗号、空格、换行分隔
-  const symbols = input.split(/[,，\s\n]+/).map(s => s.trim()).filter(s => s.length === 6);
+  // 如果有选中的股票，用选中的；否则从输入框解析
+  let symbols = [];
+  if (_selectedStocks.size > 0) {
+    symbols = Array.from(_selectedStocks.keys());
+  } else {
+    const input = document.getElementById('addStockInput').value.trim();
+    if (!input) { showToast('请输入或搜索股票', 'error'); return; }
+    symbols = input.split(/[,，\s\n]+/).map(s => s.trim()).filter(s => s.length === 6);
+  }
   if (symbols.length === 0) { showToast('请输入有效的6位股票代码', 'error'); return; }
 
   const btn = document.getElementById('addStockBtn');
@@ -1153,13 +1588,16 @@ async function addStocks() {
           if (!exists) {
             const opt = document.createElement('option');
             opt.value = r.symbol;
-            opt.textContent = `${r.symbol}（${r.start} ~ ${r.end}，${r.rows}条）`;
+            const name = r.name || r.symbol;
+            opt.textContent = `${name} ${r.symbol}（${r.rows}条）`;
             sel.appendChild(opt);
           }
         });
       });
       showToast(`添加完成`, 'success');
       document.getElementById('addStockInput').value = '';
+      _selectedStocks.clear();
+      renderSelectedStocks();
     } else {
       msg.innerHTML = `<span style="color:#f85149">${data.detail || '添加失败'}</span>`;
     }
@@ -1168,9 +1606,6 @@ async function addStocks() {
   }
   btn.disabled = false; btn.textContent = '下载添加';
 }
-
-// 回车键支持
-document.getElementById('addStockInput').addEventListener('keydown', e => { if (e.key === 'Enter') addStocks(); });
 
 async function refreshData() {
   const btn = document.getElementById('refreshBtn');
@@ -1183,16 +1618,12 @@ async function refreshData() {
     if (res.ok) {
       document.getElementById('refreshMsg').textContent = `已更新 ${data.count} 只股票，数据范围: ${data.start} ~ ${data.end}`;
       showToast('数据已刷新', 'success');
-      // 刷新下拉框
+      // 刷新下拉框：一次性插入
       const liveSel = document.getElementById('liveSymbol');
-      liveSel.innerHTML = '';
       if (data.files) {
-        data.files.forEach(f => {
-          const opt = document.createElement('option');
-          opt.value = f.symbol;
-          opt.textContent = `${f.symbol}（${f.start} ~ ${f.end}）`;
-          liveSel.appendChild(opt);
-        });
+        liveSel.innerHTML = data.files.map(f =>
+          `<option value="${f.symbol}">${f.symbol}（${f.start} ~ ${f.end}）</option>`
+        ).join('');
       }
     } else {
       document.getElementById('refreshMsg').textContent = '刷新失败: ' + (data.detail || '未知错误');
@@ -1203,6 +1634,395 @@ async function refreshData() {
 
   btn.disabled = false; btn.textContent = '刷新数据';
 }
+
+// ==================== 自定义策略 ====================
+const _buyConditions = [];
+const _sellConditions = [];
+
+const INDICATORS = {
+  close: {name: '收盘价', params: []},
+  open: {name: '开盘价', params: []},
+  high: {name: '最高价', params: []},
+  low: {name: '最低价', params: []},
+  ma: {name: 'MA 均线', params: [{key:'period',label:'周期',default:20}]},
+  ema: {name: 'EMA 均线', params: [{key:'period',label:'周期',default:20}]},
+  wma: {name: 'WMA 加权均线', params: [{key:'period',label:'周期',default:20}]},
+  rsi: {name: 'RSI', params: [{key:'period',label:'周期',default:14}]},
+  macd: {name: 'MACD', params: [{key:'fast',label:'快线',default:12},{key:'slow',label:'慢线',default:26},{key:'signal',label:'信号线',default:9}], fields:['dif','dea','macd']},
+  boll: {name: '布林带', params: [{key:'period',label:'周期',default:20},{key:'std',label:'标准差',default:2}], fields:['upper','middle','lower']},
+  kdj: {name: 'KDJ', params: [{key:'n',label:'N',default:9},{key:'m1',label:'M1',default:3},{key:'m2',label:'M2',default:3}], fields:['k','d','j']},
+  atr: {name: 'ATR 波幅', params: [{key:'period',label:'周期',default:14}]},
+  cci: {name: 'CCI', params: [{key:'period',label:'周期',default:20}]},
+  volume: {name: '成交量', params: []},
+  vol_ma: {name: '成交量均线', params: [{key:'period',label:'周期',default:20}]},
+  vol_ratio: {name: '量比', params: [{key:'period',label:'周期',default:20}]},
+  obv: {name: 'OBV 能量潮', params: []},
+  highest: {name: 'N日最高价', params: [{key:'period',label:'天数',default:20}]},
+  lowest: {name: 'N日最低价', params: [{key:'period',label:'天数',default:20}]},
+  donchian: {name: '唐奇安通道', params: [{key:'period',label:'周期',default:20}], fields:['upper','lower','middle']},
+  return: {name: 'N日收益率%', params: [{key:'period',label:'天数',default:20}]},
+};
+
+const OPERATORS = [
+  {value:'cross_above', label:'上穿'},
+  {value:'cross_below', label:'下穿'},
+  {value:'>', label:'大于 (>)'},
+  {value:'<', label:'小于 (<)'},
+  {value:'>=', label:'大于等于 (>=)'},
+  {value:'<=', label:'小于等于 (<=)'},
+  {value:'==', label:'等于 (==)'},
+];
+
+function buildConditionHTML(cond, type, idx) {
+  const borderColor = type === 'buy' ? '#238636' : '#da3633';
+  const indOpts = Object.entries(INDICATORS).map(([k,v]) =>
+    `<option value="${k}" ${cond.left.indicator===k||cond.left.type==='value'&&k==='close' ? 'selected' : ''}>${v.name}</option>`).join('');
+
+  const rightType = cond.right.type === 'fixed' ? 'fixed' : 'indicator';
+  const opOpts = OPERATORS.map(o => `<option value="${o.value}" ${cond.op===o.value?'selected':''}>${o.label}</option>`).join('');
+
+  return `<div style="display:flex;gap:6px;align-items:center;padding:8px;background:#131722;border:1px solid ${borderColor}33;border-radius:6px;flex-wrap:wrap">
+    <select onchange="updateCondLeftType('${type}',${idx},this.value)" style="width:85px;font-size:12px">
+      <option value="indicator" ${cond.left.type==='indicator'?'selected':''}>指标</option>
+      <option value="fixed" ${cond.left.type==='fixed'?'selected':''}>数值</option>
+    </select>
+    ${cond.left.type === 'fixed'
+      ? `<input type="number" step="any" value="${cond.left.value||0}" style="width:80px;font-size:12px" onchange="updateCondLeftValue('${type}',${idx},this.value)">`
+      : `<select onchange="updateCondLeftIndicator('${type}',${idx},this.value)" style="width:115px;font-size:12px">${indOpts}</select>
+         ${buildIndicatorParams(cond.left, type, idx, 'left')}`
+    }
+    <select onchange="updateCondOp('${type}',${idx},this.value)" style="width:125px;font-size:12px">${opOpts}</select>
+    <select onchange="updateCondRightType('${type}',${idx},this.value)" style="width:85px;font-size:12px">
+      <option value="indicator" ${rightType==='indicator'?'selected':''}>指标</option>
+      <option value="fixed" ${rightType==='fixed'?'selected':''}>数值</option>
+    </select>
+    ${rightType === 'fixed'
+      ? `<input type="number" step="any" value="${cond.right.value||0}" style="width:80px;font-size:12px" onchange="updateCondRightValue('${type}',${idx},this.value)">`
+      : `<select onchange="updateCondRightIndicator('${type}',${idx},this.value)" style="width:115px;font-size:12px">${indOpts}</select>
+         ${buildIndicatorParams(cond.right, type, idx, 'right')}`
+    }
+    <span style="color:#484f58;cursor:pointer;font-size:16px" onclick="removeCondition('${type}',${idx})">×</span>
+  </div>`;
+}
+
+function buildIndicatorParams(ref, type, idx, side) {
+  const ind = INDICATORS[ref.indicator || 'ma'];
+  if (!ind) return '';
+  let html = '';
+  const p = ref.params || {};
+  for (const param of (ind.params || [])) {
+    html += `<input type="number" value="${p[param.key]||param.default}" title="${param.label}" style="width:50px;font-size:11px;padding:2px 4px" placeholder="${param.key}"
+      onchange="updateCondParam('${type}',${idx},'${side}','${param.key}',this.value)">`;
+  }
+  if (ind.fields) {
+    html += `<select style="width:80px;font-size:11px" onchange="updateCondParam('${type}',${idx},'${side}','field',this.value)">
+      ${ind.fields.map(f => `<option value="${f}" ${(p.field||ind.fields[0])===f?'selected':''}>${f}</option>`).join('')}
+    </select>`;
+  }
+  return html;
+}
+
+function renderConditions(type) {
+  const conds = type === 'buy' ? _buyConditions : _sellConditions;
+  const el = document.getElementById(type === 'buy' ? 'buyConditions' : 'sellConditions');
+  if (conds.length === 0) {
+    el.innerHTML = `<div style="color:#484f58;font-size:13px;padding:12px;text-align:center;border:1px dashed #21262d;border-radius:6px">点击「+ 添加条件」配置${type==='buy'?'买入':'卖出'}规则</div>`;
+    return;
+  }
+  el.innerHTML = conds.map((c, i) => buildConditionHTML(c, type, i)).join('');
+}
+
+function defaultCondition() {
+  return {
+    left: {type:'indicator', indicator:'ma', params:{period:5}},
+    op: 'cross_above',
+    right: {type:'indicator', indicator:'ma', params:{period:20}},
+  };
+}
+
+function addCondition(type) {
+  (type === 'buy' ? _buyConditions : _sellConditions).push(defaultCondition());
+  renderConditions(type);
+}
+
+function removeCondition(type, idx) {
+  (type === 'buy' ? _buyConditions : _sellConditions).splice(idx, 1);
+  renderConditions(type);
+}
+
+function updateCondLeftType(type, idx, val) {
+  const cond = (type === 'buy' ? _buyConditions : _sellConditions)[idx];
+  if (val === 'fixed') { cond.left = {type:'fixed', value: 100}; }
+  else { cond.left = {type:'indicator', indicator:'ma', params:{period:20}}; }
+  renderConditions(type);
+}
+function updateCondRightType(type, idx, val) {
+  const cond = (type === 'buy' ? _buyConditions : _sellConditions)[idx];
+  if (val === 'fixed') { cond.right = {type:'fixed', value: 100}; }
+  else { cond.right = {type:'indicator', indicator:'ma', params:{period:20}}; }
+  renderConditions(type);
+}
+function updateCondLeftIndicator(type, idx, val) {
+  const cond = (type === 'buy' ? _buyConditions : _sellConditions)[idx];
+  cond.left.indicator = val;
+  const ind = INDICATORS[val];
+  cond.left.params = {};
+  for (const p of (ind.params || [])) cond.left.params[p.key] = p.default;
+  if (ind.fields) cond.left.params.field = ind.fields[0];
+  renderConditions(type);
+}
+function updateCondRightIndicator(type, idx, val) {
+  const cond = (type === 'buy' ? _buyConditions : _sellConditions)[idx];
+  cond.right.indicator = val;
+  const ind = INDICATORS[val];
+  cond.right.params = {};
+  for (const p of (ind.params || [])) cond.right.params[p.key] = p.default;
+  if (ind.fields) cond.right.params.field = ind.fields[0];
+  renderConditions(type);
+}
+function updateCondOp(type, idx, val) { (type === 'buy' ? _buyConditions : _sellConditions)[idx].op = val; }
+function updateCondLeftValue(type, idx, val) { (type === 'buy' ? _buyConditions : _sellConditions)[idx].left.value = parseFloat(val); }
+function updateCondRightValue(type, idx, val) { (type === 'buy' ? _buyConditions : _sellConditions)[idx].right.value = parseFloat(val); }
+function updateCondParam(type, idx, side, key, val) {
+  const cond = (type === 'buy' ? _buyConditions : _sellConditions)[idx];
+  if (!cond[side].params) cond[side].params = {};
+  cond[side].params[key] = isNaN(val) ? val : parseFloat(val);
+}
+
+// 股票搜索联想（策略页）
+bindStockSearch('strategySymbol', 'strategySymbolDropdown', 'strategyMarket',
+  (code) => { document.getElementById('strategySymbol').value = code; document.getElementById('strategySymbolDropdown').style.display = 'none'; });
+
+async function saveStrategy() {
+  const name = document.getElementById('strategyName').value.trim();
+  const symbol = document.getElementById('strategySymbol').value.trim();
+  const market = document.getElementById('strategyMarket').value;
+  const msg = document.getElementById('strategySaveMsg');
+  if (!name) { msg.innerHTML = '<span style="color:#f85149">请输入策略名称</span>'; return; }
+  if (!symbol) { msg.innerHTML = '<span style="color:#f85149">请输入股票代码</span>'; return; }
+  if (_buyConditions.length === 0 && _sellConditions.length === 0) {
+    msg.innerHTML = '<span style="color:#f85149">至少配置一个买入或卖出条件</span>'; return;
+  }
+  try {
+    const resp = await authFetch('/user-strategies', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name, symbol, market, buy_conditions: _buyConditions, sell_conditions: _sellConditions}),
+    });
+    if (resp.ok) {
+      msg.innerHTML = '<span style="color:#3fb950">策略创建成功！</span>';
+      _buyConditions.length = 0; _sellConditions.length = 0;
+      renderConditions('buy'); renderConditions('sell');
+      document.getElementById('strategyName').value = '';
+      document.getElementById('strategySymbol').value = '';
+      loadStrategies();
+      showToast('策略已保存', 'success');
+    } else {
+      const d = await resp.json();
+      msg.innerHTML = `<span style="color:#f85149">${d.detail || '创建失败'}</span>`;
+    }
+  } catch(e) { msg.innerHTML = `<span style="color:#f85149">${e.message}</span>`; }
+}
+
+async function loadStrategies() {
+  const el = document.getElementById('userStrategyList');
+  try {
+    const resp = await authFetch('/user-strategies');
+    const data = await resp.json();
+    const strats = data.strategies || [];
+    if (strats.length === 0) {
+      el.innerHTML = '<div style="color:#484f58;text-align:center;padding:24px">还没有策略，先在左边创建一个吧</div>';
+      return;
+    }
+    el.innerHTML = strats.map(s => {
+      const buyN = (s.buy_conditions || []).length;
+      const sellN = (s.sell_conditions || []).length;
+      const statusColor = s.enabled ? '#3fb950' : '#484f58';
+      const lastEval = s.last_evaluated || '未评估';
+      return `<div style="padding:12px;background:#0d1117;border:1px solid #21262d;border-radius:8px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div>
+            <b style="color:#e6edf3">${s.name}</b>
+            <span style="color:#8b949e;font-size:12px;margin-left:8px">${s.symbol}</span>
+            <span style="color:${statusColor};font-size:11px;margin-left:8px">${s.enabled ? '●运行中' : '●已暂停'}</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn" style="background:#1f6feb;padding:3px 10px;font-size:11px" onclick="evaluateStrategy(${s.id})">评估</button>
+            <button class="btn" style="background:${s.enabled?'#6e7681':'#238636'};padding:3px 10px;font-size:11px" onclick="toggleStrategy(${s.id},${!s.enabled})">${s.enabled?'暂停':'启用'}</button>
+            <button class="btn" style="background:#da3633;padding:3px 10px;font-size:11px" onclick="deleteStrategy(${s.id})">删除</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#8b949e">
+          买入条件: ${buyN} 条 | 卖出条件: ${sellN} 条 | 上次评估: ${lastEval}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { el.innerHTML = `<div style="color:#f85149">加载失败: ${e.message}</div>`; }
+}
+
+async function evaluateStrategy(id) {
+  showToast('正在评估...', 'success');
+  try {
+    const resp = await authFetch(`/user-strategies/${id}/evaluate`, {method:'POST'});
+    const data = await resp.json();
+    if (data.status === 'error') {
+      showToast(`评估失败: ${data.error}`, 'error');
+      return;
+    }
+    const signals = data.signals || [];
+    if (signals.length > 0) {
+      const s = signals[0];
+      showToast(`发现信号: ${s.type === 'buy' ? '买入' : '卖出'}！已推送通知`, 'success');
+    } else {
+      showToast(`评估完成: 暂无信号 (最新: ${data.latest_date} 收盘 ${data.latest_close})`, 'success');
+    }
+    loadStrategies();
+  } catch(e) { showToast('评估失败', 'error'); }
+}
+
+async function toggleStrategy(id, enabled) {
+  await authFetch(`/user-strategies/${id}`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({enabled}),
+  });
+  loadStrategies();
+}
+
+async function deleteStrategy(id) {
+  if (!confirm('确认删除这个策略？')) return;
+  await authFetch(`/user-strategies/${id}`, {method:'DELETE'});
+  loadStrategies();
+  showToast('已删除', 'success');
+}
+
+async function evaluateAllStrategies() {
+  const msg = document.getElementById('evalAllMsg');
+  msg.innerHTML = '<span style="color:#58a6ff">正在评估所有策略...</span>';
+  try {
+    const resp = await authFetch('/user-strategies/evaluate-all', {method:'POST'});
+    const data = await resp.json();
+    msg.innerHTML = `<span style="color:#3fb950">评估完成: ${data.evaluated} 个策略，发现 ${data.signals} 个信号</span>`;
+    loadStrategies();
+    showToast(`评估完成，${data.signals} 个信号`, 'success');
+  } catch(e) { msg.innerHTML = `<span style="color:#f85149">${e.message}</span>`; }
+}
+
+// 初始化策略页
+renderConditions('buy');
+renderConditions('sell');
+loadStrategies();
+
+// 自然语言策略解析
+function fillNLExample(text) {
+  document.getElementById('nlInput').value = text;
+  document.getElementById('nlInput').focus();
+}
+
+async function parseNLStrategy() {
+  const text = document.getElementById('nlInput').value.trim();
+  const result = document.getElementById('nlResult');
+  if (!text) {
+    result.innerHTML = '<span style="color:#f85149">请输入你的策略描述</span>';
+    return;
+  }
+  result.innerHTML = '<span style="color:#58a6ff">正在翻译...</span>';
+  try {
+    const resp = await authFetch('/nl/parse', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text}),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.status === 'ok') {
+      const bc = data.buy_conditions || [];
+      const sc = data.sell_conditions || [];
+      if (bc.length === 0 && sc.length === 0) {
+        result.innerHTML = `<span style="color:#f85149">未能识别条件，请换个说法试试</span>
+          <div style="color:#484f58;font-size:12px;margin-top:4px">试试：跌破20%就卖，站上20日线就买，MACD金叉买入</div>`;
+        return;
+      }
+      // 填入条件表单
+      _buyConditions.length = 0;
+      _sellConditions.length = 0;
+      for (const c of bc) _buyConditions.push(c);
+      for (const c of sc) _sellConditions.push(c);
+      renderConditions('buy');
+      renderConditions('sell');
+
+      // 显示翻译结果
+      const src = data.source === 'llm' ? '<span style="background:#a371f733;color:#a371f7;padding:1px 6px;border-radius:3px;font-size:11px;margin-left:6px">AI解析</span>' : '<span style="background:#23863633;color:#3fb950;padding:1px 6px;border-radius:3px;font-size:11px;margin-left:6px">免费解析</span>';
+      let html = `<div style="color:#3fb950;margin-bottom:6px">翻译成功！${src}</div>`;
+      html += `<div style="color:#8b949e;font-size:12px">${data.explanation}</div>`;
+      if (data.unmatched && data.unmatched.length > 0) {
+        html += `<div style="color:#d29922;font-size:12px;margin-top:4px">以下内容未能识别：${data.unmatched.join('、')}，请手动补充或换个说法</div>`;
+      }
+      html += `<div style="color:#484f58;font-size:11px;margin-top:6px">条件已填入下方表单，可手动调整后点击「保存策略」</div>`;
+      result.innerHTML = html;
+      showToast('策略翻译成功', 'success');
+    } else {
+      result.innerHTML = `<span style="color:#f85149">${data.detail || '翻译失败'}</span>`;
+    }
+  } catch(e) {
+    result.innerHTML = `<span style="color:#f85149">网络错误: ${e.message}</span>`;
+  }
+}
+
+// 预设策略模板
+async function loadPresets() {
+  try {
+    const resp = await authFetch('/user-strategies/presets');
+    const data = await resp.json();
+    const presets = data.presets || [];
+    const el = document.getElementById('presetList');
+    const colors = ['#238636','#1f6feb','#f0883e','#a371f7','#3fb950','#58a6ff','#d29922','#f778ba'];
+    el.innerHTML = presets.map((p, i) => {
+      const color = colors[i % colors.length];
+      return `<div style="padding:12px;background:#0d1117;border:1px solid ${color}44;border-radius:8px;cursor:pointer;transition:border-color .2s"
+        onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='${color}44'"
+        onclick="loadPreset(${p.index})">
+        <div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:4px">${p.name}</div>
+        <div style="font-size:12px;color:#8b949e;margin-bottom:8px">${p.description}</div>
+        <div style="display:flex;gap:12px;font-size:11px">
+          <span style="color:#3fb950">买入 ${p.buy_count} 条</span>
+          <span style="color:#f85149">卖出 ${p.sell_count} 条</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('presetList').innerHTML = `<div style="color:#f85149">加载失败: ${e.message}</div>`;
+  }
+}
+
+async function loadPreset(index) {
+  const symbol = document.getElementById('presetSymbol').value.trim();
+  const market = document.getElementById('presetMarket').value;
+  const msg = document.getElementById('presetMsg');
+  if (!symbol) {
+    msg.innerHTML = '<span style="color:#f85149">请先输入股票代码</span>';
+    return;
+  }
+  try {
+    const resp = await authFetch(`/user-strategies/presets/${index}?symbol=${encodeURIComponent(symbol)}&market=${market}`, {
+      method: 'POST',
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      msg.innerHTML = `<span style="color:#3fb950">已加载: ${data.strategy.name} → ${symbol}</span>`;
+      loadStrategies();
+      showToast('预设策略已创建', 'success');
+    } else {
+      const d = await resp.json();
+      msg.innerHTML = `<span style="color:#f85149">${d.detail || '加载失败'}</span>`;
+    }
+  } catch(e) {
+    msg.innerHTML = `<span style="color:#f85149">${e.message}</span>`;
+  }
+}
+
+// 预设页股票搜索联想
+bindStockSearch('presetSymbol', 'presetSymbolDropdown', 'presetMarket',
+  (code) => { document.getElementById('presetSymbol').value = code; document.getElementById('presetSymbolDropdown').style.display = 'none'; });
+
+loadPresets();
 
 // 启动：检查认证状态
 (function() {

@@ -1,5 +1,6 @@
 """FastAPI 管理接口"""
 import importlib
+import time as _time
 from datetime import datetime
 from typing import Optional
 from pathlib import Path
@@ -32,15 +33,59 @@ from api.websocket import manager as ws_manager, market_push_loop
 import asyncio
 import json
 
+# ---- 数据缓存 ----
+_csv_cache: dict[str, tuple[float, list]] = {}  # symbol -> (timestamp, bars)
+_CSV_CACHE_TTL = 300  # 5 分钟缓存
+_html_cache: str = ""  # 模板缓存
+
+
+def _load_csv_cached(symbol: str):
+    """带缓存的 CSV 数据加载"""
+    now = _time.time()
+    cached = _csv_cache.get(symbol)
+    if cached and now - cached[0] < _CSV_CACHE_TTL:
+        return cached[1]
+    bars = load_csv_bars(symbol)
+    _csv_cache[symbol] = (now, bars)
+    return bars
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：初始化数据库 + 启动后台任务"""
+    """应用生命周期：初始化数据库 + 启动后台任务 + 缓存模板"""
+    global _html_cache
     init_db()
     init_admin_user()
-    task = asyncio.create_task(market_push_loop())
+    _html_cache = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
+    ws_task = asyncio.create_task(market_push_loop())
+    eval_task = asyncio.create_task(daily_evaluate_loop())
     yield
-    task.cancel()
+    ws_task.cancel()
+    eval_task.cancel()
+
+
+async def daily_evaluate_loop():
+    """每日自动评估策略（收盘后 15:05）"""
+    import time as _time
+    last_run = ""
+    while True:
+        try:
+            now = datetime.now()
+            # 工作日 15:05 自动评估
+            if now.weekday() < 5 and now.hour == 15 and now.minute >= 5:
+                today = now.strftime("%Y-%m-%d")
+                if last_run != today:
+                    last_run = today
+                    try:
+                        from utils.strategy_rules import evaluate_all
+                        results = evaluate_all()
+                        signal_count = sum(len(r.get("signals", [])) for r in results)
+                        logger.info(f"每日自动评估完成: {len(results)} 个策略, {signal_count} 个信号")
+                    except Exception as e:
+                        logger.error(f"每日自动评估失败: {e}")
+        except Exception:
+            pass
+        await asyncio.sleep(60)  # 每分钟检查一次
 
 
 app = FastAPI(title="量化回测系统", version="2.0.0", lifespan=lifespan)
@@ -174,8 +219,7 @@ class BacktestRequest(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 def root():
     """管理界面"""
-    html_path = TEMPLATE_DIR / "index.html"
-    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content=_html_cache or (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8"))
 
 
 @app.get("/strategies")
@@ -188,14 +232,23 @@ def list_strategies():
 def list_data():
     """获取已下载的股票数据"""
     from pathlib import Path
+    from utils.stock_search import get_stock_names
+
     data_dir = Path(__file__).parent.parent / "data"
-    csv_files = list(data_dir.glob("*.csv"))
+    csv_files = sorted(data_dir.glob("*.csv"))
+    symbols = [f.stem for f in csv_files if not f.name.startswith(("_", "download"))]
+    name_map = get_stock_names(symbols)
+
     result = []
     for f in csv_files:
+        if f.name.startswith(("_", "download")):
+            continue
         import pandas as pd
         df = pd.read_csv(f)
+        sym = f.stem
         result.append({
-            "symbol": f.stem,
+            "symbol": sym,
+            "name": name_map.get(sym, sym),
             "rows": len(df),
             "start": str(df["date"].iloc[0]) if len(df) > 0 else "",
             "end": str(df["date"].iloc[-1]) if len(df) > 0 else "",
@@ -203,89 +256,8 @@ def list_data():
     return {"data": result}
 
 
-@app.post("/backtest")
-def run_backtest(req: BacktestRequest):
-    """运行回测"""
-    if req.strategy not in STRATEGIES:
-        raise HTTPException(400, f"未知策略: {req.strategy}")
-
-    info = STRATEGIES[req.strategy]
-    module = importlib.import_module(info["module"])
-    strategy_cls = getattr(module, info["class"])
-
-    # 选择数据源
-    if req.symbol:
-        try:
-            bars = load_csv_bars(req.symbol)
-        except FileNotFoundError:
-            raise HTTPException(404, f"未找到 {req.symbol} 的数据，请先下载")
-    else:
-        bars = generate_random_bars(days=req.days)
-
-    engine = BacktestingEngine()
-    config = BACKTEST_CONFIG.copy()
-    config["capital"] = req.capital
-
-    # 动态日期：从数据中取实际范围
-    if bars:
-        start_dt = bars[0].datetime
-        end_dt = bars[-1].datetime
-    else:
-        start_dt = datetime(2020, 1, 1)
-        end_dt = datetime(2026, 12, 31)
-
-    engine.set_parameters(
-        vt_symbol=f"{req.symbol or '000001'}.SSE",
-        interval=Interval.DAILY,
-        start=start_dt,
-        end=end_dt,
-        **config,
-    )
-
-    # 合并风控参数到策略参数
-    merged_params = dict(req.params or {})
-    if req.risk:
-        merged_params.update(req.risk)
-    engine.add_strategy(strategy_cls, merged_params)
-    engine.history_data = bars
-
-    engine.run_backtesting()
-    engine.calculate_result()
-    stats = engine.calculate_statistics(output=False)
-
-    # 转换 numpy 类型为 Python 原生类型
-    clean_stats = {}
-    if stats:
-        for key, value in stats.items():
-            if hasattr(value, "item"):
-                clean_stats[key] = value.item()
-            else:
-                clean_stats[key] = value
-
-    # 持久化回测记录
-    record_id = save_backtest(
-        strategy=req.strategy,
-        symbol=req.symbol or "模拟数据",
-        params=req.params or {},
-        risk_config=req.risk or {},
-        capital=req.capital,
-        data_count=len(bars),
-        stats=clean_stats,
-    )
-
-    return {
-        "id": record_id,
-        "strategy": info["name"],
-        "symbol": req.symbol or "模拟数据",
-        "data_count": len(bars),
-        "params": req.params,
-        "stats": clean_stats,
-    }
-
-
-@app.post("/backtest-detail")
-def run_backtest_detail(req: BacktestRequest):
-    """运行回测（返回详细数据用于绘图）"""
+def _execute_backtest(req: BacktestRequest):
+    """公共回测逻辑：加载策略、数据、运行引擎、返回 (engine, info, bars, clean_stats, merged_params)"""
     if req.strategy not in STRATEGIES:
         raise HTTPException(400, f"未知策略: {req.strategy}")
 
@@ -295,7 +267,7 @@ def run_backtest_detail(req: BacktestRequest):
 
     if req.symbol:
         try:
-            bars = load_csv_bars(req.symbol)
+            bars = _load_csv_cached(req.symbol)
         except FileNotFoundError:
             raise HTTPException(404, f"未找到 {req.symbol} 的数据")
     else:
@@ -338,6 +310,92 @@ def run_backtest_detail(req: BacktestRequest):
             else:
                 clean_stats[key] = value
 
+    # 计算增强指标
+    try:
+        import math
+        daily_results = engine.get_all_daily_results()
+        pnls = [float(dr.net_pnl) for dr in daily_results]
+        if pnls:
+            # Sortino 比率（只计算下行波动率）
+            downside = [p for p in pnls if p < 0]
+            if downside:
+                downside_std = math.sqrt(sum(p**2 for p in downside) / len(downside))
+                ann_factor = math.sqrt(252)
+                daily_rf = 0.03 / 252  # 年化无风险利率 3%
+                mean_daily = sum(pnls) / len(pnls)
+                clean_stats["sortino_ratio"] = round(
+                    (mean_daily - daily_rf) / downside_std * ann_factor, 4
+                ) if downside_std > 0 else 0
+
+            # Calmar 比率（年化收益 / 最大回撤）
+            max_dd = abs(clean_stats.get("max_ddpercent", 0))
+            ann_ret = clean_stats.get("annual_return", 0)
+            clean_stats["calmar_ratio"] = round(ann_ret / max_dd, 4) if max_dd > 0 else 0
+
+        # 胜率和盈亏比（从交易记录计算）
+        trades = list(engine.trades.values())
+        if trades:
+            wins, losses = [], []
+            open_trades = {}
+            for t in trades:
+                offset_val = t.offset.value if hasattr(t.offset, 'value') else str(t.offset)
+                dir_val = t.direction.value if hasattr(t.direction, 'value') else str(t.direction)
+                symbol = t.vt_symbol
+                if offset_val == "开":
+                    # 开多 → key=(多,sym), 开空 → key=(空,sym)
+                    open_trades[(dir_val, symbol)] = float(t.price)
+                else:
+                    # 平仓：平空 → 匹配开多，平多 → 匹配开空
+                    open_dir = "空" if dir_val == "多" else "多"
+                    match_key = (open_dir, symbol)
+                    if match_key in open_trades:
+                        entry = open_trades.pop(match_key)
+                        pnl = (float(t.price) - entry) * int(t.volume)
+                        if open_dir == "空":
+                            pnl = -pnl
+                        (wins if pnl > 0 else losses).append(abs(pnl))
+
+            total_closed = len(wins) + len(losses)
+            clean_stats["win_rate"] = round(len(wins) / total_closed * 100, 2) if total_closed > 0 else 0
+            avg_win = sum(wins) / len(wins) if wins else 0
+            avg_loss = sum(losses) / len(losses) if losses else 0
+            clean_stats["profit_loss_ratio"] = round(avg_win / avg_loss, 2) if avg_loss > 0 else 0
+    except Exception:
+        pass
+
+    return engine, info, bars, clean_stats, merged_params
+
+
+@app.post("/backtest")
+async def run_backtest(req: BacktestRequest):
+    """运行回测"""
+    engine, info, bars, clean_stats, merged_params = await asyncio.to_thread(_execute_backtest, req)
+
+    record_id = save_backtest(
+        strategy=req.strategy,
+        symbol=req.symbol or "模拟数据",
+        params=merged_params,
+        risk_config=req.risk or {},
+        capital=req.capital,
+        data_count=len(bars),
+        stats=clean_stats,
+    )
+
+    return {
+        "id": record_id,
+        "strategy": info["name"],
+        "symbol": req.symbol or "模拟数据",
+        "data_count": len(bars),
+        "params": merged_params,
+        "stats": clean_stats,
+    }
+
+
+@app.post("/backtest-detail")
+async def run_backtest_detail(req: BacktestRequest):
+    """运行回测（返回详细数据用于绘图）"""
+    engine, info, bars, clean_stats, merged_params = await asyncio.to_thread(_execute_backtest, req)
+
     # 日收益数据（资金曲线，从 net_pnl 累加计算余额）
     daily_data = []
     try:
@@ -353,28 +411,22 @@ def run_backtest_detail(req: BacktestRequest):
     except Exception:
         pass
 
-    # K线数据
-    kline = []
-    for bar in bars:
-        kline.append([
-            bar.datetime.strftime("%Y-%m-%d"),
-            float(bar.open_price),
-            float(bar.close_price),
-            float(bar.low_price),
-            float(bar.high_price),
-        ])
+    # K线数据（列表推导式）
+    kline = [
+        [bar.datetime.strftime("%Y-%m-%d"), float(bar.open_price),
+         float(bar.close_price), float(bar.low_price), float(bar.high_price)]
+        for bar in bars
+    ]
 
-    # 交易记录（买卖点，engine.trades 是 dict）
+    # 交易记录
     trades = []
     try:
-        for trade in engine.trades.values():
-            trades.append({
-                "datetime": trade.datetime.strftime("%Y-%m-%d %H:%M"),
-                "direction": str(trade.direction.value),
-                "offset": str(trade.offset.value),
-                "price": float(trade.price),
-                "volume": int(trade.volume),
-            })
+        trades = [
+            {"datetime": t.datetime.strftime("%Y-%m-%d %H:%M"),
+             "direction": str(t.direction.value), "offset": str(t.offset.value),
+             "price": float(t.price), "volume": int(t.volume)}
+            for t in engine.trades.values()
+        ]
     except Exception:
         pass
 
@@ -403,10 +455,10 @@ def run_backtest_detail(req: BacktestRequest):
 
 
 @app.get("/backtest/{strategy_key}")
-def quick_backtest(strategy_key: str, symbol: Optional[str] = None, days: int = 500):
+async def quick_backtest(strategy_key: str, symbol: Optional[str] = None, days: int = 500):
     """快速回测（GET 方式）"""
     req = BacktestRequest(strategy=strategy_key, symbol=symbol, days=days)
-    return run_backtest(req)
+    return await run_backtest(req)
 
 
 class CompareRequest(BaseModel):
@@ -415,9 +467,9 @@ class CompareRequest(BaseModel):
 
 
 @app.post("/compare")
-def api_compare(req: CompareRequest):
+async def api_compare(req: CompareRequest):
     """策略对比"""
-    results = compare_strategies(symbol=req.symbol, days=req.days)
+    results = await asyncio.to_thread(compare_strategies, symbol=req.symbol, days=req.days)
     return {"results": results}
 
 
@@ -696,24 +748,42 @@ class AddStockRequest(BaseModel):
 
 @app.post("/stocks/add")
 def api_add_stocks(req: AddStockRequest):
-    """添加新股票数据"""
+    """添加新股票数据（A 股/港股/美股）"""
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    import baostock as bs
-    from data.download_akshare import download_stock
+    from data.download_akshare import download_stock, _detect_market
+    from utils.stock_search import get_stock_names
+    from utils.stock_list import search_stocks_local
 
-    bs.login()
+    # 过滤有效代码
+    clean_symbols = [s.strip() for s in req.symbols if s.strip()]
+
+    # 名称映射：先本地搜，再查新浪
+    name_map = {}
+    for sym in clean_symbols:
+        results = search_stocks_local(sym, limit=1)
+        if results and results[0]["code"].upper() == sym.upper():
+            name_map[sym] = results[0]["name"]
+    name_map.update(get_stock_names([s for s in clean_symbols if len(s) == 6 and s.isdigit()]))
+
+    # A 股需要 baostock 登录
+    has_a = any(_detect_market(s.strip()) == "a" for s in clean_symbols)
+    if has_a:
+        import baostock as bs
+        bs.login()
+
     results = []
     for symbol in req.symbols:
         symbol = symbol.strip()
-        if not symbol or len(symbol) != 6:
-            results.append({"symbol": symbol, "status": "error", "msg": "代码格式错误"})
+        if not symbol or len(symbol) < 1:
+            results.append({"symbol": symbol, "status": "error", "msg": "代码不能为空"})
             continue
         try:
             df = download_stock(symbol)
             if df is not None and len(df) > 0:
                 results.append({
                     "symbol": symbol,
+                    "name": name_map.get(symbol, symbol),
                     "status": "ok",
                     "rows": len(df),
                     "start": str(df["date"].iloc[0]),
@@ -723,7 +793,9 @@ def api_add_stocks(req: AddStockRequest):
                 results.append({"symbol": symbol, "status": "error", "msg": "无数据"})
         except Exception as e:
             results.append({"symbol": symbol, "status": "error", "msg": str(e)})
-    bs.logout()
+
+    if has_a:
+        bs.logout()
 
     # 同步更新 HOT_STOCKS 列表（写入文件）
     data_dir = Path(__file__).parent.parent / "data"
@@ -736,15 +808,16 @@ def api_add_stocks(req: AddStockRequest):
 
 
 @app.get("/stocks/search")
-def api_search_stock(q: str = ""):
-    """搜索股票（新浪搜索API，支持代码/名称/拼音联想）"""
-    from utils.stock_search import search_stock_sina, get_popular_stocks
+def api_search_stock(q: str = "", limit: int = 30, market: str = ""):
+    """搜索股票（A 股 5200+ / 港股 / 美股）"""
+    from utils.stock_list import search_stocks_local
+    from utils.stock_search import get_popular_stocks
 
     if not q:
         return {"results": get_popular_stocks(), "source": "popular"}
 
-    results = search_stock_sina(q)
-    return {"results": results, "source": "sina", "query": q}
+    results = search_stocks_local(q, limit=limit, market=market)
+    return {"results": results, "source": "local", "query": q, "total": len(results)}
 
 
 class FavoriteRequest(BaseModel):
@@ -809,10 +882,10 @@ class FactorRequest(BaseModel):
 
 
 @app.post("/factors/compute")
-def api_compute_factors(req: FactorRequest):
+async def api_compute_factors(req: FactorRequest):
     """计算指定股票的因子值"""
     try:
-        df = compute_factors(req.symbol, req.factors, **(req.params or {}))
+        df = await asyncio.to_thread(compute_factors, req.symbol, req.factors, **(req.params or {}))
     except FileNotFoundError as e:
         raise HTTPException(404, str(e))
 
@@ -831,10 +904,10 @@ def api_compute_factors(req: FactorRequest):
 
 
 @app.get("/factors/score/{symbol}")
-def api_factor_score(symbol: str):
+async def api_factor_score(symbol: str):
     """多因子打分（最新一日）"""
     try:
-        scores = top_factors_score(symbol)
+        scores = await asyncio.to_thread(top_factors_score, symbol)
     except FileNotFoundError as e:
         raise HTTPException(404, str(e))
 
@@ -851,18 +924,21 @@ class MultiStockRequest(BaseModel):
 
 
 @app.post("/factors/ranking")
-def api_factor_ranking(req: MultiStockRequest):
+async def api_factor_ranking(req: MultiStockRequest):
     """多股票因子排名（多因子选股）"""
-    results = []
-    for symbol in req.symbols:
+
+    def _calc_one(symbol):
         try:
             scores = top_factors_score(symbol, req.factor_weights)
             total = float(scores.sum())
-            results.append({"symbol": symbol, "score": round(total, 4)})
+            return {"symbol": symbol, "score": round(total, 4)}
         except FileNotFoundError:
-            results.append({"symbol": symbol, "score": None, "error": "数据不存在"})
+            return {"symbol": symbol, "score": None, "error": "数据不存在"}
 
-    results.sort(key=lambda x: x.get("score") or -999, reverse=True)
+    tasks = [asyncio.to_thread(_calc_one, s) for s in req.symbols]
+    results = await asyncio.gather(*tasks)
+
+    results = sorted(results, key=lambda x: x.get("score") or -999, reverse=True)
 
     # 持久化因子排名记录
     save_factor_ranking(req.symbols, req.factor_weights or {}, results)
@@ -1054,3 +1130,170 @@ def api_list_orders(
 def api_order_stats():
     """订单统计"""
     return order_manager.get_stats()
+
+
+# ==================== 自定义策略接口 ====================
+
+class StrategyRule(BaseModel):
+    left: dict     # {"type": "indicator", "indicator": "ma", "params": {"period": 5}}
+    op: str        # "cross_above", ">", "<" 等
+    right: dict    # 同上，或 {"type": "fixed", "value": 100}
+
+class StrategyRequest(BaseModel):
+    name: str
+    symbol: str
+    market: str = "a"
+    buy_conditions: list[StrategyRule] = []
+    sell_conditions: list[StrategyRule] = []
+
+class StrategyUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    buy_conditions: Optional[list[StrategyRule]] = None
+    sell_conditions: Optional[list[StrategyRule]] = None
+
+
+@app.get("/user-strategies")
+def api_list_user_strategies():
+    """列出所有自定义策略"""
+    from utils.strategy_rules import list_strategies
+    return {"strategies": list_strategies()}
+
+
+@app.post("/user-strategies")
+def api_create_user_strategy(req: StrategyRequest, user: dict = Depends(get_current_user)):
+    """新增策略"""
+    from utils.strategy_rules import add_strategy
+    strategy = add_strategy(
+        name=req.name, symbol=req.symbol,
+        buy_conditions=[c.model_dump() for c in req.buy_conditions],
+        sell_conditions=[c.model_dump() for c in req.sell_conditions],
+        market=req.market,
+    )
+    log_audit(user["username"], "create_strategy", f"{req.name} → {req.symbol}")
+    return strategy
+
+
+@app.get("/user-strategies/presets")
+def api_get_presets():
+    """获取预设策略模板列表"""
+    from utils.strategy_rules import get_presets
+    return {"presets": get_presets()}
+
+
+@app.post("/user-strategies/presets/{index}")
+def api_load_preset(index: int, symbol: str, market: str = "a"):
+    """一键加载预设策略模板"""
+    from utils.strategy_rules import PRESET_STRATEGIES, add_strategy
+    if index < 0 or index >= len(PRESET_STRATEGIES):
+        raise HTTPException(400, f"无效的模板索引: {index}")
+    if not symbol:
+        raise HTTPException(400, "股票代码不能为空")
+    preset = PRESET_STRATEGIES[index]
+    strategy = add_strategy(
+        name=preset["name"],
+        symbol=symbol,
+        buy_conditions=preset["buy_conditions"],
+        sell_conditions=preset["sell_conditions"],
+        market=market,
+    )
+    return {"status": "ok", "strategy": strategy}
+
+
+@app.post("/user-strategies/evaluate-all")
+def api_evaluate_all_user():
+    """评估所有已启用策略（每日定时调用）"""
+    from utils.strategy_rules import evaluate_all
+    results = evaluate_all()
+    signal_count = sum(len(r.get("signals", [])) for r in results)
+    return {
+        "evaluated": len(results),
+        "signals": signal_count,
+        "results": results,
+    }
+
+
+@app.get("/user-strategies/{strategy_id}")
+def api_get_user_strategy(strategy_id: int):
+    """获取策略详情"""
+    from utils.strategy_rules import get_strategy
+    s = get_strategy(strategy_id)
+    if not s:
+        raise HTTPException(404, "策略不存在")
+    return s
+
+
+@app.put("/user-strategies/{strategy_id}")
+def api_update_user_strategy(strategy_id: int, req: StrategyUpdateRequest,
+                             user: dict = Depends(get_current_user)):
+    """更新策略"""
+    from utils.strategy_rules import update_strategy
+    updates = {k: v for k, v in req.model_dump().items() if v is not None}
+    s = update_strategy(strategy_id, updates)
+    if not s:
+        raise HTTPException(404, "策略不存在")
+    return s
+
+
+@app.delete("/user-strategies/{strategy_id}")
+def api_delete_user_strategy(strategy_id: int, user: dict = Depends(get_current_user)):
+    """删除策略"""
+    from utils.strategy_rules import remove_strategy
+    remove_strategy(strategy_id)
+    return {"status": "ok"}
+
+
+@app.post("/user-strategies/{strategy_id}/evaluate")
+def api_evaluate_user_strategy(strategy_id: int):
+    """手动评估单个策略"""
+    from utils.strategy_rules import get_strategy, evaluate_strategy
+    s = get_strategy(strategy_id)
+    if not s:
+        raise HTTPException(404, "策略不存在")
+    return evaluate_strategy(s)
+
+
+class NLStrategyRequest(BaseModel):
+    text: str
+
+
+class NLCreateStrategyRequest(BaseModel):
+    text: str
+    name: str = ""
+    symbol: str
+    market: str = "a"
+
+
+@app.post("/nl/parse")
+def api_nl_parse(req: NLStrategyRequest):
+    """自然语言解析为策略条件（不保存）"""
+    from utils.nl_parser import parse_nl_strategy
+    if not req.text.strip():
+        raise HTTPException(400, "请输入策略描述")
+    result = parse_nl_strategy(req.text)
+    return {"status": "ok", **result}
+
+
+@app.post("/nl/create-strategy")
+def api_nl_create_strategy(req: NLCreateStrategyRequest):
+    """自然语言解析并创建策略"""
+    from utils.nl_parser import parse_nl_strategy
+    from utils.strategy_rules import add_strategy
+    if not req.text.strip():
+        raise HTTPException(400, "请输入策略描述")
+    if not req.symbol.strip():
+        raise HTTPException(400, "股票代码不能为空")
+
+    result = parse_nl_strategy(req.text)
+    if not result["buy_conditions"] and not result["sell_conditions"]:
+        raise HTTPException(400, f"未能识别任何条件: {result['explanation']}")
+
+    name = req.name or f"NL策略-{req.symbol}"
+    strategy = add_strategy(
+        name=name,
+        symbol=req.symbol,
+        buy_conditions=result["buy_conditions"],
+        sell_conditions=result["sell_conditions"],
+        market=req.market,
+    )
+    return {"status": "ok", "strategy": strategy, "parsed": result}

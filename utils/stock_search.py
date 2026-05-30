@@ -5,6 +5,49 @@ import re
 # 缓存热门股票（避免频繁请求）
 _POPULAR_STOCKS: list[dict] | None = None
 
+# 内置名称映射（常用 A 股，离线可用）
+_STOCK_NAMES: dict[str, str] = {
+    "600519": "贵州茅台", "000858": "五粮液", "000568": "泸州老窖",
+    "601318": "中国平安", "600036": "招商银行", "000001": "平安银行",
+    "601398": "工商银行", "300750": "宁德时代", "002594": "比亚迪",
+    "002415": "海康威视", "603501": "韦尔股份", "688981": "中芯国际",
+    "002230": "科大讯飞", "600276": "恒瑞医药", "300760": "迈瑞医疗",
+    "601888": "中国中免", "000333": "美的集团", "600887": "伊利股份",
+    "300059": "东方财富", "601857": "中国石油", "600000": "浦发银行",
+    "601012": "隆基绿能", "002027": "分众传媒", "600900": "长江电力",
+    "601899": "紫金矿业", "600050": "中国联通", "601166": "兴业银行",
+    "000651": "格力电器", "002714": "牧原股份", "300015": "爱尔眼科",
+    "600031": "三一重工", "601668": "中国建筑", "600585": "海螺水泥",
+}
+
+
+def get_stock_name(symbol: str) -> str:
+    """查询股票名称（内置映射 → 新浪API回退）"""
+    if symbol in _STOCK_NAMES:
+        return _STOCK_NAMES[symbol]
+    # 通过新浪搜索 API 查一次
+    results = search_stock_sina(symbol, limit=1)
+    if results and results[0]["code"] == symbol:
+        name = results[0]["name"]
+        _STOCK_NAMES[symbol] = name  # 缓存
+        return name
+    return symbol  # 查不到就返回代码本身
+
+
+def get_stock_names(symbols: list[str]) -> dict[str, str]:
+    """批量查询股票名称，返回 {code: name} 映射"""
+    result = {}
+    need_lookup = []
+    for s in symbols:
+        if s in _STOCK_NAMES:
+            result[s] = _STOCK_NAMES[s]
+        else:
+            need_lookup.append(s)
+    # 批量查新浪
+    for s in need_lookup:
+        result[s] = get_stock_name(s)
+    return result
+
 
 def search_stock_sina(keyword: str, limit: int = 10) -> list[dict]:
     """通过新浪搜索接口查找股票（支持代码/名称/拼音）
