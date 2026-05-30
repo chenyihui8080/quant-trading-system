@@ -1769,8 +1769,50 @@ async def paper_trade_status():
     return {"running": running}
 
 
+def _fetch_realtime_quote(symbol: str) -> dict | None:
+    """从新浪/腾讯获取实时行情（免费，盘中3-5秒延迟）"""
+    import requests as req
+    prefix = "sh" if symbol.startswith("6") else "sz"
+    code = f"{prefix}{symbol}"
+
+    # 新浪行情
+    try:
+        r = req.get(
+            f"https://hq.sinajs.cn/list={code}",
+            headers={"Referer": "https://finance.sina.com.cn"}, timeout=3,
+        )
+        parts = r.text.split('"')[1].split(",")
+        if len(parts) > 30 and parts[3]:
+            return {
+                "name": parts[0], "price": float(parts[3]),
+                "open": float(parts[1]), "pre_close": float(parts[2]),
+                "high": float(parts[4]), "low": float(parts[5]),
+                "volume": float(parts[8]), "time": parts[30],
+                "source": "sina",
+            }
+    except Exception:
+        pass
+
+    # 腾讯行情（备选）
+    try:
+        r = req.get(f"https://qt.gtimg.cn/q={code}", timeout=3)
+        parts = r.text.split("~")
+        if len(parts) > 40 and parts[3]:
+            return {
+                "name": parts[1], "price": float(parts[3]),
+                "open": float(parts[5]), "pre_close": float(parts[4]),
+                "high": float(parts[33]), "low": float(parts[34]),
+                "volume": float(parts[6]) * 100,  # 腾讯单位是手
+                "time": parts[30], "source": "tencent",
+            }
+    except Exception:
+        pass
+
+    return None
+
+
 async def _run_paper_trade(strategy: str, symbol: str, capital: float, interval: int):
-    """模拟盘后台任务：用真实历史数据初始化策略 + 最新价格模拟"""
+    """模拟盘后台任务：真实历史数据初始化 + 实时行情驱动"""
     import random
     from vnpy.trader.object import BarData
     from vnpy.trader.constant import Exchange, Interval
@@ -1780,7 +1822,7 @@ async def _run_paper_trade(strategy: str, symbol: str, capital: float, interval:
     if not strategy_info:
         return
 
-    # 用 baostock 获取最近 200 天真实数据作为策略初始状态
+    # 1) 用 baostock 获取最近 200 天真实历史数据
     real_prices = []
     try:
         import baostock as bs
@@ -1811,77 +1853,63 @@ async def _run_paper_trade(strategy: str, symbol: str, capital: float, interval:
     if not real_prices:
         await ws_manager.broadcast("paper-trade", {
             "action": "错误", "strategy": strategy, "symbol": symbol,
-            "message": "无法获取历史数据",
-            "time": datetime.now().strftime("%H:%M:%S"),
+            "message": "无法获取历史数据", "time": datetime.now().strftime("%H:%M:%S"),
         })
         return
 
-    # 用真实数据初始化策略引擎
-    from vnpy_ctastrategy.backtesting import BacktestingEngine
-    from vnpy.trader.constant import Interval
-    engine = BacktestingEngine()
-    engine.set_parameters(
-        vt_symbol=f"{symbol}.SSE",
-        interval=Interval.DAILY,
-        start=datetime.strptime(real_prices[0]["date"], "%Y-%m-%d"),
-        end=datetime.strptime(real_prices[-1]["date"], "%Y-%m-%d"),
-        rate=0.0003, slippage=0.2, size=1, pricetick=0.01, capital=capital,
-    )
-    engine.add_strategy(strategy_info["class"], {})
-    engine.load_data = lambda: None  # 跳过默认加载
-    engine.run_backtesting = lambda: None  # 跳过默认回测
+    # 2) 获取实时行情作为初始价格
+    quote = await asyncio.to_thread(_fetch_realtime_quote, symbol)
+    if quote:
+        price = quote["price"]
+        prev_close = quote["pre_close"]
+        source = quote["source"]
+        msg = f"实时行情: ¥{price:.2f} (来源: {source})"
+    else:
+        price = real_prices[-1]["close"]
+        prev_close = real_prices[-2]["close"] if len(real_prices) > 1 else price
+        source = "历史"
+        msg = f"使用历史收盘价: ¥{price:.2f}"
 
-    # 手动喂入历史数据初始化 ArrayManager
-    bars = []
-    for p in real_prices:
-        dt = datetime.strptime(p["date"], "%Y-%m-%d")
-        bar = BarData(
-            symbol=symbol, exchange=Exchange.SSE, datetime=dt,
-            interval=Interval.DAILY, volume=int(p["volume"]),
-            open_price=p["open"], high_price=p["high"],
-            low_price=p["low"], close_price=p["close"],
-            gateway_name="paper",
-        )
-        bars.append(bar)
-
-    # 最新真实价格
-    latest = real_prices[-1]
-    price = latest["close"]
-    prev_close = real_prices[-2]["close"] if len(real_prices) > 1 else price
     pos = 0
     entry_price = 0.0
 
     await ws_manager.broadcast("paper-trade", {
         "action": "启动", "strategy": strategy, "symbol": symbol,
-        "price": round(price, 2), "history_bars": len(bars),
-        "message": f"已加载 {len(bars)} 天真实数据，最新价 ¥{price:.2f}",
+        "price": round(price, 2), "history_bars": len(real_prices),
+        "message": f"已加载 {len(real_prices)} 天数据，{msg}",
         "time": datetime.now().strftime("%H:%M:%S"),
     })
 
     try:
         while True:
-            # 基于真实价格的小幅波动（更贴近实际）
-            change_pct = random.gauss(0, 0.008)  # ~0.8% 标准差（日内波动）
-            price *= (1 + change_pct)
-            price = max(price, 1.0)
-            now = datetime.now()
+            # 3) 每次循环获取最新实时价格（盘中3-5秒刷新）
+            new_quote = await asyncio.to_thread(_fetch_realtime_quote, symbol)
+            if new_quote and new_quote["price"] > 0:
+                price = new_quote["price"]
+                source = new_quote["source"]
+            else:
+                # 非交易时段：小幅随机波动模拟
+                import random as _rand
+                price *= (1 + _rand.gauss(0, 0.003))
+                source = "模拟"
 
-            # 基于价格变化生成信号
-            daily_change = (price - prev_close) / prev_close
+            now = datetime.now()
+            daily_change = (price - prev_close) / prev_close if prev_close > 0 else 0
+
             signal_data = {
                 "time": now.strftime("%H:%M:%S"),
                 "price": round(price, 2),
                 "change_pct": round(daily_change * 100, 2),
-                "strategy": strategy,
-                "symbol": symbol,
+                "strategy": strategy, "symbol": symbol,
+                "source": source,
             }
 
-            if daily_change > 0.01 and pos == 0:
+            if daily_change > 0.008 and pos == 0:
                 pos = 100
                 entry_price = price
                 signal_data["action"] = "买入"
                 signal_data["pos"] = pos
-            elif daily_change < -0.01 and pos > 0:
+            elif daily_change < -0.008 and pos > 0:
                 pnl = (price - entry_price) / entry_price * 100
                 pos = 0
                 signal_data["action"] = "卖出"
