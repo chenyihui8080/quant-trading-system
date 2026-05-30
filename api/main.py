@@ -411,10 +411,11 @@ async def run_backtest_detail(req: BacktestRequest):
     except Exception:
         pass
 
-    # K线数据（列表推导式）
+    # K线数据（含成交量）
     kline = [
         [bar.datetime.strftime("%Y-%m-%d"), float(bar.open_price),
-         float(bar.close_price), float(bar.low_price), float(bar.high_price)]
+         float(bar.close_price), float(bar.low_price), float(bar.high_price),
+         int(bar.volume) if hasattr(bar, 'volume') and bar.volume else 0]
         for bar in bars
     ]
 
@@ -487,22 +488,113 @@ OPTIMIZE_GRIDS = {
     "kdj": {"kdj_window": [7, 9, 14], "kdj_signal": [3, 5], "oversold": [15, 20, 25], "overbought": [75, 80, 85]},
     "turtle": {"entry_window": [10, 20, 30, 55], "exit_window": [5, 10, 20]},
     "grid": {"grid_pct": [2, 3, 5], "max_grids": [3, 5, 8]},
+    "momentum": {"lookback": [10, 20, 30, 60], "buy_threshold": [3, 5, 8, 10], "sell_threshold": [-2, -3, -5]},
+    "mean_reversion": {"ma_window": [10, 20, 30], "entry_std": [1.5, 2.0, 2.5], "exit_std": [0.3, 0.5, 1.0]},
+    "atr_breakout": {"atr_window": [10, 14, 20], "atr_multiplier": [1.5, 2.0, 2.5, 3.0], "ma_filter": [20, 50]},
 }
 
 
 @app.post("/optimize")
-def api_optimize(req: OptimizeRequest):
+async def api_optimize(req: OptimizeRequest):
     """参数优化"""
     if req.strategy not in OPTIMIZE_GRIDS:
         raise HTTPException(400, f"暂不支持 {req.strategy} 的参数优化")
 
-    results = optimize_strategy(
+    grid = OPTIMIZE_GRIDS[req.strategy]
+    results = await asyncio.to_thread(
+        optimize_strategy,
         strategy_key=req.strategy,
-        param_grid=OPTIMIZE_GRIDS[req.strategy],
+        param_grid=grid,
         symbol=req.symbol,
         days=req.days,
     )
-    return {"strategy": req.strategy, "total_combos": len(results), "results": results[:10]}
+
+    # 构建热力图数据（取前两个参数维度）
+    heatmap = None
+    param_keys = list(grid.keys())
+    if len(param_keys) >= 2:
+        x_key, y_key = param_keys[0], param_keys[1]
+        x_vals = sorted(set(r["params"][x_key] for r in results))
+        y_vals = sorted(set(r["params"][y_key] for r in results))
+        # 矩阵：[x_idx, y_idx, sharpe, return]
+        data_sharpe, data_return = [], []
+        for r in results:
+            xi = x_vals.index(r["params"][x_key])
+            yi = y_vals.index(r["params"][y_key])
+            data_sharpe.append([xi, yi, round(r["stats"].get("sharpe_ratio", 0), 4)])
+            data_return.append([xi, yi, round(r["stats"].get("total_return", 0), 2)])
+        heatmap = {
+            "x_key": x_key, "y_key": y_key,
+            "x_vals": [str(v) for v in x_vals],
+            "y_vals": [str(v) for v in y_vals],
+            "sharpe": data_sharpe,
+            "return": data_return,
+        }
+
+    return {
+        "strategy": req.strategy,
+        "total_combos": len(results),
+        "results": results[:10],
+        "heatmap": heatmap,
+    }
+
+
+class PortfolioRequest(BaseModel):
+    strategies: list[str]  # 策略 key 列表
+    symbols: list[str]     # 股票代码列表
+    days: int = 500
+    capital: float = 1000000
+
+
+@app.post("/portfolio")
+async def api_portfolio(req: PortfolioRequest):
+    """组合回测：多策略 × 多股票"""
+
+    def _run_one(strategy, symbol):
+        try:
+            sub_req = BacktestRequest(strategy=strategy, symbol=symbol, days=req.days, capital=req.capital)
+            engine, info, bars, stats, _ = _execute_backtest(sub_req)
+            daily = []
+            try:
+                drs = engine.get_all_daily_results()
+                bal = req.capital
+                for dr in drs:
+                    bal += float(dr.net_pnl)
+                    daily.append({"date": dr.date.strftime("%Y-%m-%d"), "balance": round(bal, 2)})
+            except Exception:
+                pass
+            return {
+                "strategy": strategy, "strategy_name": info["name"],
+                "symbol": symbol, "stats": stats, "daily": daily,
+            }
+        except Exception as e:
+            return {"strategy": strategy, "symbol": symbol, "error": str(e)}
+
+    # 并行运行所有组合
+    pairs = [(s, sym) for s in req.strategies for sym in req.symbols]
+    tasks = [asyncio.to_thread(_run_one, s, sym) for s, sym in pairs]
+    raw = await asyncio.gather(*tasks)
+
+    # 计算组合收益曲线（等权）
+    all_daily = {}
+    valid = [r for r in raw if "error" not in r and r["daily"]]
+    for r in valid:
+        for d in r["daily"]:
+            all_daily.setdefault(d["date"], []).append(d["balance"])
+
+    portfolio_daily = []
+    if all_daily:
+        init_cap = req.capital
+        for date in sorted(all_daily.keys()):
+            vals = all_daily[date]
+            avg = sum(vals) / len(vals)
+            portfolio_daily.append({"date": date, "balance": round(avg, 2), "return_pct": round((avg - init_cap) / init_cap * 100, 2)})
+
+    return {
+        "items": raw,
+        "portfolio": portfolio_daily,
+        "total_combos": len(pairs),
+    }
 
 
 class NotifyConfig(BaseModel):

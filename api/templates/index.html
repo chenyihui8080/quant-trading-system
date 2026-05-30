@@ -219,11 +219,23 @@ body {
 .compare-table th, .optimize-table th { color: #848e9c; font-weight: 600; background: #131722; position: sticky; top: 0; }
 .compare-table td, .optimize-table td { color: #d1d4dc; }
 .compare-table tr:hover, .optimize-table tr:hover { background: rgba(30, 41, 59, 0.4); }
+.compare-table tbody tr:nth-child(even), .optimize-table tbody tr:nth-child(even) { background: rgba(30, 41, 59, 0.15); }
 .compare-table .best { color: #26a69a; font-weight: 700; }
 .compare-table .worst { color: #ef5350; }
 .rank-1 { background: rgba(38, 166, 154, 0.08) !important; }
 .rank-2 { background: rgba(41, 98, 255, 0.06) !important; }
 .rank-3 { background: rgba(41, 98, 255, 0.04) !important; }
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .grid-full { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .form-row-inline { flex-direction: column; }
+  .tabs { overflow-x: auto; white-space: nowrap; }
+  .tab { font-size: 12px; padding: 8px 12px; }
+  .header h1 { font-size: 16px; }
+  .stat-card .value { font-size: 14px; }
+}
 
 /* 风控配置 */
 .risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -333,6 +345,7 @@ body {
   <div class="tab" onclick="switchTab('live', this)">实时行情</div>
   <div class="tab" onclick="switchTab('strategies', this)">我的策略</div>
   <div class="tab" onclick="switchTab('compare', this)">策略对比</div>
+  <div class="tab" onclick="switchTab('portfolio', this)">组合回测</div>
   <div class="tab" onclick="switchTab('optimize', this)">参数优化</div>
   <div class="tab" onclick="switchTab('risk', this)">风控配置</div>
 </div>
@@ -559,6 +572,46 @@ body {
   </div>
 </div>
 
+<!-- ==================== 组合回测页 ==================== -->
+<div class="container tab-content hidden" id="tab-portfolio">
+  <div class="grid-full">
+    <div class="panel">
+      <h2>组合回测（多策略 × 多股票）</h2>
+      <p style="font-size:13px;color:#8b949e;margin-bottom:12px">选择多个策略和股票，计算等权组合收益曲线</p>
+      <div class="form-row">
+        <label>选择策略（可多选）</label>
+        <div id="portfolioStrategies" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="dual_ma" checked> 双均线</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="macd" checked> MACD</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="bollinger"> 布林带</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="rsi"> RSI</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="kdj"> KDJ</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="turtle"> 海龟</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="grid"> 网格</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="momentum"> 动量</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="mean_reversion"> 均值回归</label>
+          <label style="font-size:13px;color:#e6edf3"><input type="checkbox" value="atr_breakout"> ATR突破</label>
+        </div>
+      </div>
+      <div class="form-row-inline">
+        <div class="form-row" style="flex:1">
+          <label>选择股票（逗号分隔）</label>
+          <input type="text" id="portfolioSymbols" value="600519,600036,000858" placeholder="例如：600519,600036">
+        </div>
+        <div class="form-row">
+          <label>初始资金</label>
+          <input type="number" id="portfolioCapital" value="1000000">
+        </div>
+      </div>
+      <button class="btn btn-blue" onclick="runPortfolio()" id="portfolioBtn">运行组合回测</button>
+    </div>
+    <div class="panel">
+      <h2>组合结果</h2>
+      <div id="portfolioArea"><div class="loading">选择策略和股票后点击「运行组合回测」</div></div>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== 参数优化页 ==================== -->
 <div class="container tab-content hidden" id="tab-optimize">
   <div class="grid-full">
@@ -576,6 +629,9 @@ body {
             <option value="kdj">KDJ</option>
             <option value="turtle">海龟</option>
             <option value="grid">网格交易</option>
+            <option value="momentum">动量</option>
+            <option value="mean_reversion">均值回归</option>
+            <option value="atr_breakout">ATR突破</option>
           </select>
         </div>
         <div class="form-row">
@@ -1031,19 +1087,177 @@ function renderOptimize(data) {
     </tr>`;
   });
 
-  document.getElementById('optimizeArea').innerHTML = `
+  let html = `
     <div style="margin-bottom:8px;font-size:13px;color:#8b949e">
       策略: <b style="color:#e6edf3">${data.strategy}</b> &nbsp;|&nbsp;
       共测试 <b style="color:#e6edf3">${data.total_combos}</b> 种参数组合
+    </div>`;
+
+  // 热力图
+  if (data.heatmap) {
+    html += `<div style="margin-bottom:12px">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-sm" onclick="_renderHeatmap('sharpe')" id="hmSharpe" style="background:#238636">夏普比率</button>
+        <button class="btn btn-sm" onclick="_renderHeatmap('return')" id="hmReturn" style="background:#21262d">总收益</button>
+      </div>
+      <div id="heatmapChart" style="height:400px"></div>
+    </div>`;
+  }
+
+  html += `<div style="overflow-x:auto">
+    <table class="optimize-table">
+      <thead><tr>
+        <th>排名</th><th>参数</th><th>总收益</th><th>夏普比率</th><th>最大回撤</th><th>交易次数</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+
+  document.getElementById('optimizeArea').innerHTML = html;
+
+  // 渲染热力图
+  if (data.heatmap) {
+    window._heatmapData = data.heatmap;
+    _renderHeatmap('sharpe');
+  }
+}
+
+function _renderHeatmap(metric) {
+  const hm = window._heatmapData;
+  if (!hm) return;
+  const isSharpe = metric === 'sharpe';
+  const rawData = isSharpe ? hm.sharpe : hm.return;
+  const title = isSharpe ? '夏普比率' : '总收益 (%)';
+
+  document.getElementById('hmSharpe').style.background = isSharpe ? '#238636' : '#21262d';
+  document.getElementById('hmReturn').style.background = isSharpe ? '#21262d' : '#238636';
+
+  const vals = rawData.map(d => d[2]);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+
+  const el = document.getElementById('heatmapChart');
+  const chart = getChart(el);
+  _chartInstances['heatmap'] = chart;
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      formatter: p => `${hm.x_key}=${hm.x_vals[p.value[0]]}<br>${hm.y_key}=${hm.y_vals[p.value[1]]}<br>${title}: <b>${p.value[2]}</b>`,
+    },
+    grid: { left: 80, right: 40, top: 40, bottom: 60 },
+    xAxis: { type: 'category', data: hm.x_vals, name: hm.x_key, nameTextStyle: { color: '#8b949e' }, axisLabel: { color: '#484f58' } },
+    yAxis: { type: 'category', data: hm.y_vals, name: hm.y_key, nameTextStyle: { color: '#8b949e' }, axisLabel: { color: '#484f58' } },
+    visualMap: {
+      min, max, calculable: true, orient: 'horizontal', left: 'center', bottom: 0,
+      inRange: { color: ['#f85149', '#30363d', '#3fb950'] },
+      textStyle: { color: '#8b949e' },
+    },
+    series: [{
+      type: 'heatmap', data: rawData,
+      label: { show: true, color: '#e6edf3', fontSize: 11, formatter: p => p.value[2] },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } },
+    }],
+  });
+}
+
+// ==================== 组合回测 ====================
+async function runPortfolio() {
+  const btn = document.getElementById('portfolioBtn');
+  const area = document.getElementById('portfolioArea');
+  btn.disabled = true; btn.textContent = '回测中...';
+  area.innerHTML = '<div class="loading"><span class="spinner"></span>正在运行组合回测...</div>';
+
+  const strategies = Array.from(document.querySelectorAll('#portfolioStrategies input:checked')).map(c => c.value);
+  const symbols = document.getElementById('portfolioSymbols').value.split(/[,，\s]+/).filter(s => s.trim());
+  const capital = parseInt(document.getElementById('portfolioCapital').value) || 1000000;
+
+  if (strategies.length === 0) { area.innerHTML = '<div style="color:#f85149">请至少选择一个策略</div>'; btn.disabled = false; btn.textContent = '运行组合回测'; return; }
+  if (symbols.length === 0) { area.innerHTML = '<div style="color:#f85149">请至少输入一只股票</div>'; btn.disabled = false; btn.textContent = '运行组合回测'; return; }
+
+  try {
+    const res = await authFetch('/portfolio', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ strategies, symbols, capital }),
+    });
+    const data = await res.json();
+    if (res.ok) { renderPortfolio(data); showToast(`组合回测完成，共${data.total_combos}个组合`, 'success'); }
+    else { area.innerHTML = `<div style="color:#f85149">${data.detail || '回测失败'}</div>`; }
+  } catch (e) { area.innerHTML = `<div style="color:#f85149">请求失败: ${e.message}</div>`; }
+
+  btn.disabled = false; btn.textContent = '运行组合回测';
+}
+
+function renderPortfolio(data) {
+  const area = document.getElementById('portfolioArea');
+  const items = data.items || [];
+
+  // 表格
+  let rows = '';
+  items.forEach(r => {
+    if (r.error) {
+      rows += `<tr><td>${r.strategy_name || r.strategy}</td><td>${r.symbol}</td><td colspan="5" style="color:#f85149">${r.error}</td></tr>`;
+      return;
+    }
+    const s = r.stats || {};
+    rows += `<tr>
+      <td>${r.strategy_name || r.strategy}</td>
+      <td>${r.symbol}</td>
+      <td style="color:${(s.total_return||0)>=0?'#3fb950':'#f85149'}">${(s.total_return||0).toFixed(2)}%</td>
+      <td>${(s.sharpe_ratio||0).toFixed(2)}</td>
+      <td style="color:#f85149">${(s.max_ddpercent||0).toFixed(2)}%</td>
+      <td>${(s.win_rate||0).toFixed(1)}%</td>
+      <td>${s.total_trade_count||0}</td>
+    </tr>`;
+  });
+
+  let html = `
+    <div style="margin-bottom:12px;font-size:13px;color:#8b949e">
+      共 <b style="color:#e6edf3">${data.total_combos}</b> 个策略×股票组合
     </div>
-    <div style="overflow-x:auto">
+    <div style="overflow-x:auto;margin-bottom:16px">
       <table class="optimize-table">
         <thead><tr>
-          <th>排名</th><th>参数</th><th>总收益</th><th>夏普比率</th><th>最大回撤</th><th>交易次数</th>
+          <th>策略</th><th>股票</th><th>收益</th><th>Sharpe</th><th>最大回撤</th><th>胜率</th><th>交易数</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+
+  // 组合收益曲线
+  if (data.portfolio && data.portfolio.length > 0) {
+    html += `<div id="portfolioChart" style="height:350px"></div>`;
+  }
+
+  area.innerHTML = html;
+
+  // 渲染组合曲线
+  if (data.portfolio && data.portfolio.length > 0) {
+    const el = document.getElementById('portfolioChart');
+    const chart = getChart(el);
+    _chartInstances['portfolio'] = chart;
+    const dates = data.portfolio.map(d => d.date);
+    const balances = data.portfolio.map(d => d.balance);
+    const returns = data.portfolio.map(d => d.return_pct);
+
+    chart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['组合净值', '收益率%'], textStyle: { color: '#8b949e' }, top: 0 },
+      grid: { left: 60, right: 60, top: 40, bottom: 60 },
+      dataZoom: [{ type: 'inside' }, { type: 'slider', bottom: 10, height: 20, borderColor: '#30363d' }],
+      xAxis: { type: 'category', data: dates, axisLabel: { color: '#484f58', fontSize: 10 } },
+      yAxis: [
+        { type: 'value', name: '净值', axisLabel: { color: '#484f58', formatter: v => (v/10000).toFixed(0)+'万' }, splitLine: { lineStyle: { color: '#21262d' } } },
+        { type: 'value', name: '收益率%', axisLabel: { color: '#484f58', formatter: v => v+'%' }, splitLine: { show: false } },
+      ],
+      series: [
+        { name: '组合净值', type: 'line', data: balances, smooth: true, lineStyle: { color: '#58a6ff', width: 2 }, showSymbol: false,
+          areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#58a6ff33' }, { offset: 1, color: '#58a6ff05' }] } } },
+        { name: '收益率%', type: 'line', data: returns, smooth: true, yAxisIndex: 1, lineStyle: { color: '#ffa657', width: 1, type: 'dashed' }, showSymbol: false },
+      ],
+    });
+  }
 }
 
 // ==================== 风控配置 ====================
@@ -1213,8 +1427,13 @@ function renderKlineChart(kline, trades) {
 
   const dates = kline.map(k => k[0]);
   const ohlc = kline.map(k => [k[1], k[2], k[3], k[4]]);
+  const volumes = kline.map(k => ({
+    value: k[5] || 0,
+    itemStyle: { color: k[2] >= k[1] ? '#3fb95088' : '#f8514988' },
+  }));
 
   const ma5 = calcMA(kline, 5);
+  const ma10 = calcMA(kline, 10);
   const ma20 = calcMA(kline, 20);
 
   // 买卖点标记
@@ -1223,32 +1442,62 @@ function renderKlineChart(kline, trades) {
     const date = t.datetime.split(' ')[0];
     const idx = dates.indexOf(date);
     if (idx < 0) return;
-    const y = kline[idx][3]; // high
     if (t.offset === '开' || t.direction === '多') {
-      buyPoints.push({ name: '买入', coord: [date, kline[idx][3] * 1.01], value: t.price.toFixed(2),
-        symbol: 'triangle', symbolSize: 12, symbolRotate: 0, itemStyle: { color: '#3fb950' },
-        label: { show: false } });
+      buyPoints.push({ name: 'B', coord: [date, kline[idx][3] * 1.01], value: t.price.toFixed(2),
+        symbol: 'arrow', symbolSize: 14, symbolRotate: 0, itemStyle: { color: '#3fb950' },
+        label: { show: true, formatter: 'B', color: '#3fb950', fontSize: 10, position: 'top' } });
     } else {
-      sellPoints.push({ name: '卖出', coord: [date, kline[idx][4] * 0.99], value: t.price.toFixed(2),
-        symbol: 'triangle', symbolSize: 12, symbolRotate: 180, itemStyle: { color: '#f85149' },
-        label: { show: false } });
+      sellPoints.push({ name: 'S', coord: [date, kline[idx][4] * 0.99], value: t.price.toFixed(2),
+        symbol: 'arrow', symbolSize: 14, symbolRotate: 180, itemStyle: { color: '#f85149' },
+        label: { show: true, formatter: 'S', color: '#f85149', fontSize: 10, position: 'bottom' } });
+    }
+  });
+
+  // 计算信号区间（持仓背景色）
+  const markAreas = [];
+  let openDate = null;
+  trades.forEach(t => {
+    const date = t.datetime.split(' ')[0];
+    if (t.offset === '开' || t.direction === '多') {
+      openDate = date;
+    } else if (openDate) {
+      markAreas.push([
+        { xAxis: openDate, itemStyle: { color: 'rgba(63,185,80,0.06)' } },
+        { xAxis: date },
+      ]);
+      openDate = null;
     }
   });
 
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-    legend: { data: ['K线', 'MA5', 'MA20'], textStyle: { color: '#8b949e' }, top: 0 },
-    grid: { left: 60, right: 20, top: 40, bottom: 80 },
-    xAxis: { type: 'category', data: dates, axisLabel: { color: '#484f58', fontSize: 10 }, boundaryGap: true },
-    yAxis: { type: 'value', scale: true, axisLabel: { color: '#484f58' }, splitLine: { lineStyle: { color: '#21262d' } } },
-    dataZoom: [{ type: 'inside', start: 80, end: 100 }, { type: 'slider', bottom: 10, height: 20, borderColor: '#30363d', textStyle: { color: '#484f58' } }],
+    legend: { data: ['K线', 'MA5', 'MA10', 'MA20'], textStyle: { color: '#8b949e' }, top: 0 },
+    grid: [
+      { left: 60, right: 20, top: 40, bottom: '28%' },
+      { left: 60, right: 20, top: '76%', bottom: 40 },
+    ],
+    xAxis: [
+      { type: 'category', data: dates, axisLabel: { color: '#484f58', fontSize: 10 }, boundaryGap: true, gridIndex: 0 },
+      { type: 'category', data: dates, axisLabel: { show: false }, gridIndex: 1 },
+    ],
+    yAxis: [
+      { type: 'value', scale: true, axisLabel: { color: '#484f58' }, splitLine: { lineStyle: { color: '#21262d' } }, gridIndex: 0 },
+      { type: 'value', scale: true, axisLabel: { show: false }, splitLine: { show: false }, gridIndex: 1 },
+    ],
+    dataZoom: [
+      { type: 'inside', xAxisIndex: [0, 1], start: 80, end: 100 },
+      { type: 'slider', bottom: 10, height: 20, borderColor: '#30363d', textStyle: { color: '#484f58' }, xAxisIndex: [0, 1] },
+    ],
     series: [
-      { name: 'K线', type: 'candlestick', data: ohlc,
+      { name: 'K线', type: 'candlestick', data: ohlc, xAxisIndex: 0, yAxisIndex: 0,
         itemStyle: { color: '#f85149', color0: '#3fb950', borderColor: '#f85149', borderColor0: '#3fb950' },
-        markPoint: { data: [...buyPoints, ...sellPoints] } },
-      { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ffa657', width: 1 }, showSymbol: false },
-      { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { color: '#bc8cff', width: 1 }, showSymbol: false },
+        markPoint: { data: [...buyPoints, ...sellPoints] },
+        markArea: { data: markAreas, silent: true } },
+      { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ffa657', width: 1 }, showSymbol: false, xAxisIndex: 0, yAxisIndex: 0 },
+      { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { color: '#58a6ff', width: 1 }, showSymbol: false, xAxisIndex: 0, yAxisIndex: 0 },
+      { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { color: '#bc8cff', width: 1 }, showSymbol: false, xAxisIndex: 0, yAxisIndex: 0 },
+      { name: '成交量', type: 'bar', data: volumes, xAxisIndex: 1, yAxisIndex: 1 },
     ],
   });
 }
@@ -2023,6 +2272,24 @@ bindStockSearch('presetSymbol', 'presetSymbolDropdown', 'presetMarket',
   (code) => { document.getElementById('presetSymbol').value = code; document.getElementById('presetSymbolDropdown').style.display = 'none'; });
 
 loadPresets();
+
+// 快捷键支持
+document.addEventListener('keydown', e => {
+  // Ctrl+Enter / Cmd+Enter → 运行当前 Tab 的主操作
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    const active = document.querySelector('.tab-content:not(.hidden)');
+    if (!active) return;
+    const id = active.id;
+    if (id === 'tab-backtest') document.getElementById('runBtn')?.click();
+    else if (id === 'tab-portfolio') document.getElementById('portfolioBtn')?.click();
+    else if (id === 'tab-optimize') document.getElementById('optimizeBtn')?.click();
+  }
+  // Escape → 关闭下拉框
+  if (e.key === 'Escape') {
+    document.querySelectorAll('[id$="Dropdown"]').forEach(d => d.style.display = 'none');
+  }
+});
 
 // 启动：检查认证状态
 (function() {

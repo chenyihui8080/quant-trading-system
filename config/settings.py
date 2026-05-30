@@ -64,6 +64,24 @@ STRATEGIES = {
         "class": "GridStrategy",
         "desc": "固定百分比网格，下跌买上涨卖",
     },
+    "momentum": {
+        "name": "动量策略",
+        "module": "strategies.momentum",
+        "class": "MomentumStrategy",
+        "desc": "N日收益率突破阈值，趋势动量跟踪",
+    },
+    "mean_reversion": {
+        "name": "均值回归",
+        "module": "strategies.mean_reversion",
+        "class": "MeanReversionStrategy",
+        "desc": "价格偏离均线过多时反向交易",
+    },
+    "atr_breakout": {
+        "name": "ATR突破",
+        "module": "strategies.atr_breakout",
+        "class": "AtrBreakoutStrategy",
+        "desc": "ATR通道突破 + 趋势过滤",
+    },
 }
 
 # LLM 配置（可选，不配置则仅使用正则解析）
