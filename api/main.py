@@ -90,6 +90,12 @@ async def daily_evaluate_loop():
 
 app = FastAPI(title="量化回测系统", version="2.0.0", lifespan=lifespan)
 TEMPLATE_DIR = Path(__file__).parent / "templates"
+STATIC_DIR = Path(__file__).parent.parent / "static"
+
+# 挂载静态文件目录
+if STATIC_DIR.exists():
+    from starlette.staticfiles import StaticFiles
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # 公开路径（无需认证）
 PUBLIC_PATHS = {"/", "/auth/register", "/auth/login", "/docs", "/openapi.json", "/redoc", "/docs/oauth2-redirect"}
@@ -1631,3 +1637,133 @@ def api_nl_create_strategy(req: NLCreateStrategyRequest):
         market=req.market,
     )
     return {"status": "ok", "strategy": strategy, "parsed": result}
+
+
+# ==================== 模拟盘 ====================
+
+# 全局模拟盘任务管理
+_paper_trade_tasks: dict[str, asyncio.Task] = {}
+
+
+class PaperTradeRequest(BaseModel):
+    strategy: str
+    symbol: str = "600519"
+    capital: float = 1_000_000
+    interval: int = 3  # 秒
+
+
+@app.post("/paper-trade/start")
+async def start_paper_trade(req: PaperTradeRequest):
+    """启动模拟盘"""
+    task_key = f"{req.strategy}_{req.symbol}"
+    if task_key in _paper_trade_tasks and not _paper_trade_tasks[task_key].done():
+        raise HTTPException(400, "该策略已在运行中")
+
+    _paper_trade_tasks[task_key] = asyncio.create_task(
+        _run_paper_trade(req.strategy, req.symbol, req.capital, req.interval)
+    )
+    return {"status": "started", "task_key": task_key}
+
+
+@app.post("/paper-trade/stop")
+async def stop_paper_trade(req: PaperTradeRequest):
+    """停止模拟盘"""
+    task_key = f"{req.strategy}_{req.symbol}"
+    task = _paper_trade_tasks.get(task_key)
+    if task and not task.done():
+        task.cancel()
+    _paper_trade_tasks.pop(task_key, None)
+    return {"status": "stopped", "task_key": task_key}
+
+
+@app.get("/paper-trade/status")
+async def paper_trade_status():
+    """查看所有模拟盘状态"""
+    running = []
+    for key, task in _paper_trade_tasks.items():
+        if not task.done():
+            running.append(key)
+    return {"running": running}
+
+
+async def _run_paper_trade(strategy: str, symbol: str, capital: float, interval: int):
+    """模拟盘后台任务：模拟行情 + 策略信号"""
+    import random
+    from vnpy.trader.object import BarData
+    from vnpy.trader.constant import Exchange, Interval
+    from datetime import datetime, timedelta
+
+    # 动态加载策略类
+    strategy_info = STRATEGIES.get(strategy)
+    if not strategy_info:
+        return
+
+    try:
+        module = __import__(strategy_info["module"], fromlist=[strategy_info["class"]])
+        strategy_cls = getattr(module, strategy_info["class"])
+    except Exception:
+        return
+
+    # 模拟初始价格
+    price = 100.0 + random.uniform(-20, 20)
+    pos = 0
+    entry_price = 0.0
+    signals = []
+
+    try:
+        while True:
+            # 模拟价格随机游走
+            change_pct = random.gauss(0, 0.015)  # ~1.5% 标准差
+            price *= (1 + change_pct)
+            price = max(price, 1.0)
+
+            now = datetime.now()
+            bar = BarData(
+                symbol=symbol,
+                exchange=Exchange.SSE,
+                datetime=now,
+                interval=Interval.DAILY,
+                volume=random.randint(10000, 100000),
+                open_price=price * (1 + random.uniform(-0.005, 0.005)),
+                high_price=price * (1 + abs(random.gauss(0, 0.01))),
+                low_price=price * (1 - abs(random.gauss(0, 0.01))),
+                close_price=price,
+                gateway_name="paper",
+            )
+
+            # 生成信号（简化版：用价格变化率模拟）
+            signal_data = {
+                "time": now.strftime("%H:%M:%S"),
+                "price": round(price, 2),
+                "change_pct": round(change_pct * 100, 2),
+                "strategy": strategy,
+                "symbol": symbol,
+            }
+
+            # 简单信号逻辑：基于价格变化
+            if change_pct > 0.01 and pos == 0:
+                pos = 100
+                entry_price = price
+                signal_data["action"] = "买入"
+                signal_data["pos"] = pos
+            elif change_pct < -0.01 and pos > 0:
+                pnl = (price - entry_price) / entry_price * 100
+                pos = 0
+                signal_data["action"] = "卖出"
+                signal_data["pnl"] = round(pnl, 2)
+                signal_data["pos"] = 0
+            else:
+                signal_data["action"] = "持仓" if pos > 0 else "观望"
+                signal_data["pos"] = pos
+                if pos > 0:
+                    signal_data["pnl"] = round((price - entry_price) / entry_price * 100, 2)
+
+            # 广播信号
+            await ws_manager.broadcast("paper-trade", signal_data)
+            await asyncio.sleep(interval)
+
+    except asyncio.CancelledError:
+        await ws_manager.broadcast("paper-trade", {
+            "action": "停止", "strategy": strategy, "symbol": symbol,
+            "time": datetime.now().strftime("%H:%M:%S"),
+        })

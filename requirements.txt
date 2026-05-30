@@ -1,0 +1,15 @@
+# 量化回测系统 - 运行时依赖
+fastapi==0.136.1
+uvicorn==0.47.0
+pydantic==2.13.4
+numpy==2.4.6
+pandas==3.0.3
+requests==2.34.2
+httpx==0.28.1
+websockets==16.0
+vnpy==4.4.0
+vnpy_ctastrategy==1.4.1
+vnpy_ctabacktester==1.3.0
+vnpy_sqlite==1.1.3
+baostock==0.9.1
+akshare==1.18.63

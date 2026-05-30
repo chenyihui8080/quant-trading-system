@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>量化回测系统</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="/static/echarts.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { 
@@ -349,6 +349,7 @@ body {
   <div class="tab" onclick="switchTab('optimize', this)">参数优化</div>
   <div class="tab" onclick="switchTab('risk', this)">风控配置</div>
   <div class="tab" onclick="switchTab('quality', this)">数据质量</div>
+  <div class="tab" onclick="switchTab('paper', this)">模拟盘</div>
 </div>
 
 <!-- ==================== 回测页 ==================== -->
@@ -788,6 +789,55 @@ body {
   </div>
 </div>
 
+<!-- ==================== 模拟盘 ==================== -->
+<div class="container tab-content hidden" id="tab-paper">
+  <div class="grid-2">
+    <div>
+      <div class="panel">
+        <h2>模拟盘配置</h2>
+        <div class="form-row">
+          <label>选择策略</label>
+          <select id="paperStrategy"></select>
+        </div>
+        <div class="form-row">
+          <label>股票代码</label>
+          <input type="text" id="paperSymbol" value="600519" placeholder="输入股票代码">
+        </div>
+        <div class="form-row">
+          <label>刷新间隔（秒）</label>
+          <input type="number" id="paperInterval" value="3" min="1" max="60">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn" id="paperStartBtn" onclick="startPaperTrade()">启动模拟盘</button>
+          <button class="btn" id="paperStopBtn" onclick="stopPaperTrade()" style="background:#f85149" disabled>停止</button>
+        </div>
+        <div id="paperStatus" style="margin-top:8px;font-size:13px;color:#8b949e"></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <h2>实时信号</h2>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:1px solid #30363d">
+                <th style="text-align:left;padding:6px">时间</th>
+                <th>操作</th>
+                <th>价格</th>
+                <th>涨跌%</th>
+                <th>持仓</th>
+                <th>盈亏%</th>
+              </tr>
+            </thead>
+            <tbody id="paperSignalsBody"></tbody>
+          </table>
+        </div>
+        <div id="paperSignalsEmpty" style="color:#8b949e;font-size:13px;margin-top:8px">启动模拟盘后，交易信号将在此实时显示</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -881,6 +931,9 @@ async function init() {
       <div class="name">${info.name}</div><div class="desc">${info.desc}</div></div>`;
   }).join('');
 
+  // 填充模拟盘策略下拉框
+  populatePaperStrategies();
+
   // 同步数据到所有下拉框：一次性插入
   const optHtml = data.data.map(d => {
     const name = d.name || d.symbol;
@@ -945,6 +998,26 @@ async function runBacktest() {
   } catch (e) { result.innerHTML = `<div style="color:#f85149">请求失败: ${e.message}</div>`; }
 
   btn.disabled = false; btn.textContent = '开始回测';
+}
+
+async function runBacktestWithParams(strategy, params) {
+  if (!strategy) { showToast('未指定策略', 'error'); return; }
+  const result = document.getElementById('resultArea');
+  result.innerHTML = '<div class="loading"><span class="spinner"></span>正在用优化参数运行回测...</div>';
+
+  const symbol = document.getElementById('symbolSelect').value || null;
+  const capital = parseInt(document.getElementById('capital').value) || 1000000;
+  const days = parseInt(document.getElementById('days').value) || 500;
+
+  try {
+    const res = await authFetch('/backtest-detail', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ strategy, symbol, capital, days, params }),
+    });
+    const data = await res.json();
+    if (res.ok) { renderResult(data); showToast(`优化参数回测完成`, 'success'); }
+    else { result.innerHTML = `<div style="color:#f85149">${data.detail || '回测失败'}</div>`; }
+  } catch (e) { result.innerHTML = `<div style="color:#f85149">请求失败: ${e.message}</div>`; }
 }
 
 function renderResult(data) {
@@ -1090,6 +1163,7 @@ async function runOptimize() {
   const strategy = document.getElementById('optimizeStrategy').value;
   const symbol = document.getElementById('optimizeSymbol').value || null;
   const days = parseInt(document.getElementById('optimizeDays').value) || 500;
+  window._optimizeStrategy = strategy;
 
   try {
     const res = await authFetch('/optimize', {
@@ -1198,6 +1272,33 @@ function _renderHeatmap(metric) {
       label: { show: true, color: '#e6edf3', fontSize: 11, formatter: p => p.value[2] },
       emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } },
     }],
+  });
+
+  // 点击热力图格子 → 跳转回测页并用该参数运行
+  chart.off('click');
+  chart.on('click', function(params) {
+    const xVal = hm.x_vals[params.value[0]];
+    const yVal = hm.y_vals[params.value[1]];
+    const strategy = window._optimizeStrategy || '';
+    // 存储待运行参数
+    window._pendingOptimizeRun = { strategy, params: { [hm.x_key]: Number(xVal), [hm.y_key]: Number(yVal) } };
+    showToast(`参数 ${hm.x_key}=${xVal}, ${hm.y_key}=${yVal}，正在跳转回测...`, 'success');
+    // 切换到回测 tab 并自动运行
+    const tab = document.querySelector(".tab");
+    switchTab('backtest', document.querySelectorAll('.tab')[0]);
+    // 选择对应策略
+    setTimeout(() => {
+      const items = document.querySelectorAll('.strategy-item');
+      items.forEach(el => {
+        if (el.dataset.key === strategy) { el.click(); }
+      });
+      // 通过 API 运行回测
+      if (window._pendingOptimizeRun) {
+        const pr = window._pendingOptimizeRun;
+        window._pendingOptimizeRun = null;
+        runBacktestWithParams(pr.strategy, pr.params);
+      }
+    }, 300);
   });
 }
 
@@ -2330,6 +2431,90 @@ document.addEventListener('keydown', e => {
     document.querySelectorAll('[id$="Dropdown"]').forEach(d => d.style.display = 'none');
   }
 });
+
+// ==================== 模拟盘 ====================
+let paperWs = null;
+let paperRunning = false;
+
+function populatePaperStrategies() {
+  const sel = document.getElementById('paperStrategy');
+  sel.innerHTML = strategyKeys.map(k => `<option value="${k}">${k}</option>`).join('');
+}
+
+async function startPaperTrade() {
+  const strategy = document.getElementById('paperStrategy').value;
+  const symbol = document.getElementById('paperSymbol').value.trim();
+  const interval = parseInt(document.getElementById('paperInterval').value) || 3;
+  if (!strategy) { showToast('请选择策略', 'error'); return; }
+  if (!symbol) { showToast('请输入股票代码', 'error'); return; }
+
+  try {
+    const res = await authFetch('/paper-trade/start', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ strategy, symbol, interval }),
+    });
+    if (!res.ok) { const d = await res.json(); showToast(d.detail || '启动失败', 'error'); return; }
+    paperRunning = true;
+    document.getElementById('paperStartBtn').disabled = true;
+    document.getElementById('paperStopBtn').disabled = false;
+    document.getElementById('paperStatus').textContent = `运行中: ${strategy} / ${symbol}`;
+    document.getElementById('paperSignalsEmpty').style.display = 'none';
+    connectPaperWs();
+    showToast('模拟盘已启动', 'success');
+  } catch (e) { showToast('启动失败: ' + e.message, 'error'); }
+}
+
+async function stopPaperTrade() {
+  const strategy = document.getElementById('paperStrategy').value;
+  const symbol = document.getElementById('paperSymbol').value.trim();
+  try {
+    await authFetch('/paper-trade/stop', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ strategy, symbol }),
+    });
+  } catch (e) {}
+  paperRunning = false;
+  document.getElementById('paperStartBtn').disabled = false;
+  document.getElementById('paperStopBtn').disabled = true;
+  document.getElementById('paperStatus').textContent = '已停止';
+  if (paperWs) { paperWs.close(); paperWs = null; }
+  showToast('模拟盘已停止', 'success');
+}
+
+function connectPaperWs() {
+  if (paperWs) paperWs.close();
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  paperWs = new WebSocket(`${proto}//${location.host}/ws`);
+  paperWs.onopen = () => {
+    paperWs.send(JSON.stringify({ action: 'subscribe', topic: 'paper-trade' }));
+  };
+  paperWs.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.topic === 'paper-trade') addPaperSignal(msg.data);
+    } catch {}
+  };
+  paperWs.onclose = () => { if (paperRunning) setTimeout(connectPaperWs, 3000); };
+}
+
+function addPaperSignal(d) {
+  const tbody = document.getElementById('paperSignalsBody');
+  const color = d.action === '买入' ? '#3fb950' : d.action === '卖出' ? '#f85149' : '#8b949e';
+  const pnlColor = (d.pnl || 0) > 0 ? '#3fb950' : (d.pnl || 0) < 0 ? '#f85149' : '#8b949e';
+  const row = document.createElement('tr');
+  row.style.borderBottom = '1px solid #21262d';
+  row.innerHTML = `
+    <td style="padding:4px 6px">${d.time || '-'}</td>
+    <td style="text-align:center;color:${color};font-weight:600">${d.action || '-'}</td>
+    <td style="text-align:center">¥${d.price || '-'}</td>
+    <td style="text-align:center;color:${(d.change_pct||0)>0?'#3fb950':(d.change_pct||0)<0?'#f85149':'#8b949e'}">${d.change_pct != null ? d.change_pct.toFixed(2) + '%' : '-'}</td>
+    <td style="text-align:center">${d.pos != null ? d.pos : '-'}</td>
+    <td style="text-align:center;color:${pnlColor}">${d.pnl != null ? d.pnl.toFixed(2) + '%' : '-'}</td>
+  `;
+  tbody.insertBefore(row, tbody.firstChild);
+  // 保留最近 50 条
+  while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+}
 
 // ==================== 数据质量 ====================
 async function loadDataQuality() {

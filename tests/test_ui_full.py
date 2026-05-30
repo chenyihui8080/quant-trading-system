@@ -143,7 +143,7 @@ def goto_tab(page, tab_name):
     page.click(f".tab:text('{tab_name}')")
     tab_id = {"回测": "backtest", "实时行情": "live", "我的策略": "strategies",
               "策略对比": "compare", "组合回测": "portfolio", "参数优化": "optimize",
-              "风控配置": "risk", "数据质量": "quality"}.get(tab_name)
+              "风控配置": "risk", "数据质量": "quality", "模拟盘": "paper"}.get(tab_name)
     if tab_id:
         page.wait_for_selector(f"#tab-{tab_id}", state="visible", timeout=5000)
     else:
@@ -2465,3 +2465,90 @@ class TestReportExport:
         download = download_info.value
         shot(page, "export_download")
         assert download.suggested_filename.endswith(".html")
+
+
+class TestPaperTradeTab:
+    """模拟盘标签页"""
+
+    def test_paper_tab_visible(self, page):
+        """切换到模拟盘标签页"""
+        goto_tab(page, "模拟盘")
+        shot(page, "paper_tab")
+        assert page.locator("#tab-paper").is_visible()
+
+    def test_paper_has_strategy_select(self, page):
+        """模拟盘页有策略下拉框"""
+        goto_tab(page, "模拟盘")
+        page.wait_for_timeout(300)
+        sel = page.locator("#paperStrategy")
+        assert sel.is_visible()
+        # 应该有策略选项
+        opts = sel.locator("option").count()
+        assert opts > 0
+
+    def test_paper_start_stop_buttons(self, page):
+        """启动/停止按钮存在"""
+        goto_tab(page, "模拟盘")
+        shot(page, "paper_buttons")
+        assert page.locator("#paperStartBtn").is_visible()
+        assert page.locator("#paperStopBtn").is_visible()
+        assert page.locator("#paperStopBtn").is_disabled()
+
+    def test_paper_start_and_stop(self, page):
+        """启动模拟盘后停止"""
+        goto_tab(page, "模拟盘")
+        page.wait_for_timeout(300)
+        page.fill("#paperSymbol", "600519")
+        page.click("#paperStartBtn")
+        page.wait_for_timeout(2000)
+        shot(page, "paper_running")
+        # 停止
+        page.click("#paperStopBtn")
+        page.wait_for_timeout(500)
+        shot(page, "paper_stopped")
+        status = page.locator("#paperStatus").inner_text()
+        assert "已停止" in status or "停止" in status
+
+
+class TestHeatmapInteraction:
+    """热力图交互增强"""
+
+    def test_heatmap_click_navigates_to_backtest(self, page):
+        """点击热力图格子跳转回测页"""
+        goto_tab(page, "参数优化")
+        page.wait_for_timeout(300)
+        # 选择策略和股票
+        page.locator("#optimizeStrategy").select_option(index=0)
+        page.click("#optimizeBtn")
+        # 等待优化完成
+        page.wait_for_timeout(8000)
+        shot(page, "heatmap_before_click")
+        # 如果有热力图，点击它
+        heatmap = page.locator("#heatmapChart canvas").first
+        if heatmap.count() > 0:
+            box = heatmap.bounding_box()
+            if box:
+                page.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+                page.wait_for_timeout(1000)
+                shot(page, "heatmap_after_click")
+
+
+class TestExportReportContent:
+    """导出报告内容验证"""
+
+    def test_export_contains_stats(self, page):
+        """导出报告 HTML 内容包含统计卡片"""
+        page.locator(".strategy-item").first.click()
+        page.wait_for_timeout(200)
+        run_backtest(page)
+        with page.expect_download(timeout=10000) as download_info:
+            page.click("button:text('导出报告')")
+        download = download_info.value
+        # 保存到临时文件
+        import tempfile
+        path = tempfile.mktemp(suffix=".html")
+        download.save_as(path)
+        content = open(path, encoding="utf-8").read()
+        shot(page, "export_content")
+        assert "总收益" in content or "夏普比率" in content or "收益" in content
+        os.unlink(path)

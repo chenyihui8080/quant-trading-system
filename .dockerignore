@@ -1,0 +1,14 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.git/
+.github/
+screenshots/
+test-reports/
+simnow/
+node_modules/
+.cache/
+*.egg-info/
+dist/
+build/
