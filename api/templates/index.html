@@ -365,7 +365,7 @@ body {
         <div class="form-row">
           <label>股票代码</label>
           <div style="display:flex;gap:8px;align-items:center;position:relative">
-            <select id="symbolSelect" style="flex:1"><option value="">模拟数据</option></select>
+            <select id="symbolSelect" style="flex:1" onchange="onSymbolChange(this.value)"><option value="">模拟数据</option></select>
             <select id="quickMarket" style="width:96px;font-size:12px;padding:6px 4px">
               <option value="">全部</option>
               <option value="a">A 股</option>
@@ -375,6 +375,7 @@ body {
             <input type="text" id="quickSearch" placeholder="搜索代码或名称..." style="width:160px;font-size:12px;padding:6px 8px" autocomplete="off">
             <div id="quickDropdown" style="display:none;position:absolute;top:100%;left:0;width:320px;z-index:100;background:#161b22;border:1px solid #30363d;border-radius:8px;max-height:240px;overflow-y:auto;margin-top:4px"></div>
           </div>
+          <div id="quoteBar" style="display:none;font-size:12px;margin-top:4px;padding:4px 8px;background:#0d1117;border:1px solid #21262d;border-radius:6px"></div>
         </div>
         <div class="form-row">
           <label>初始资金</label>
@@ -405,7 +406,7 @@ body {
       <div class="form-row-inline">
         <div class="form-row">
           <label>股票</label>
-          <select id="liveSymbol"></select>
+          <select id="liveSymbol" onchange="loadLiveKline()"></select>
         </div>
         <div class="form-row">
           <label>查看范围</label>
@@ -943,6 +944,10 @@ async function init() {
     const sel = document.getElementById(id);
     sel.innerHTML = sel.innerHTML + optHtml;
   });
+
+  // 页面加载后自动获取第一个股票的实时行情
+  const firstSymbol = document.getElementById('symbolSelect').value;
+  if (firstSymbol) onSymbolChange(firstSymbol);
 }
 
 // ==================== 标签页切换 ====================
@@ -2431,6 +2436,26 @@ document.addEventListener('keydown', e => {
     document.querySelectorAll('[id$="Dropdown"]').forEach(d => d.style.display = 'none');
   }
 });
+
+// ==================== 实时行情刷新 ====================
+let _quoteTimer = null;
+async function onSymbolChange(symbol) {
+  const bar = document.getElementById('quoteBar');
+  if (!symbol) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  bar.innerHTML = '<span style="color:#8b949e">获取行情中...</span>';
+  try {
+    const res = await authFetch(`/realtime/${symbol}`);
+    if (!res.ok) { bar.innerHTML = '<span style="color:#f85149">获取失败</span>'; return; }
+    const q = await res.json();
+    const color = q.change_pct >= 0 ? '#3fb950' : '#f85149';
+    const sign = q.change_pct >= 0 ? '+' : '';
+    bar.innerHTML = `<b style="color:#e6edf3">${q.name}</b> ` +
+      `<span style="color:${color};font-weight:700">¥${q.price.toFixed(2)}</span> ` +
+      `<span style="color:${color}">${sign}${q.change_pct.toFixed(2)}%</span> ` +
+      `<span style="color:#8b949e">开:${q.open.toFixed(2)} 高:${q.high.toFixed(2)} 低:${q.low.toFixed(2)} ${q.updated||''}</span>`;
+  } catch(e) { bar.innerHTML = `<span style="color:#f85149">${e.message}</span>`; }
+}
 
 // ==================== 模拟盘 ====================
 let paperWs = null;
