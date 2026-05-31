@@ -446,3 +446,333 @@ class TestNotifier:
         gen.check_signal("test", "600519", "trade", 100.0, 100)
         # 仓位不变，positions 不更新
         assert gen.positions["600519"] == 100
+
+
+# ==================== NL 解析器测试 ====================
+
+class TestNlParser:
+    """自然语言策略解析器测试"""
+
+    def test_basic_ma_golden_cross(self):
+        """基本均线金叉买入"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("5日均线金叉20日均线买入")
+        assert len(r["buy_conditions"]) == 1
+        assert r["buy_conditions"][0]["op"] == "cross_above"
+        assert r["unmatched"] == []
+
+    def test_basic_ma_death_cross_sell(self):
+        """基本均线死叉卖出"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("5日均线下穿20日均线卖出")
+        assert len(r["sell_conditions"]) == 1
+        assert r["sell_conditions"][0]["op"] == "cross_below"
+
+    def test_context_inherit_death_cross(self):
+        """上下文继承：买入指定均线，卖出简写'死叉'"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("5日均线金叉20日均线买入，死叉卖出")
+        assert len(r["buy_conditions"]) == 1
+        assert len(r["sell_conditions"]) == 1
+        sell = r["sell_conditions"][0]
+        assert sell["op"] == "cross_below"
+        assert sell["left"]["indicator"] == "ma"
+        assert sell["left"]["params"]["period"] == 5
+        assert sell["right"]["indicator"] == "ma"
+        assert sell["right"]["params"]["period"] == 20
+
+    def test_context_inherit_rsi_above(self):
+        """上下文继承：RSI买入条件，'高于70卖出'继承RSI"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("RSI低于30买入，高于70卖出")
+        assert len(r["buy_conditions"]) == 1
+        assert len(r["sell_conditions"]) == 1
+        sell = r["sell_conditions"][0]
+        assert sell["op"] == ">"
+        assert sell["left"]["indicator"] == "rsi"
+        assert sell["right"]["value"] == 70
+
+    def test_macd_death_cross(self):
+        """MACD死叉卖出"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("MACD金叉买入，MACD死叉卖出")
+        assert len(r["buy_conditions"]) == 1
+        assert len(r["sell_conditions"]) == 1
+        assert r["sell_conditions"][0]["op"] == "cross_below"
+
+    def test_kdj_death_cross(self):
+        """KDJ死叉卖出"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("KDJ超卖买入，KDJ死叉卖出")
+        assert len(r["buy_conditions"]) == 1
+        assert len(r["sell_conditions"]) == 1
+        assert r["sell_conditions"][0]["op"] == "cross_below"
+        assert r["sell_conditions"][0]["left"]["indicator"] == "kdj"
+
+    def test_boll_middle_band(self):
+        """布林中轨突破/跌破"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("突破中轨买入，跌破中轨卖出")
+        assert len(r["buy_conditions"]) == 1
+        assert len(r["sell_conditions"]) == 1
+        assert r["sell_conditions"][0]["op"] == "<"
+        assert r["sell_conditions"][0]["right"]["indicator"] == "boll"
+
+    def test_bare_super_overbought(self):
+        """简写'超买'→RSI>70"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("超买卖出")
+        assert len(r["sell_conditions"]) == 1
+        assert r["sell_conditions"][0]["op"] == ">"
+        assert r["sell_conditions"][0]["left"]["indicator"] == "rsi"
+
+    def test_bare_supersold(self):
+        """简写'超卖'→RSI<30"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("超卖买入")
+        assert len(r["buy_conditions"]) == 1
+        assert r["buy_conditions"][0]["op"] == "<"
+        assert r["buy_conditions"][0]["left"]["indicator"] == "rsi"
+
+    def test_volume_conditions(self):
+        """放量/缩量"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("放量买入，缩量卖出")
+        assert len(r["buy_conditions"]) == 1
+        assert len(r["sell_conditions"]) == 1
+
+    def test_complex_strategy(self):
+        """复合策略：多条件"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("5日均线金叉20日均线买入，RSI超买卖出，跌破10块止损")
+        assert len(r["buy_conditions"]) >= 1
+        assert len(r["sell_conditions"]) >= 1
+
+    def test_no_conditions_returns_empty(self):
+        """无条件输入"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("今天天气不错")
+        assert r["buy_conditions"] == []
+        assert r["sell_conditions"] == []
+
+    def test_chinese_numbers(self):
+        """中文数字支持"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("站上二十日均线买入")
+        assert len(r["buy_conditions"]) == 1
+
+    def test_explanation_generated(self):
+        """生成中文说明"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("5日均线金叉20日均线买入")
+        assert "买入" in r["explanation"]
+
+    def test_context_inherit_kdj_above(self):
+        """上下文继承：KDJ买入，'高于80卖出'继承KDJ"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("KDJ超卖买入，高于80卖出")
+        assert len(r["sell_conditions"]) == 1
+        sell = r["sell_conditions"][0]
+        assert sell["left"]["indicator"] == "kdj"
+        assert sell["right"]["value"] == 80
+
+
+class TestNlMultiStock:
+    """多股票自然语言解析测试"""
+
+    def test_two_stocks(self):
+        """识别两只股票各自的规则"""
+        from utils.nl_parser import parse_nl_multi
+        results = parse_nl_multi("茅台亏百分之十就卖 杭州柯林涨到150就卖")
+        assert len(results) == 2
+        assert results[0]["stock_code"] == "600519"
+        assert len(results[0]["sell_conditions"]) == 1
+        assert results[1]["stock_name"] == "杭州柯林"
+        assert len(results[1]["sell_conditions"]) == 1
+
+    def test_chinese_percent(self):
+        """中文百分之N识别"""
+        from utils.nl_parser import parse_nl_multi
+        results = parse_nl_multi("茅台亏了百分之二十就跑")
+        assert len(results) == 1
+        assert results[0]["sell_conditions"][0]["right"]["value"] == -20.0
+
+    def test_no_stock_returns_unknown(self):
+        """没有股票名时返回unknown"""
+        from utils.nl_parser import parse_nl_multi
+        results = parse_nl_multi("涨了就买，跌了就卖")
+        assert len(results) == 1
+        assert results[0]["stock_name"] == "unknown"
+
+    def test_short_stock_name(self):
+        """简称匹配（茅台→贵州茅台）"""
+        from utils.nl_parser import parse_nl_multi
+        results = parse_nl_multi("茅台跌破1000就买")
+        assert results[0]["stock_code"] == "600519"
+
+    def test_price_condition(self):
+        """绝对价格条件"""
+        from utils.nl_parser import parse_nl_multi
+        results = parse_nl_multi("五粮液跌破50块就买")
+        assert results[0]["stock_code"] == "000858"
+        assert results[0]["buy_conditions"][0]["right"]["value"] == 50.0
+
+
+# ==================== 分钟数据模块测试 ====================
+
+class TestMinuteData:
+    """分钟K线数据模块测试"""
+
+    def test_period_map(self):
+        """周期映射正确性"""
+        from utils.minute_data import PERIOD_MAP
+        assert PERIOD_MAP["5"] == 5
+        assert PERIOD_MAP["15m"] == 15
+        assert PERIOD_MAP["60"] == 60
+
+    def test_sina_symbol_format(self):
+        """股票代码转新浪格式"""
+        from utils.minute_data import _get_sina_symbol
+        assert _get_sina_symbol("600519") == "sh600519"
+        assert _get_sina_symbol("000001") == "sz000001"
+        assert _get_sina_symbol("300750") == "sz300750"
+
+    def test_fetch_returns_list(self):
+        """fetch_minute_klines 返回列表"""
+        from utils.minute_data import fetch_minute_klines
+        bars = fetch_minute_klines("600519", "60", limit=5)
+        assert isinstance(bars, list)
+        if bars:
+            assert "datetime" in bars[0]
+            assert "open" in bars[0]
+            assert "close" in bars[0]
+            assert "high" in bars[0]
+            assert "low" in bars[0]
+            assert "volume" in bars[0]
+
+    def test_fetch_with_info(self):
+        """fetch_minute_klines_with_info 包含元信息"""
+        from utils.minute_data import fetch_minute_klines_with_info
+        info = fetch_minute_klines_with_info("600519", "60", limit=5)
+        assert "name" in info
+        assert "symbol" in info
+        assert "count" in info
+        assert info["symbol"] == "600519"
+        assert info["count"] <= 5
+
+    def test_to_vnpy_bars(self):
+        """to_vnpy_bars 转换正确"""
+        from utils.minute_data import to_vnpy_bars
+        bars = [
+            {"datetime": "2026-05-29 10:00:00", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000, "amount": 0},
+        ]
+        vnpy_bars = to_vnpy_bars("600519", bars)
+        assert len(vnpy_bars) == 1
+        assert vnpy_bars[0].symbol == "600519"
+        assert vnpy_bars[0].open_price == 100
+        assert vnpy_bars[0].close_price == 103
+
+
+# ==================== 券商模块测试 ====================
+
+class TestBroker:
+    """实盘交易模块测试"""
+
+    def test_broker_map(self):
+        """券商映射正确"""
+        from utils.broker import BROKER_MAP
+        assert "yh" in BROKER_MAP
+        assert "ht" in BROKER_MAP
+        assert BROKER_MAP["银河"]["key"] == "yh"
+
+    def test_status_disconnected(self):
+        """初始状态未连接"""
+        from utils.broker import get_status, disconnect
+        disconnect()  # 确保断开
+        status = get_status()
+        assert status["connected"] is False
+
+    def test_balance_without_connection(self):
+        """未连接时查询资金返回错误"""
+        from utils.broker import get_balance, disconnect
+        disconnect()
+        result = get_balance()
+        assert "error" in result
+
+    def test_buy_validation(self):
+        """买入数量校验 — mock已连接状态"""
+        import utils.broker as broker_mod
+        from utils.broker import buy, disconnect
+        disconnect()
+        # 模拟已连接状态以触发数量校验
+        broker_mod._broker_instance = object()
+        try:
+            result = buy("600519", 100.0, 50)  # 不是100整数倍
+            assert "error" in result
+            assert "100" in result["error"]
+        finally:
+            broker_mod._broker_instance = None
+
+    def test_sell_validation(self):
+        """卖出数量校验"""
+        from utils.broker import sell, disconnect
+        disconnect()
+        result = sell("600519", 100.0, 0)
+        assert "error" in result
+
+    def test_connect_invalid_broker(self):
+        """连接无效券商返回错误"""
+        from utils.broker import connect
+        result = connect("invalid_broker")
+        assert result["status"] == "error"
+        assert "不支持" in result["message"]
+
+
+# ==================== NL解析器边界测试 ====================
+
+class TestNlParserEdgeCases:
+    """NL解析器边界情况测试"""
+
+    def test_empty_input(self):
+        """空输入"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("")
+        assert r["buy_conditions"] == []
+        assert r["sell_conditions"] == []
+
+    def test_percent_zhi(self):
+        """中文百分之"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("亏百分之十就卖")
+        assert len(r["sell_conditions"]) == 1
+        assert r["sell_conditions"][0]["right"]["value"] == -10.0
+
+    def test_percent_er_shi(self):
+        """中文百分之二十"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("亏百分之二十就卖")
+        assert r["sell_conditions"][0]["right"]["value"] == -20.0
+
+    def test_multi_stock_two_rules(self):
+        """多股票两条规则"""
+        from utils.nl_parser import parse_nl_multi
+        r = parse_nl_multi("宁德时代RSI低于30买入，比亚迪涨了20%就卖")
+        assert len(r) == 2
+        assert r[0]["stock_code"] == "300750"
+        assert r[1]["stock_code"] == "002594"
+
+    def test_multi_stock_single(self):
+        """单股票"""
+        from utils.nl_parser import parse_nl_multi
+        r = parse_nl_multi("五粮液跌破50块就买")
+        assert len(r) == 1
+        assert r[0]["stock_code"] == "000858"
+
+    def test_context_inherit_all_loose(self):
+        """买卖都是简写，默认RSI"""
+        from utils.nl_parser import parse_nl_strategy
+        r = parse_nl_strategy("跌到底了就买，涨到头了就卖")
+        assert len(r["buy_conditions"]) == 1
+        assert len(r["sell_conditions"]) == 1
+        assert r["buy_conditions"][0]["left"]["indicator"] == "rsi"
+        assert r["sell_conditions"][0]["left"]["indicator"] == "rsi"

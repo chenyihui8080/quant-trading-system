@@ -843,3 +843,137 @@ class TestNLParserUnit:
         from utils.nl_parser import parse_nl_strategy
         r = parse_nl_strategy("跌破20%就卖")
         assert r["source"] == "regex"
+
+
+# ================================================================
+#  分钟数据端点（2 个）
+# ================================================================
+
+class TestMinuteDataEndpoint:
+    """GET /minute-data/{symbol}"""
+
+    def test_minute_data_default(self, client, auth_headers):
+        """默认 5 分钟周期"""
+        resp = client.get("/minute-data/600519", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["symbol"] == "600519"
+        assert "bars" in data
+        assert "count" in data
+
+    def test_minute_data_15min(self, client, auth_headers):
+        """15 分钟周期"""
+        resp = client.get("/minute-data/600519?period=15", headers=auth_headers)
+        assert resp.status_code == 200
+        assert "15" in resp.json()["period"]
+
+    def test_minute_data_invalid_period(self, client, auth_headers):
+        """无效周期回退到默认 5 分钟"""
+        resp = client.get("/minute-data/600519?period=2", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["symbol"] == "600519"
+        assert "bars" in data
+
+
+# ================================================================
+#  实盘交易端点（8 个）
+# ================================================================
+
+class TestBrokerEndpoints:
+    """券商相关端点"""
+
+    def test_broker_status_disconnected(self, client, auth_headers):
+        """未连接状态"""
+        resp = client.get("/broker/status", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["connected"] is False
+
+    def test_broker_connect_invalid(self, client, auth_headers):
+        """连接无效券商返回 400"""
+        resp = client.post("/broker/connect", json={"broker": "invalid"}, headers=auth_headers)
+        assert resp.status_code == 400
+        assert "不支持" in resp.json()["detail"]
+
+    def test_broker_balance_no_connection(self, client, auth_headers):
+        """未连接时查询余额返回 400"""
+        resp = client.get("/broker/balance", headers=auth_headers)
+        assert resp.status_code == 400
+        assert "未连接" in resp.json()["detail"]
+
+    def test_broker_positions_no_connection(self, client, auth_headers):
+        """未连接时查询持仓"""
+        resp = client.get("/broker/positions", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert "error" in data[0]
+
+    def test_broker_buy_no_connection(self, client, auth_headers):
+        """未连接时买入"""
+        resp = client.post("/broker/buy", json={
+            "symbol": "600519", "price": 1800.0, "amount": 100
+        }, headers=auth_headers)
+        assert resp.status_code == 200
+        assert "error" in resp.json()
+
+    def test_broker_sell_no_connection(self, client, auth_headers):
+        """未连接时卖出"""
+        resp = client.post("/broker/sell", json={
+            "symbol": "600519", "price": 1800.0, "amount": 100
+        }, headers=auth_headers)
+        assert resp.status_code == 200
+        assert "error" in resp.json()
+
+    def test_broker_orders_no_connection(self, client, auth_headers):
+        """未连接时查委托"""
+        resp = client.get("/broker/orders", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+
+    def test_broker_disconnect(self, client, auth_headers):
+        """断开连接"""
+        resp = client.post("/broker/disconnect", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+
+# ================================================================
+#  多股票 NL 解析端点（3 个）
+# ================================================================
+
+class TestNLMultiStockEndpoint:
+    """POST /nl/parse 多股票场景"""
+
+    def test_multi_stock_two_rules(self, client, auth_headers):
+        """两条不同股票的规则"""
+        resp = client.post("/nl/parse", json={
+            "text": "茅台亏百分之十就卖 杭州柯林涨到150就卖"
+        }, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["multi"] is True
+        assert len(data["rules"]) == 2
+
+    def test_beginner_language(self, client, auth_headers):
+        """小白语言解析"""
+        resp = client.post("/nl/parse", json={
+            "text": "涨了就买，跌了就卖"
+        }, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        rules = data.get("rules", [data])
+        result = rules[0] if data.get("multi") else data
+        if isinstance(result, dict) and "buy_conditions" in result:
+            assert len(result["buy_conditions"]) >= 1 or len(result.get("sell_conditions", [])) >= 1
+
+    def test_multi_stock_single_stock(self, client, auth_headers):
+        """单只股票不算 multi"""
+        resp = client.post("/nl/parse", json={
+            "text": "茅台跌破20%就卖"
+        }, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["multi"] is False

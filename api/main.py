@@ -303,6 +303,7 @@ class BacktestRequest(BaseModel):
     days: int = 500
     capital: float = 1_000_000
     risk: Optional[dict] = None     # 风控参数覆盖
+    interval: Optional[str] = None  # "5"/"15"/"30"/"60" 分钟级，None=日线
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -355,10 +356,18 @@ def _execute_backtest(req: BacktestRequest):
     strategy_cls = getattr(module, info["class"])
 
     if req.symbol:
-        try:
-            bars = _load_csv_cached(req.symbol)
-        except FileNotFoundError:
-            raise HTTPException(404, f"未找到 {req.symbol} 的数据")
+        # 分钟级回测
+        if req.interval and req.interval in ("5", "15", "30", "60"):
+            from utils.minute_data import fetch_minute_klines, to_vnpy_bars as minute_to_bars
+            minute_bars = fetch_minute_klines(req.symbol, req.interval)
+            if not minute_bars:
+                raise HTTPException(404, f"未获取到 {req.symbol} 的{req.interval}分钟数据")
+            bars = minute_to_bars(req.symbol, minute_bars)
+        else:
+            try:
+                bars = _load_csv_cached(req.symbol)
+            except FileNotFoundError:
+                raise HTTPException(404, f"未找到 {req.symbol} 的数据")
     else:
         bars = generate_random_bars(days=req.days)
 
@@ -1233,6 +1242,14 @@ def api_realtime_kline(symbol: str, period: str = "101", count: int = 250):
     return {"symbol": symbol, "count": len(kline), "kline": kline}
 
 
+@app.get("/minute-data/{symbol}")
+def api_minute_data(symbol: str, period: str = "5", limit: int = 500):
+    """获取分钟K线数据（新浪免费API）"""
+    from utils.minute_data import fetch_minute_klines_with_info
+    info = fetch_minute_klines_with_info(symbol, period, limit)
+    return info
+
+
 # ==================== 因子计算接口 ====================
 
 @app.get("/factors")
@@ -1687,14 +1704,99 @@ class NLCreateStrategyRequest(BaseModel):
     market: str = "a"
 
 
+# ==================== 实盘交易接口 ====================
+
+class BrokerConnectRequest(BaseModel):
+    broker: str               # "yh"/"ht"/"xq"
+    exe_path: Optional[str] = None   # 券商客户端路径
+    cookie: Optional[str] = None      # 雪球cookie
+
+class BrokerOrderRequest(BaseModel):
+    symbol: str               # 股票代码
+    price: float              # 价格
+    amount: int               # 数量
+
+@app.get("/broker/status")
+def api_broker_status():
+    """查询券商连接状态"""
+    from utils.broker import get_status
+    return get_status()
+
+@app.post("/broker/connect")
+def api_broker_connect(req: BrokerConnectRequest):
+    """连接券商客户端"""
+    from utils.broker import connect
+    result = connect(req.broker, exe_path=req.exe_path, cookie=req.cookie)
+    if result.get("status") == "error":
+        raise HTTPException(400, result["message"])
+    return result
+
+@app.post("/broker/disconnect")
+def api_broker_disconnect():
+    """断开券商连接"""
+    from utils.broker import disconnect
+    return disconnect()
+
+@app.get("/broker/balance")
+def api_broker_balance():
+    """查询账户资金"""
+    from utils.broker import get_balance
+    result = get_balance()
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+@app.get("/broker/positions")
+def api_broker_positions():
+    """查询持仓"""
+    from utils.broker import get_positions
+    return get_positions()
+
+@app.get("/broker/orders")
+def api_broker_orders():
+    """查询当日委托"""
+    from utils.broker import get_orders
+    return get_orders()
+
+@app.post("/broker/buy")
+def api_broker_buy(req: BrokerOrderRequest):
+    """买入股票"""
+    from utils.broker import buy
+    result = buy(req.symbol, req.price, req.amount)
+    if result.get("status") == "error":
+        raise HTTPException(400, result.get("message", "下单失败"))
+    return result
+
+@app.post("/broker/sell")
+def api_broker_sell(req: BrokerOrderRequest):
+    """卖出股票"""
+    from utils.broker import sell
+    result = sell(req.symbol, req.price, req.amount)
+    if result.get("status") == "error":
+        raise HTTPException(400, result.get("message", "下单失败"))
+    return result
+
+@app.post("/broker/cancel/{order_id}")
+def api_broker_cancel(order_id: str):
+    """撤销委托"""
+    from utils.broker import cancel_order
+    result = cancel_order(order_id)
+    if result.get("status") == "error":
+        raise HTTPException(400, result.get("message", "撤单失败"))
+    return result
+
+
 @app.post("/nl/parse")
 def api_nl_parse(req: NLStrategyRequest):
-    """自然语言解析为策略条件（不保存）"""
-    from utils.nl_parser import parse_nl_strategy
+    """自然语言解析为策略条件（支持多只股票，不保存）"""
+    from utils.nl_parser import parse_nl_multi
     if not req.text.strip():
         raise HTTPException(400, "请输入策略描述")
-    result = parse_nl_strategy(req.text)
-    return {"status": "ok", **result}
+    results = parse_nl_multi(req.text)
+    # 单条结果保持向后兼容
+    if len(results) == 1:
+        return {"status": "ok", "multi": False, **results[0]}
+    return {"status": "ok", "multi": True, "rules": results}
 
 
 @app.post("/nl/create-strategy")

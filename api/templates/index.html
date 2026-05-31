@@ -350,6 +350,7 @@ body {
   <div class="tab" onclick="switchTab('risk', this)">风控配置</div>
   <div class="tab" onclick="switchTab('quality', this)">数据质量</div>
   <div class="tab" onclick="switchTab('paper', this)">模拟盘</div>
+  <div class="tab" onclick="switchTab('broker', this)">实盘交易</div>
 </div>
 
 <!-- ==================== 回测页 ==================== -->
@@ -384,6 +385,16 @@ body {
         <div class="form-row">
           <label>模拟天数（无真实数据时）</label>
           <input type="number" id="days" value="500">
+        </div>
+        <div class="form-row">
+          <label>数据周期</label>
+          <select id="interval">
+            <option value="">日线（默认）</option>
+            <option value="5">5分钟线</option>
+            <option value="15">15分钟线</option>
+            <option value="30">30分钟线</option>
+            <option value="60">60分钟线</option>
+          </select>
         </div>
         <button class="btn" id="runBtn" onclick="runBacktest()">开始回测</button>
       </div>
@@ -465,16 +476,18 @@ body {
           <b style="color:#58a6ff;font-size:14px">用大白话说出你的策略</b>
           <span style="font-size:11px;color:#484f58">看不懂指标没关系，打字就行</span>
         </div>
-        <textarea id="nlInput" rows="3" placeholder="例如：跌破20%就卖，涨了5%就买&#10;站上20日线买入，跌破10日线卖出&#10;MACD金叉买入，RSI超买卖出"
+        <textarea id="nlInput" rows="3" placeholder="用大白话描述你的策略就行，比如：&#10;涨了就买，跌了就卖&#10;亏了20%就跑，赚够10%就落袋&#10;跌到底了就买，涨到头了就卖"
           style="width:100%;background:#131722;color:#d1d4dc;border:1px solid #30363d;border-radius:6px;padding:10px;font-size:14px;resize:vertical;font-family:inherit"></textarea>
         <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
           <button class="btn" style="background:#2962ff;padding:6px 16px;font-size:13px" onclick="parseNLStrategy()">智能翻译</button>
           <span style="font-size:12px;color:#484f58;margin-left:8px">快捷填入:</span>
-          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('跌破20%就卖，涨了5%就买')">涨跌百分比</button>
-          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('站上20日线就买，跌破10日线就卖')">均线突破</button>
-          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('MACD金叉买入，MACD死叉卖出')">MACD金叉死叉</button>
-          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('RSI超买卖出，RSI超卖买入')">RSI超买超卖</button>
-          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('放量突破10日高点买入，缩量跌破10日低点卖出')">量价突破</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('涨了就买，跌了就卖')">涨买跌卖</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('亏了20%就跑，赚够10%就落袋')">止盈止损</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('跌到底了就买，涨到头了就卖')">抄底逃顶</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('站上3000就买，跌破2800就卖')">整数关口</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('5日均线金叉20日均线买入，死叉卖出')">均线交叉</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('RSI低于30买入，高于70卖出')">RSI高低</button>
+          <button style="background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer" onclick="fillNLExample('MACD金叉买入，MACD死叉卖出')">MACD</button>
         </div>
         <div id="nlResult" style="margin-top:10px;font-size:13px;min-height:20px"></div>
       </div>
@@ -839,6 +852,87 @@ body {
   </div>
 </div>
 
+<!-- ==================== 实盘交易 ==================== -->
+<div class="container tab-content hidden" id="tab-broker">
+  <div class="card">
+    <h2>券商连接</h2>
+    <p style="color:#8b949e;font-size:13px;margin-bottom:16px">接入真实券商账户进行实盘交易。需要对应券商客户端运行中。</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-row">
+        <label>券商类型</label>
+        <select id="brokerType">
+          <option value="yh">银河证券</option>
+          <option value="ht">华泰证券</option>
+          <option value="xq">雪球</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>客户端路径（可选）</label>
+        <input type="text" id="brokerExePath" placeholder="如 C:\银河证券\...">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" style="background:#238636" onclick="brokerConnect()">连接</button>
+      <button class="btn" style="background:#30363d" onclick="brokerDisconnect()">断开</button>
+      <span id="brokerStatus" style="color:#8b949e;font-size:13px;align-self:center">未连接</span>
+    </div>
+  </div>
+
+  <div class="card" id="brokerTrading" style="display:none">
+    <h2>交易操作</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:16px">
+      <div class="form-row">
+        <label>股票代码</label>
+        <input type="text" id="brokerSymbol" placeholder="如 600519">
+      </div>
+      <div class="form-row">
+        <label>价格</label>
+        <input type="number" id="brokerPrice" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-row">
+        <label>数量</label>
+        <input type="number" id="brokerAmount" step="100" value="100" placeholder="100">
+      </div>
+      <div class="form-row">
+        <label>快速填价</label>
+        <button class="btn" style="background:#30363d;font-size:12px" onclick="brokerFillPrice()">获取现价</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" style="background:#3fb950" onclick="brokerBuy()">买入</button>
+        <button class="btn" style="background:#f85149" onclick="brokerSell()">卖出</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <h3 style="color:#58a6ff;font-size:14px;margin-bottom:8px">账户资金</h3>
+        <div id="brokerBalance" style="font-size:13px;color:#8b949e">点击「刷新」查看</div>
+        <button class="btn" style="background:#30363d;font-size:12px;margin-top:6px" onclick="brokerRefreshBalance()">刷新资金</button>
+      </div>
+      <div>
+        <h3 style="color:#58a6ff;font-size:14px;margin-bottom:8px">当前持仓</h3>
+        <div id="brokerPositions" style="font-size:13px;color:#8b949e">点击「刷新」查看</div>
+        <button class="btn" style="background:#30363d;font-size:12px;margin-top:6px" onclick="brokerRefreshPositions()">刷新持仓</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="brokerOrdersCard" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h2>当日委托</h2>
+      <button class="btn" style="background:#30363d;font-size:12px" onclick="brokerRefreshOrders()">刷新</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>编号</th><th>代码</th><th>名称</th><th>方向</th><th>价格</th><th>数量</th><th>已成交</th><th>状态</th><th>操作</th></tr>
+        </thead>
+        <tbody id="brokerOrdersBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -975,6 +1069,9 @@ async function runBacktest() {
   const symbol = document.getElementById('symbolSelect').value || null;
   const capital = parseInt(document.getElementById('capital').value) || 1000000;
   const days = parseInt(document.getElementById('days').value) || 500;
+  const interval = document.getElementById('interval').value || null;
+
+  if (interval && !symbol) { showToast('分钟级回测需要选择股票', 'error'); btn.disabled = false; btn.textContent = '开始回测'; return; }
 
   // 读取本地保存的风控配置
   let risk = null;
@@ -995,7 +1092,7 @@ async function runBacktest() {
   try {
     const res = await authFetch('/backtest-detail', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ strategy: selectedStrategy, symbol, capital, days, risk }),
+      body: JSON.stringify({ strategy: selectedStrategy, symbol, capital, days, risk, interval }),
     });
     const data = await res.json();
     if (res.ok) { renderResult(data); showToast('回测完成', 'success'); }
@@ -2328,37 +2425,91 @@ async function parseNLStrategy() {
     });
     const data = await resp.json();
     if (resp.ok && data.status === 'ok') {
-      const bc = data.buy_conditions || [];
-      const sc = data.sell_conditions || [];
-      if (bc.length === 0 && sc.length === 0) {
-        result.innerHTML = `<span style="color:#f85149">未能识别条件，请换个说法试试</span>
-          <div style="color:#484f58;font-size:12px;margin-top:4px">试试：跌破20%就卖，站上20日线就买，MACD金叉买入</div>`;
-        return;
-      }
-      // 填入条件表单
-      _buyConditions.length = 0;
-      _sellConditions.length = 0;
-      for (const c of bc) _buyConditions.push(c);
-      for (const c of sc) _sellConditions.push(c);
-      renderConditions('buy');
-      renderConditions('sell');
+      const src = data.source === 'llm' ? '<span style="background:#a371f733;color:#a371f7;padding:1px 6px;border-radius:3px;font-size:11px">AI解析</span>' : '<span style="background:#23863633;color:#3fb950;padding:1px 6px;border-radius:3px;font-size:11px">免费解析</span>';
 
-      // 显示翻译结果
-      const src = data.source === 'llm' ? '<span style="background:#a371f733;color:#a371f7;padding:1px 6px;border-radius:3px;font-size:11px;margin-left:6px">AI解析</span>' : '<span style="background:#23863633;color:#3fb950;padding:1px 6px;border-radius:3px;font-size:11px;margin-left:6px">免费解析</span>';
-      let html = `<div style="color:#3fb950;margin-bottom:6px">翻译成功！${src}</div>`;
-      html += `<div style="color:#8b949e;font-size:12px">${data.explanation}</div>`;
-      if (data.unmatched && data.unmatched.length > 0) {
-        html += `<div style="color:#d29922;font-size:12px;margin-top:4px">以下内容未能识别：${data.unmatched.join('、')}，请手动补充或换个说法</div>`;
+      // 多股票模式
+      if (data.multi && data.rules) {
+        let html = `<div style="color:#3fb950;margin-bottom:8px">识别到 ${data.rules.length} 只股票的规则 ${src}</div>`;
+        data.rules.forEach((rule, idx) => {
+          const bc = rule.buy_conditions || [];
+          const sc = rule.sell_conditions || [];
+          const hasConditions = bc.length > 0 || sc.length > 0;
+          const stockLabel = rule.stock_code !== 'unknown' ? `${rule.stock_name}（${rule.stock_code}）` : '未绑定股票';
+          html += `<div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;margin-bottom:6px">`;
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">`;
+          html += `<span style="color:#58a6ff;font-weight:600">${stockLabel}</span>`;
+          if (hasConditions) {
+            html += `<button class="btn" style="background:#238636;padding:3px 10px;font-size:11px" onclick="applyNLRule(${idx})">应用此规则</button>`;
+          }
+          html += `</div>`;
+          if (hasConditions) {
+            html += `<div style="color:#8b949e;font-size:12px">${rule.explanation}</div>`;
+          } else {
+            html += `<div style="color:#f85149;font-size:12px">未能识别条件</div>`;
+          }
+          if (rule.unmatched && rule.unmatched.length > 0) {
+            html += `<div style="color:#d29922;font-size:11px;margin-top:2px">未识别: ${rule.unmatched.join('、')}</div>`;
+          }
+          html += `</div>`;
+        });
+        // 缓存规则供 applyNLRule 使用
+        window._nlRules = data.rules;
+        html += `<div style="color:#484f58;font-size:11px;margin-top:4px">点击「应用此规则」填入下方表单，调整后保存</div>`;
+        result.innerHTML = html;
+        showToast(`识别到 ${data.rules.length} 条规则`, 'success');
+      } else {
+        // 单股票模式（向后兼容）
+        const rule = data;
+        const bc = rule.buy_conditions || [];
+        const sc = rule.sell_conditions || [];
+        if (bc.length === 0 && sc.length === 0) {
+          result.innerHTML = `<span style="color:#f85149">未能识别条件，请换个说法试试</span>
+            <div style="color:#484f58;font-size:12px;margin-top:4px">试试：涨了就买跌了就卖、亏了20%就跑、茅台亏10%就卖</div>`;
+          return;
+        }
+        window._nlRules = [rule];
+        let html = `<div style="color:#3fb950;margin-bottom:6px">翻译成功！${src}</div>`;
+        if (rule.stock_name && rule.stock_name !== 'unknown') {
+          html += `<div style="color:#58a6ff;font-size:13px;margin-bottom:4px">股票: ${rule.stock_name}（${rule.stock_code}）</div>`;
+        }
+        html += `<div style="color:#8b949e;font-size:12px">${rule.explanation}</div>`;
+        if (rule.unmatched && rule.unmatched.length > 0) {
+          html += `<div style="color:#d29922;font-size:12px;margin-top:4px">未识别: ${rule.unmatched.join('、')}</div>`;
+        }
+        html += `<div style="margin-top:6px"><button class="btn" style="background:#238636;padding:4px 12px;font-size:12px" onclick="applyNLRule(0)">应用规则</button>
+          <span style="color:#484f58;font-size:11px;margin-left:8px">填入下方表单后可手动调整</span></div>`;
+        result.innerHTML = html;
+        showToast('策略翻译成功', 'success');
       }
-      html += `<div style="color:#484f58;font-size:11px;margin-top:6px">条件已填入下方表单，可手动调整后点击「保存策略」</div>`;
-      result.innerHTML = html;
-      showToast('策略翻译成功', 'success');
     } else {
       result.innerHTML = `<span style="color:#f85149">${data.detail || '翻译失败'}</span>`;
     }
   } catch(e) {
     result.innerHTML = `<span style="color:#f85149">网络错误: ${e.message}</span>`;
   }
+}
+
+function applyNLRule(idx) {
+  const rules = window._nlRules || [];
+  if (idx >= rules.length) return;
+  const rule = rules[idx];
+  const bc = rule.buy_conditions || [];
+  const sc = rule.sell_conditions || [];
+  _buyConditions.length = 0;
+  _sellConditions.length = 0;
+  for (const c of bc) _buyConditions.push(c);
+  for (const c of sc) _sellConditions.push(c);
+  renderConditions('buy');
+  renderConditions('sell');
+  // 如果有股票代码，自动选中
+  if (rule.stock_code && rule.stock_code !== 'unknown') {
+    const sel = document.getElementById('symbolSelect');
+    if (sel) {
+      const opt = [...sel.options].find(o => o.value === rule.stock_code);
+      if (opt) { sel.value = rule.stock_code; sel.dispatchEvent(new Event('change')); }
+    }
+  }
+  showToast(`已应用 ${rule.stock_name !== 'unknown' ? rule.stock_name : ''} 的规则`, 'success');
 }
 
 // 预设策略模板
@@ -2599,6 +2750,129 @@ async function showQualityDetail(symbol) {
   } catch (e) {
     showToast('加载详情失败：' + e.message, 'error');
   }
+}
+
+// ==================== 实盘交易 ====================
+async function brokerConnect() {
+  const broker = document.getElementById('brokerType').value;
+  const exePath = document.getElementById('brokerExePath').value || null;
+  try {
+    const res = await authFetch('/broker/connect', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ broker, exe_path: exePath }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('brokerStatus').innerHTML = `<span style="color:#3fb950">已连接: ${data.broker}</span>`;
+      document.getElementById('brokerTrading').style.display = '';
+      document.getElementById('brokerOrdersCard').style.display = '';
+      showToast(`已连接 ${data.broker}`, 'success');
+    } else {
+      document.getElementById('brokerStatus').innerHTML = `<span style="color:#f85149">${data.detail || '连接失败'}</span>`;
+    }
+  } catch(e) {
+    document.getElementById('brokerStatus').innerHTML = `<span style="color:#f85149">${e.message}</span>`;
+  }
+}
+
+async function brokerDisconnect() {
+  await authFetch('/broker/disconnect', { method: 'POST' });
+  document.getElementById('brokerStatus').innerHTML = '<span style="color:#8b949e">未连接</span>';
+  document.getElementById('brokerTrading').style.display = 'none';
+  document.getElementById('brokerOrdersCard').style.display = 'none';
+  showToast('已断开券商连接', 'success');
+}
+
+async function brokerRefreshBalance() {
+  try {
+    const res = await authFetch('/broker/balance');
+    const data = await res.json();
+    if (res.ok) {
+      const el = document.getElementById('brokerBalance');
+      el.innerHTML = Object.entries(data).map(([k,v]) => `<div>${k}: <b style="color:#e6edf3">¥${Number(v).toLocaleString()}</b></div>`).join('');
+    }
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function brokerRefreshPositions() {
+  try {
+    const res = await authFetch('/broker/positions');
+    const data = await res.json();
+    const el = document.getElementById('brokerPositions');
+    if (data.length === 0 || data[0].error) {
+      el.innerHTML = data[0]?.error ? `<span style="color:#f85149">${data[0].error}</span>` : '无持仓';
+      return;
+    }
+    el.innerHTML = '<table style="font-size:12px;width:100%"><tr><th>代码</th><th>名称</th><th>数量</th><th>现价</th><th>盈亏</th></tr>' +
+      data.map(p => `<tr><td>${p.股票代码}</td><td>${p.股票名称}</td><td>${p.持仓数量}</td><td>¥${p.当前价}</td><td style="color:${p.盈亏>=0?'#3fb950':'#f85149'}">${p.盈亏}</td></tr>`).join('') + '</table>';
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function brokerRefreshOrders() {
+  try {
+    const res = await authFetch('/broker/orders');
+    const data = await res.json();
+    const body = document.getElementById('brokerOrdersBody');
+    body.innerHTML = data.map(o => `<tr>
+      <td>${o.委托编号||''}</td><td>${o.股票代码||''}</td><td>${o.股票名称||''}</td>
+      <td style="color:${o.方向?.includes('买')?'#3fb950':'#f85149'}">${o.方向||''}</td>
+      <td>${o.价格||''}</td><td>${o.数量||''}</td><td>${o.已成交||0}</td><td>${o.状态||''}</td>
+      <td><button class="btn" style="background:#30363d;font-size:11px;padding:2px 6px" onclick="brokerCancel('${o.委托编号}')">撤单</button></td>
+    </tr>`).join('');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function brokerBuy() {
+  const symbol = document.getElementById('brokerSymbol').value.trim();
+  const price = parseFloat(document.getElementById('brokerPrice').value);
+  const amount = parseInt(document.getElementById('brokerAmount').value);
+  if (!symbol || !price || !amount) { showToast('请填写完整信息', 'error'); return; }
+  if (!confirm(`确认买入 ${symbol} ${amount}股 @ ¥${price}？`)) return;
+  try {
+    const res = await authFetch('/broker/buy', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ symbol, price, amount }),
+    });
+    const data = await res.json();
+    if (res.ok) { showToast(`买入成功: ${data.message}`, 'success'); brokerRefreshOrders(); }
+    else showToast(data.detail || '买入失败', 'error');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function brokerSell() {
+  const symbol = document.getElementById('brokerSymbol').value.trim();
+  const price = parseFloat(document.getElementById('brokerPrice').value);
+  const amount = parseInt(document.getElementById('brokerAmount').value);
+  if (!symbol || !price || !amount) { showToast('请填写完整信息', 'error'); return; }
+  if (!confirm(`确认卖出 ${symbol} ${amount}股 @ ¥${price}？`)) return;
+  try {
+    const res = await authFetch('/broker/sell', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ symbol, price, amount }),
+    });
+    const data = await res.json();
+    if (res.ok) { showToast(`卖出成功: ${data.message}`, 'success'); brokerRefreshOrders(); }
+    else showToast(data.detail || '卖出失败', 'error');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function brokerCancel(orderId) {
+  if (!confirm(`确认撤销委托 ${orderId}？`)) return;
+  try {
+    const res = await authFetch(`/broker/cancel/${orderId}`, { method: 'POST' });
+    if (res.ok) { showToast('撤单成功', 'success'); brokerRefreshOrders(); }
+    else { const d = await res.json(); showToast(d.detail || '撤单失败', 'error'); }
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function brokerFillPrice() {
+  const symbol = document.getElementById('brokerSymbol').value.trim();
+  if (!symbol) { showToast('请先输入股票代码', 'error'); return; }
+  try {
+    const res = await authFetch(`/realtime/${symbol}`);
+    const q = await res.json();
+    if (q.price) document.getElementById('brokerPrice').value = q.price.toFixed(2);
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
 // 启动：检查认证状态

@@ -766,7 +766,7 @@ class TestStrategiesPage:
     def test_quick_example_buttons_visible(self, page):
         """#43-#47 快捷示例按钮全部可见"""
         self._goto_strategies(page)
-        examples = ["涨跌百分比", "均线突破", "MACD金叉死叉", "RSI超买超卖", "量价突破"]
+        examples = ["涨买跌卖", "止盈止损", "抄底逃顶", "整数关口"]
         for name in examples:
             assert page.locator(f"button:text('{name}')").is_visible()
         shot(page, "strat_quick_examples")
@@ -816,11 +816,13 @@ class TestStrategiesPage:
     # ---- NL 翻译 ----
 
     @pytest.mark.parametrize("btn_text, keyword, tag", [
-        ("涨跌百分比", "跌破", "nl_percentage"),
-        ("均线突破", "日线", "nl_ma"),
-        ("MACD金叉死叉", "MACD", "nl_macd"),
-        ("RSI超买超卖", "RSI", "nl_rsi"),
-        ("量价突破", "放量", "nl_volume"),
+        ("涨买跌卖", "买", "nl_percentage"),
+        ("止盈止损", "赚够", "nl_stop"),
+        ("抄底逃顶", "到底", "nl_bottom"),
+        ("整数关口", "3000", "nl_round"),
+        ("均线交叉", "均线", "nl_ma"),
+        ("RSI高低", "RSI", "nl_rsi"),
+        ("MACD", "MACD", "nl_macd"),
     ])
     def test_nl_quick_examples(self, page, btn_text, keyword, tag):
         """#43-#47 快捷示例"""
@@ -1950,7 +1952,7 @@ class TestNLToBacktestCrossPage:
     """NL 翻译策略 → 保存 → 切到回测页 → 用模拟数据回测该策略"""
 
     def test_nl_save_then_backtest_with_simulated(self, page):
-        """完整链路：先选策略 → NL 翻译 → 保存策略 → 切回测 → 运行"""
+        """完整链路：先选策略 → NL 翻译 → 应用规则 → 保存策略 → 切回测 → 运行"""
         page.locator(".strategy-item").first.click()
         page.wait_for_timeout(200)
         shot(page, "cross_select_strategy")
@@ -1961,6 +1963,10 @@ class TestNLToBacktestCrossPage:
         result = page.locator("#nlResult").inner_text()
         assert "成功" in result
         shot(page, "cross_nl_translated")
+
+        # 点击「应用规则」将条件填入表单
+        page.click("button:text('应用规则')")
+        page.wait_for_timeout(300)
 
         page.fill("#strategyName", "跨页测试策略")
         page.fill("#strategySymbol", "600519")
@@ -2552,3 +2558,121 @@ class TestExportReportContent:
         shot(page, "export_content")
         assert "总收益" in content or "夏普比率" in content or "收益" in content
         os.unlink(path)
+
+
+# ======================================================================
+#  分钟级数据回测（3 个测试）
+# ======================================================================
+
+class TestMinuteDataBacktest:
+    """回测页数据周期下拉框"""
+
+    def test_interval_dropdown_visible(self, page):
+        """回测页有数据周期下拉框"""
+        goto_tab(page, "回测")
+        dropdown = page.locator("#interval")
+        assert dropdown.is_visible()
+        shot(page, "interval_dropdown")
+
+    def test_interval_options(self, page):
+        """数据周期下拉框有 5 个选项"""
+        goto_tab(page, "回测")
+        options = page.locator("#interval option")
+        assert options.count() >= 5
+        shot(page, "interval_options")
+
+    def test_interval_select_5min(self, page):
+        """选择 5 分钟周期"""
+        goto_tab(page, "回测")
+        page.select_option("#interval", value="5")
+        val = page.evaluate("document.getElementById('interval').value")
+        assert val == "5"
+        shot(page, "interval_5min")
+
+
+# ======================================================================
+#  实盘交易标签页（6 个测试）
+# ======================================================================
+
+class TestBrokerTab:
+    """实盘交易标签页"""
+
+    def test_broker_tab_visible(self, page):
+        """实盘交易标签页可见"""
+        tab = page.locator(".tab:text('实盘交易')")
+        assert tab.is_visible()
+        shot(page, "broker_tab_visible")
+
+    def test_switch_to_broker_tab(self, page):
+        """切换到实盘交易标签页"""
+        goto_tab(page, "实盘交易")
+        content = page.locator("#tab-broker")
+        assert content.is_visible()
+        shot(page, "broker_tab_content")
+
+    def test_broker_select_exists(self, page):
+        """券商选择下拉框存在"""
+        goto_tab(page, "实盘交易")
+        select = page.locator("#brokerType")
+        assert select.is_visible()
+        shot(page, "broker_select")
+
+    def test_connect_button_exists(self, page):
+        """连接按钮存在"""
+        goto_tab(page, "实盘交易")
+        btn = page.locator("button:text('连接')")
+        assert btn.is_visible()
+        shot(page, "broker_connect_btn")
+
+    def test_buy_sell_form_exists(self, page):
+        """买卖表单存在于 DOM（连接后才显示）"""
+        goto_tab(page, "实盘交易")
+        assert page.locator("#brokerSymbol").count() == 1
+        assert page.locator("#brokerPrice").count() == 1
+        assert page.locator("#brokerAmount").count() == 1
+        shot(page, "broker_buysell_form")
+
+    def test_broker_status_initial(self, page):
+        """初始状态显示未连接"""
+        goto_tab(page, "实盘交易")
+        page.wait_for_timeout(500)
+        status_text = page.locator("#brokerStatus").inner_text()
+        assert "未连接" in status_text or "连接" in status_text
+        shot(page, "broker_status_initial")
+
+
+# ======================================================================
+#  多股票 NL 解析 UI（3 个测试）
+# ======================================================================
+
+class TestMultiStockNL:
+    """多股票自然语言解析 UI"""
+
+    def test_multi_stock_cards(self, page):
+        """多股票解析显示多个规则卡片"""
+        goto_tab(page, "我的策略")
+        nl_translate(page, "茅台亏百分之十就卖 杭州柯林涨到150就卖")
+        # 应该出现多个规则卡片或 applyNLRule 按钮
+        cards = page.locator(".nl-rule-card, .applyNLRule, button:text('应用')")
+        page.wait_for_timeout(500)
+        shot(page, "multi_stock_cards")
+        # 至少应该有解析结果
+        result = page.locator("#nlResult")
+        assert result.is_visible()
+
+    def test_beginner_nl_examples(self, page):
+        """小白语言 NL 示例按钮存在"""
+        goto_tab(page, "我的策略")
+        examples = page.locator("button:text('涨买跌卖'), button:text('止盈止损')")
+        page.wait_for_timeout(300)
+        shot(page, "nl_examples")
+        assert examples.count() >= 1
+
+    def test_nl_explanation_displayed(self, page):
+        """NL 解析后显示策略说明"""
+        goto_tab(page, "我的策略")
+        nl_translate(page, "涨了5%就买，跌了3%就卖")
+        explanation = page.locator("#nlExplanation, #nlResult")
+        page.wait_for_timeout(500)
+        shot(page, "nl_explanation")
+        assert explanation.is_visible()

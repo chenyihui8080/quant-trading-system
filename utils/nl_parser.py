@@ -77,6 +77,10 @@ def _preprocess(text: str) -> str:
     text = text.replace('，', ',').replace('。', '.').replace('；', ';')
     text = text.replace('！', '!').replace('？', '?')
     text = text.replace('％', '%').replace('（', '(').replace('）', ')')
+    # "百分之N" → "N%"（支持阿拉伯数字和中文数字）
+    text = re.sub(r'百分之\s*(\d+(?:\.\d+)?)', lambda m: m.group(1) + '%', text)
+    text = re.sub(r'百分之\s*([零一二两三四五六七八九十百]+)',
+                  lambda m: str(int(_cn_to_num(m.group(1)) or 10)) + '%', text)
     # 统一空格
     text = re.sub(r'\s+', ' ', text)
     return text
@@ -257,6 +261,16 @@ def _try_patterns(text: str) -> list:
         return [_cond(_ind("close"), ">", _ind("boll", {"period": 20, "std": 2, "field": "upper"}))]
     if re.search(r'跌破\s*布林(?:带)?下轨', text):
         return [_cond(_ind("close"), "<", _ind("boll", {"period": 20, "std": 2, "field": "lower"}))]
+    if re.search(r'(?:突破|站上|高于|超过)\s*(?:布林(?:带)?|中)轨', text):
+        if re.search(r'上轨', text):
+            return [_cond(_ind("close"), ">", _ind("boll", {"period": 20, "std": 2, "field": "upper"}))]
+        if re.search(r'中轨', text):
+            return [_cond(_ind("close"), ">", _ind("boll", {"period": 20, "std": 2, "field": "middle"}))]
+    if re.search(r'(?:跌破|低于|下穿)\s*(?:布林(?:带)?|中)轨', text):
+        if re.search(r'下轨', text):
+            return [_cond(_ind("close"), "<", _ind("boll", {"period": 20, "std": 2, "field": "lower"}))]
+        if re.search(r'中轨', text):
+            return [_cond(_ind("close"), "<", _ind("boll", {"period": 20, "std": 2, "field": "middle"}))]
 
     # ========== 绝对价格类（放最后，避免和百分比/均线冲突） ==========
     # "涨到X块"
@@ -276,6 +290,102 @@ def _try_patterns(text: str) -> list:
     m = re.search(r'(?:价格?在|低于)\s*(\d+(?:\.\d+)?)\s*(?:块|元|以下)', text)
     if m:
         return [_cond(_ind("close"), "<=", _fixed(float(m.group(1))))]
+
+    # ========== 简写模式（供上下文继承使用） ==========
+    # 纯"死叉"/"金叉" —— 不含具体指标，由外层上下文继承补全
+    if re.search(r'^死叉$', text):
+        return [{"_loose": "cross_below"}]
+    if re.search(r'^金叉$', text):
+        return [{"_loose": "cross_above"}]
+
+    # "KDJ死叉"/"MACD死叉"/"KDJ金叉"/"MACD金叉"
+    if re.search(r'KDJ\s*死叉', text, re.IGNORECASE):
+        return [_cond(_ind("kdj", {"field": "k"}), "cross_below", _ind("kdj", {"field": "d"}))]
+    if re.search(r'KDJ\s*金叉', text, re.IGNORECASE):
+        return [_cond(_ind("kdj", {"field": "k"}), "cross_above", _ind("kdj", {"field": "d"}))]
+
+    # "超买"/"超卖" 简写（不含 RSI/KDJ 前缀）
+    if re.search(r'超买', text) and not re.search(r'RSI|KDJ', text, re.IGNORECASE):
+        return [_cond(_ind("rsi", {"period": 14}), ">", _fixed(70))]
+    if re.search(r'超卖', text) and not re.search(r'RSI|KDJ', text, re.IGNORECASE):
+        return [_cond(_ind("rsi", {"period": 14}), "<", _fixed(30))]
+
+    # "高于N" / "低于N" 简写 —— 数值型阈值（供 RSI/KDJ 上下文继承）
+    m = re.match(r'^高于\s*(\d+(?:\.\d+)?)$', text)
+    if m:
+        return [{"_loose": "above", "value": float(m.group(1))}]
+    m = re.match(r'^低于\s*(\d+(?:\.\d+)?)$', text)
+    if m:
+        return [{"_loose": "below", "value": float(m.group(1))}]
+
+    # ========== 散户口语化模式 ==========
+
+    # "涨到头了" / "涨到顶了" / "见顶了"
+    if re.search(r'涨到头|涨到顶|见顶|到头了|到顶了', text):
+        return [{"_loose": "above", "value": 80}]  # 继承RSI/KDJ超买
+
+    # "跌到底了" / "见底了" / "到底了"
+    if re.search(r'跌到底|见底|到底了', text):
+        return [{"_loose": "below", "value": 20}]  # 继承RSI/KDJ超卖
+
+    # "涨疯了" / "暴涨" / "大涨" — 趋势过热信号
+    if re.search(r'涨疯|暴涨|大涨|疯涨', text):
+        return [{"_loose": "above", "value": 80}]
+
+    # "跌麻了" / "暴跌" / "大跌" / "崩了" — 趋势过冷信号
+    if re.search(r'跌麻|暴跌|大跌|崩了|狂跌', text):
+        return [{"_loose": "below", "value": 20}]
+
+    # "涨了" / "涨了点" — 裸涨（无百分比），默认1%
+    m = re.search(r'^涨[了过]?点?$', text)
+    if m:
+        return [_cond(_ind("return", {"period": 1}), ">", _fixed(1.0))]
+
+    # "跌了" / "跌了点" — 裸跌（无百分比），默认-1%
+    m = re.search(r'^跌[了过]?点?$', text)
+    if m:
+        return [_cond(_ind("return", {"period": 1}), "<", _fixed(-1.0))]
+
+    # "回本了" / "回本" — 盈利刚好回到0%
+    if re.search(r'回本', text):
+        return [_cond(_ind("return", {"period": 1}), ">=", _fixed(0))]
+
+    # "少亏点" / "少亏一些" — 盈亏平衡但亏损较小
+    if re.search(r'少亏', text):
+        return [_cond(_ind("return", {"period": 1}), "<", _fixed(-3))]
+
+    # "赚够N" / "赚够了" — 盈利达标
+    m = re.search(r'赚够\s*(\d+(?:\.\d+)?)\s*[%％]?', text)
+    if m:
+        return [_cond(_ind("return", {"period": 1}), ">", _fixed(float(m.group(1))))]
+    # "赚够了" / "赚够" — 没说具体数字，默认10%
+    if re.search(r'赚够', text):
+        return [_cond(_ind("return", {"period": 1}), ">", _fixed(10))]
+
+    # "亏大了" / "亏麻了" — 大额亏损
+    if re.search(r'亏大了|亏麻了|亏惨了', text):
+        return [_cond(_ind("return", {"period": 1}), "<", _fixed(-20))]
+
+    # "割肉" — 止损（默认-5%）
+    if re.search(r'割肉', text):
+        return [_cond(_ind("return", {"period": 1}), "<", _fixed(-5))]
+
+    # "反弹了" / "反弹"
+    if re.search(r'反弹', text):
+        return [_cond(_ind("return", {"period": 3}), ">", _fixed(3))]
+
+    # "冲高回落" / "冲高了"
+    if re.search(r'冲高回落|冲高', text):
+        return [_cond(_ind("return", {"period": 1}), ">", _fixed(5))]
+
+    # "站上XXXX" / "跌破XXXX"（不带"块/元"，纯数字 = 整数关口）
+    m = re.search(r'(?:站上|突破|涨到|涨过)\s*(\d{3,})\b', text)
+    if m and '%' not in text and '日' not in text:
+        return [_cond(_ind("close"), ">", _fixed(float(m.group(1))))]
+
+    m = re.search(r'(?:跌破|低于|跌到)\s*(\d{3,})\b', text)
+    if m and '%' not in text and '日' not in text:
+        return [_cond(_ind("close"), "<", _fixed(float(m.group(1))))]
 
     return []
 
@@ -372,7 +482,7 @@ def _split_and_classify(text: str) -> tuple[list[str], list[str]]:
         clean_seg = re.sub(r'(如果|若|当|只要)', '', seg)
         # 一次性移除所有尾部动词（长词优先，避免"卖出"→"卖"导致误删）
         clean_seg = re.sub(
-            r'(卖出|清仓|止损|止盈|减仓|出货|落袋|买进|建仓|抄底|买入|卖掉|卖|买|就|则|那么|那就|的话)$',
+            r'(卖出|清仓|止损|止盈|减仓|出货|落袋|买进|建仓|抄底|买入|卖掉|割肉|回本|跑路|跑|卖|买|就|则|那么|那就|的话)$',
             '', clean_seg)
         clean_seg = clean_seg.strip()
 
@@ -382,9 +492,14 @@ def _split_and_classify(text: str) -> tuple[list[str], list[str]]:
             sell_clauses.append(clean_seg)
         else:
             # 没有明确买卖关键词，尝试从上下文推断
-            if re.search(r'止损|亏|跌|下[跌穿]|低于|超卖|死叉|缩量', seg):
+            if re.search(r'止损|亏|跌|下[跌穿]|低于|超卖|死叉|缩量|割肉|少亏|跌麻|暴跌|大跌|崩了|到底|见底', seg):
                 sell_clauses.append(clean_seg)
-            elif re.search(r'涨|突破|站上|高于|金叉|超买|放量|上穿', seg):
+            elif re.search(r'涨|突破|站上|高于|金叉|超买|放量|上穿|反弹|涨疯|暴涨|大涨|冲高|到头|见顶', seg):
+                buy_clauses.append(clean_seg)
+            # 使用预分类结果兜底（当清理后的文本无法推断时）
+            elif cls == "sell":
+                sell_clauses.append(clean_seg)
+            elif cls == "buy":
                 buy_clauses.append(clean_seg)
             else:
                 buy_clauses.append(clean_seg)
@@ -545,6 +660,277 @@ def _validate_result(result: dict) -> bool:
 
 # ==================== 顶层入口 ====================
 
+def _inherit_context(buy_conds: list, sell_conds: list) -> list:
+    """上下文继承：将简写条件（如"死叉"、"涨到头了"）从另一侧继承指标参数。
+
+    例如买入条件是 5日均线 cross_above 20日均线，
+    卖出条件 "死叉" → 5日均线 cross_below 20日均线。
+
+    当买卖双方都是简写时，默认使用RSI。
+    """
+    # 从所有明确条件中提取可用于继承的上下文
+    ctx_cross = None  # (left, right) - 均线交叉对
+    ctx_indicator = None  # 指标名（rsi/kdj）
+
+    all_conds = [c for c in buy_conds + sell_conds if isinstance(c, dict) and "_loose" not in c]
+    for c in all_conds:
+        op = c.get("op", "")
+        left = c.get("left", {})
+        if op in ("cross_above", "cross_below"):
+            ctx_cross = (c.get("left"), c.get("right"))
+        if left.get("type") == "indicator":
+            ind = left.get("indicator", "")
+            if ind in ("rsi", "kdj"):
+                ctx_indicator = ind
+
+    # 如果全是简写，没有明确指标，默认用RSI
+    all_items = buy_conds + sell_conds
+    if not ctx_indicator:
+        all_loose = all(isinstance(c, dict) and "_loose" in c for c in all_items if isinstance(c, dict))
+        if all_loose and all_items:
+            ctx_indicator = "rsi"
+
+    def _resolve(conds):
+        resolved = []
+        for c in conds:
+            if not isinstance(c, dict) or "_loose" not in c:
+                resolved.append(c)
+                continue
+            loose = c["_loose"]
+            val = c.get("value", 50)
+            if loose in ("cross_above", "cross_below") and ctx_cross:
+                left, right = ctx_cross
+                resolved.append(_cond(left, loose, right))
+            elif loose == "above":
+                if ctx_indicator == "kdj":
+                    resolved.append(_cond(_ind("kdj", {"field": "k"}), ">", _fixed(val)))
+                else:
+                    resolved.append(_cond(_ind("rsi", {"period": 14}), ">", _fixed(val)))
+            elif loose == "below":
+                if ctx_indicator == "kdj":
+                    resolved.append(_cond(_ind("kdj", {"field": "k"}), "<", _fixed(val)))
+                else:
+                    resolved.append(_cond(_ind("rsi", {"period": 14}), "<", _fixed(val)))
+            else:
+                resolved.append(c)
+        return resolved
+
+    return _resolve(buy_conds), _resolve(sell_conds)
+
+
+# ==================== 多股票识别 ====================
+
+def _build_stock_pattern() -> tuple[re.Pattern, dict]:
+    """从内置股票名称构建正则，支持全名+简称（如"茅台"→"贵州茅台"）。
+
+    返回 (pattern, {匹配文本: code})
+    """
+    try:
+        from utils.stock_search import _STOCK_NAMES
+    except ImportError:
+        _STOCK_NAMES = {}
+
+    # {匹配文本: 股票代码} 包含全名和简称
+    match_to_code: dict[str, str] = {}
+    all_full_names: list[str] = []
+
+    for code, name in _STOCK_NAMES.items():
+        match_to_code[name] = code
+        all_full_names.append(name)
+
+    # 生成简称：去掉常见前缀（省份/中国），取剩余部分作为简称
+    _PREFIXES = ['中国', '贵州', '上海', '深圳', '北京', '杭州', '苏州',
+                 '南京', '广州', '重庆', '天津', '四川', '山东', '浙江',
+                 '江苏', '广东', '湖南', '湖北', '河南', '河北', '安徽',
+                 '福建', '云南', '陕西', '甘肃', '吉林', '辽宁', '黑龙江']
+
+    for code, name in _STOCK_NAMES.items():
+        short = name
+        for prefix in _PREFIXES:
+            if short.startswith(prefix) and len(short) > len(prefix):
+                short = short[len(prefix):]
+                break
+        # 简称至少2字，且不能和已有的全名冲突
+        if len(short) >= 2 and short not in match_to_code:
+            # 检查是否与其他全名有歧义
+            ambiguous = False
+            for other_name in all_full_names:
+                if other_name != name and short in other_name:
+                    ambiguous = True
+                    break
+            if not ambiguous:
+                match_to_code[short] = code
+
+    if not match_to_code:
+        return None, {}
+
+    # 按长度降序排列，优先匹配长名称
+    names = sorted(match_to_code.keys(), key=len, reverse=True)
+    pattern = re.compile('|'.join(re.escape(n) for n in names))
+    return pattern, match_to_code
+
+
+_STOCK_PATTERN, _NAME_TO_CODE = _build_stock_pattern()
+
+
+def _try_sina_search(name: str) -> str | None:
+    """通过新浪搜索API查找股票代码（离线缓存）"""
+    try:
+        from utils.stock_search import search_stock_sina
+        results = search_stock_sina(name, limit=3)
+        for r in results:
+            if r["name"] == name or name in r["name"]:
+                return r["code"]
+    except Exception:
+        pass
+    return None
+
+
+def _extract_stock_segments(text: str) -> list[tuple[str, str]]:
+    """从文本中提取 (股票名, 对应规则) 片段列表。
+
+    输入: "茅台亏百分之十就卖 杭州柯林涨到150就卖"
+    输出: [("贵州茅台", "亏百分之十就卖"), ("杭州柯林", "涨到150就卖")]
+
+    没有识别到股票名时返回 [("unknown", text)]。
+    """
+    global _STOCK_PATTERN, _NAME_TO_CODE
+
+    # 懒加载：首次调用时构建映射
+    if _STOCK_PATTERN is None:
+        _STOCK_PATTERN, _NAME_TO_CODE = _build_stock_pattern()
+
+    if not _STOCK_PATTERN:
+        return [("unknown", text)]
+
+    matches = list(_STOCK_PATTERN.finditer(text))
+    if not matches:
+        return _fallback_stock_search(text)
+
+    # 先用内置匹配提取已知股票
+    raw_segments = []
+    for i, m in enumerate(matches):
+        stock_name = m.group()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        rule_text = text[start:end].strip()
+        if rule_text:
+            raw_segments.append((stock_name, rule_text))
+
+    # 对每段 rule_text，检查是否还包含未识别的股票名
+    final_segments = []
+    for stock_name, rule_text in raw_segments:
+        sub_matches = list(_STOCK_PATTERN.finditer(rule_text))
+        if sub_matches:
+            # rule_text 中还有其他已知股票，继续拆分
+            pos = 0
+            for sm in sub_matches:
+                sub_rule = rule_text[pos:sm.start()].strip()
+                if sub_rule:
+                    final_segments.append((stock_name, sub_rule))
+                stock_name = sm.group()
+                pos = sm.end()
+            remaining = rule_text[pos:].strip()
+            if remaining:
+                final_segments.append((stock_name, remaining))
+        else:
+            # 没有已知股票，尝试新浪搜索
+            fb = _fallback_stock_search(rule_text)
+            if fb and fb[0][0] != "unknown":
+                # fallback 找到了新股票，第一段归当前股票，其余归新股票
+                # 找到第一个新股票名在 rule_text 中的位置
+                first_fb_name = fb[0][0]
+                idx = rule_text.find(first_fb_name)
+                if idx > 0:
+                    my_rule = rule_text[:idx].strip()
+                    if my_rule:
+                        final_segments.append((stock_name, my_rule))
+                final_segments.extend(fb)
+            else:
+                final_segments.append((stock_name, rule_text))
+
+    return final_segments if final_segments else [("unknown", text)]
+
+
+def _fallback_stock_search(text: str) -> list[tuple[str, str]]:
+    """内置映射未命中时，尝试从文本中提取可能的股票名并用新浪API查找。"""
+    parts = re.split(r'\s+|[,，]', text)
+    parts = [p for p in parts if p]
+
+    global _NAME_TO_CODE
+    segments = []
+    used_names = set()
+
+    for part in parts:
+        # 提取开头的中文字符（最长6个），从长到短尝试匹配
+        m = re.match(r'^([\u4e00-\u9fff]{2,6})', part)
+        if not m:
+            continue
+        full_candidate = m.group(1)
+
+        code = None
+        candidate = None
+        # 从长到短尝试，找到第一个匹配的股票名
+        for length in range(len(full_candidate), 1, -1):
+            test_name = full_candidate[:length]
+            if test_name in used_names:
+                continue
+            found = _try_sina_search(test_name)
+            if found:
+                code = found
+                candidate = test_name
+                break
+
+        if code and candidate:
+            _NAME_TO_CODE[candidate] = code
+            rule_text = part[len(candidate):].strip()
+            if rule_text:
+                segments.append((candidate, rule_text))
+                used_names.add(candidate)
+
+    return segments if segments else [("unknown", text)]
+
+
+def parse_nl_multi(text: str) -> list[dict]:
+    """解析可能包含多只股票的自然语言策略。
+
+    输入: "茅台亏百分之十就卖 杭州柯林涨到150就卖"
+    输出: [
+        {"stock_name": "贵州茅台", "stock_code": "600519", "buy_conditions": [], "sell_conditions": [...], ...},
+        {"stock_name": "杭州柯林", "stock_code": "...", ...},
+    ]
+
+    没有识别到股票名时，返回单条 unknown 规则。
+    """
+    text = _preprocess(text)
+    segments = _extract_stock_segments(text)
+
+    results = []
+    for stock_name, rule_text in segments:
+        # 查找股票代码
+        stock_code = "unknown"
+        if stock_name != "unknown" and _NAME_TO_CODE:
+            stock_code = _NAME_TO_CODE.get(stock_name, "unknown")
+
+        # 如果是 unknown 股票且规则文本很短，可能是股票名本身（如"茅台"后面没有规则）
+        if not rule_text:
+            continue
+
+        parsed = parse_nl_strategy(rule_text)
+        parsed["stock_name"] = stock_name
+        parsed["stock_code"] = stock_code
+        results.append(parsed)
+
+    # 如果没有识别出任何股票，返回一条 unknown
+    if not results:
+        parsed = parse_nl_strategy(text)
+        parsed["stock_name"] = "unknown"
+        parsed["stock_code"] = "unknown"
+        results.append(parsed)
+
+    return results
+
+
 def parse_nl_strategy(text: str) -> dict:
     """解析自然语言策略描述
 
@@ -570,8 +956,6 @@ def parse_nl_strategy(text: str) -> dict:
         conds = _parse_clause(clause)
         if conds:
             buy_conds.extend(conds)
-            for c in conds:
-                explanations.append(f"买入: {_explain_condition(c)}")
         else:
             unmatched.append(clause)
 
@@ -580,25 +964,51 @@ def parse_nl_strategy(text: str) -> dict:
         conds = _parse_clause(clause)
         if conds:
             sell_conds.extend(conds)
-            for c in conds:
-                explanations.append(f"卖出: {_explain_condition(c)}")
         else:
             unmatched.append(clause)
 
+    # 上下文继承：简写条件从另一侧继承指标参数
+    buy_conds, sell_conds = _inherit_context(buy_conds, sell_conds)
+
+    # 过滤掉无法解析的 _loose 条件，加入 unmatched
+    final_buy = []
+    for c in buy_conds:
+        if isinstance(c, dict) and "_loose" in c:
+            unmatched.append(c["_loose"])
+        else:
+            final_buy.append(c)
+            explanations.append(f"买入: {_explain_condition(c)}")
+    buy_conds = final_buy
+
+    final_sell = []
+    for c in sell_conds:
+        if isinstance(c, dict) and "_loose" in c:
+            unmatched.append(c["_loose"])
+        else:
+            final_sell.append(c)
+            explanations.append(f"卖出: {_explain_condition(c)}")
+    sell_conds = final_sell
+
     source = "regex"
 
-    # 正则解析失败且有LLM配置时，尝试LLM
-    if not buy_conds and not sell_conds:
+    # 有未匹配片段时，尝试 LLM 补全
+    if unmatched:
         llm_result = _llm_parse(text)
         if llm_result:
-            buy_conds = llm_result.get("buy_conditions", [])
-            sell_conds = llm_result.get("sell_conditions", [])
+            llm_buy = llm_result.get("buy_conditions", [])
+            llm_sell = llm_result.get("sell_conditions", [])
+            # 合并 LLM 结果到正则结果
+            if not buy_conds and llm_buy:
+                buy_conds = llm_buy
+                for c in buy_conds:
+                    explanations.append(f"买入: {_explain_condition(c)}")
+            if llm_sell:
+                for c in llm_sell:
+                    if c not in sell_conds:
+                        sell_conds.append(c)
+                        explanations.append(f"卖出: {_explain_condition(c)}")
             unmatched = []
             source = "llm"
-            for c in buy_conds:
-                explanations.append(f"买入: {_explain_condition(c)}")
-            for c in sell_conds:
-                explanations.append(f"卖出: {_explain_condition(c)}")
 
     return {
         "buy_conditions": buy_conds,
