@@ -1,6 +1,6 @@
 """用户认证：JWT + bcrypt"""
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
@@ -30,8 +30,8 @@ def create_token(username: str, role: str = "user") -> str:
     payload = {
         "sub": username,
         "role": role,
-        "exp": datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
-        "iat": datetime.utcnow(),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
+        "iat": datetime.now(timezone.utc),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
