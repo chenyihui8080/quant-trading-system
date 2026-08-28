@@ -12,7 +12,35 @@ venv/
 .venv/
 env/
 
-# 数据库和日志（本地数据不提交）
+# ==================== 🛡️ 绝对数据安全防线 ====================
+
+# 1. 用户私密持仓、交易策略资产与凭证密钥
+data/*auth*.json
+data/*portfolio*.json
+data/user_*.json
+data/strategy_versions.json
+simnow/config.json
+*.key
+*.pem
+*.token
+*.cert
+
+# 2. 本地行情数据与 CSV 缓存文件（严禁上传）
+data/*.csv
+*.csv
+
+# 3. 专属交易规则、商业机密与 PRD 文档
+*.docx
+*.xlsx
+*.xls
+*.pdf
+
+# 4. 本地数据库与快照
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
 data/*.db
 data/*.db-wal
 data/*.db-shm
@@ -22,10 +50,11 @@ review_workbench/data/*.db-shm
 logs/
 *.log
 
-
-# 环境变量（含密钥）
+# 5. 环境变量与密钥配置
 .env
-.env.local
+.env.*
+!.env.example
+
 
 # IDE
 .vscode/
