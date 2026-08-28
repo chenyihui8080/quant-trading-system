@@ -48,5 +48,19 @@ node_modules/
 screenshots/
 test-reports/
 
+# 模型与训练工作区（大文件及权重严格排除）
+train_workspace/
+models/
+checkpoints/
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.gguf
+*.h5
+*.pkl
+
 # 量化系统
 old/
+
