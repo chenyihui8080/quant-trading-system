@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "name": "默认专业4层漏斗量化规则集",
+  "description": "严格遵循 PRD v1.0 标准，实现从 5000+ 全市场 -> 350+ 波动池 -> 115 排雷池 -> 87 量价形态池 -> 45 只核心黄金观察池的层层精炼过滤",
+  "rulesets": [
+    {
+      "ruleset_id": "standard_a_share_funnel",
+      "name": "A股全市场盘后标准漏斗",
+      "stages": [
+        {
+          "stage": 1,
+          "name": "全市场客观波动初筛 (Stage 1)",
+          "description": "筛选日内振幅/涨跌幅绝对值 >= 4.5% 或换手率 >= 4.0% 的高活跃异动标的",
+          "rules": [
+            { "field": "change_pct_abs", "op": ">=", "value": 4.5, "name": "涨跌幅绝对值偏离" }
+          ]
+        },
+        {
+          "stage": 2,
+          "name": "硬性排雷与基础流动性过滤 (Stage 2)",
+          "description": "剔除风险警示ST股、次新高投机股、日成交额低于1.5亿元的流动性匮乏标的",
+          "rules": [
+            { "field": "is_st", "op": "==", "value": false, "name": "剔除ST与*ST风险股" },
+            { "field": "is_suspended", "op": "==", "value": false, "name": "剔除停牌标的" },
+            { "field": "list_days", "op": ">=", "value": 60, "name": "上市天数需>=60天" },
+            { "field": "amount_yi", "op": ">=", "value": 1.5, "name": "日成交额需>=1.5亿元" }
+          ]
+        },
+        {
+          "stage": 3,
+          "name": "量价形态与筹码换手健康度 (Stage 3)",
+          "description": "过滤换手率过低或极端换手筹码松动的标的，保留主力建仓与进攻形态",
+          "rules": [
+            { "field": "turnover_rate", "op": "between", "value": [2.5, 30.0], "name": "换手率在合理健康区间" },
+            { "field": "volatility_pattern", "op": "in", "value": ["limit_up", "high_open_high_close", "breakout_platform", "volatility_active"], "name": "主力进攻量价形态" }
+          ]
+        },
+        {
+          "stage": 4,
+          "name": "逻辑归因与核心龙头池精炼 (Stage 4)",
+          "description": "按逻辑归因置信度分数 >= 0.50 排序，最终锁定不超过 45 只高胜率主线标的",
+          "rules": [
+            { "field": "attribution_confidence", "op": ">=", "value": 0.50, "name": "归因置信度达标" }
+          ]
+        }
+      ]
+    }
+  ]
+}

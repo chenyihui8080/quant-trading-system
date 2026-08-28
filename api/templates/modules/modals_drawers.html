@@ -1,0 +1,959 @@
+<!-- ==================== 股票账户持仓直连与导入中心弹窗 ==================== -->
+<div id="uploadOcrModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-solid-card" style="width:92%;max-width:680px;padding:26px;position:relative">
+
+    
+    <!-- 弹窗顶栏 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--sys-border);padding-bottom:14px;margin-bottom:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.2));border:1px solid rgba(59,130,246,0.3);display:flex;align-items:center;justify-content:center;color:var(--sys-accent)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        </div>
+        <div>
+          <h3 style="margin:0;color:var(--sys-text-title);font-size:16px;font-weight:700">股票账户持仓多源直连与智能同步</h3>
+          <p style="margin:2px 0 0 0;font-size:11px;color:var(--sys-text-sub)">纯只读数据解析 · 零交易风险 · 支持全网券商持仓一键秒级导入</p>
+        </div>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);cursor:pointer;font-size:18px;width:32px;height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:background 0.15s" onmouseover="this.style.background='var(--sys-bg-nav)'" onmouseout="this.style.background='none'" onclick="closeUploadModal()">✕</button>
+    </div>
+
+    <!-- 4 种导入方式 Tab 切换器 (分段式胶囊) -->
+    <div style="display:grid;grid-template-columns:repeat(4, 1fr);background:var(--sys-bg-card-inner);padding:4px;border-radius:8px;border:1px solid var(--sys-border);gap:4px;margin-bottom:18px">
+      <button id="importTabText" class="btn" style="background:var(--sys-accent);color:#fff;font-size:12px;font-weight:600;padding:8px 6px;border-radius:6px;box-shadow:0 2px 8px rgba(59,130,246,0.3);display:flex;align-items:center;justify-content:center;gap:4px" onclick="switchImportMode('text')">
+        <i class="ri-chat-voice-line"></i>
+        <span>文本极速识别</span>
+      </button>
+      <button id="importTabCube" class="btn btn-outline" style="border:none;color:var(--sys-text-sub);font-size:12px;padding:8px 6px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:4px" onclick="switchImportMode('cube')">
+        <i class="ri-swap-line"></i>
+        <span>雪球/同花顺直连</span>
+      </button>
+      <button id="importTabExcel" class="btn btn-outline" style="border:none;color:var(--sys-text-sub);font-size:12px;padding:8px 6px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:4px" onclick="switchImportMode('excel')">
+        <i class="ri-file-excel-2-line"></i>
+        <span>券商表格导入</span>
+      </button>
+      <button id="importTabOcr" class="btn btn-outline" style="border:none;color:var(--sys-text-sub);font-size:12px;padding:8px 6px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:4px" onclick="switchImportMode('ocr')">
+        <i class="ri-camera-3-line"></i>
+        <span>截图识别 (备用)</span>
+      </button>
+    </div>
+
+    <!-- 模式 1: 自由文本粘贴智能 NLP 语义解析 (默认推荐) -->
+    <div id="modeText" class="import-mode-box">
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:10px;padding:16px">
+        <label style="font-size:12px;color:var(--sys-text-sub);display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span>直接粘贴股票名称、代码或聊天记录（无需导出表格，AI 自动匹配）：</span>
+          <span style="font-size:11px;color:var(--sys-accent);display:flex;align-items:center;gap:4px">
+            <i class="ri-lightbulb-line"></i>
+            <span>支持任意格式自然语言</span>
+          </span>
+        </label>
+        <textarea id="freeTextHoldingInput" rows="5" placeholder="【示例 1 - 同步持仓】：&#10;博纳影业 200股 成本5.205元&#10;证券ETF 4600股 成本1.182&#10;机器人ETF 5400股 成本1.036&#10;&#10;【示例 2 - 批量添加自选股】：&#10;贵州茅台, 宁德时代, 比亚迪, 中芯国际" style="width:100%;box-sizing:border-box;font-size:13px;background:var(--sys-bg-panel);border:1px solid var(--sys-border);border-radius:6px;padding:12px;color:var(--sys-text-primary);font-family:monospace;resize:vertical"></textarea>
+        <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:12px;color:var(--sys-text-sub);display:flex;align-items:center;gap:12px">
+            <span>目标存入：</span>
+            <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+              <input type="radio" name="textTargetType" value="position" checked>
+              <i class="ri-focus-3-line" style="color:var(--sys-accent)"></i>
+              <span>我的实盘持仓</span>
+            </label>
+            <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+              <input type="radio" name="textTargetType" value="watchlist">
+              <i class="ri-star-fill" style="color:#e3b341"></i>
+              <span>我的自选监控池</span>
+            </label>
+          </div>
+          <button class="btn btn-blue" style="width:auto;padding:8px 20px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px" onclick="parseFreeTextHolding()">
+            <i class="ri-flashlight-fill"></i>
+            <span>智能识别并提取入库</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- 模式 3: 雪球 / 同花顺投资组合公开只读直连 -->
+    <div id="modeCube" class="import-mode-box" style="display:none">
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:10px;padding:18px">
+        <label style="font-size:12px;color:var(--sys-text-sub);display:block;margin-bottom:8px">输入雪球或同花顺实盘公开投资组合代码 (零密码·纯只读)：</label>
+        <div style="display:flex;gap:10px">
+          <input type="text" id="cubeCodeInput" placeholder="例如雪球组合代码：ZH123456" style="flex:1;font-size:13px;background:var(--sys-bg-panel);padding:10px 14px;border:1px solid var(--sys-border);border-radius:6px;color:var(--sys-text-primary)">
+          <button class="btn btn-blue" style="width:auto;padding:8px 20px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px" onclick="syncCubeHolding()">
+            <i class="ri-refresh-line"></i>
+            <span>一键拉取持仓配比</span>
+          </button>
+        </div>
+        <p style="font-size:11px;color:var(--sys-text-sub);margin:10px 0 0 0;line-height:1.5;display:flex;align-items:center;gap:4px">
+          <i class="ri-information-line" style="color:var(--sys-accent)"></i>
+          <span>提示：在雪球创建投资组合后，输入公开组合编号即可自动同步持仓配比，无需输入任何账号密码，绝对安全！</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- 模式 4: 截图 OCR (备用) -->
+    <div id="modeOcr" class="import-mode-box" style="display:none">
+      <div style="border:2px dashed var(--sys-border-hover);border-radius:10px;padding:32px 20px;text-align:center;background:var(--sys-bg-card-inner);cursor:pointer;transition:all 0.2s"
+        onclick="document.getElementById('ocrFileInput').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--sys-accent)';this.style.background='rgba(59,130,246,0.06)'"
+        ondragleave="this.style.borderColor='var(--sys-border-hover)';this.style.background='var(--sys-bg-card-inner)'"
+        ondrop="handleFileDrop(event)">
+        <div style="width:48px;height:48px;border-radius:12px;background:rgba(59,130,246,0.12);color:var(--sys-accent);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+        </div>
+        <div>
+          <b style="color:var(--sys-text-title);font-size:14px">点击选择持仓截图 / 支持在此处直接 <kbd style="background:var(--sys-bg-nav);padding:2px 6px;border-radius:4px;border:1px solid var(--sys-border);font-size:11px">Ctrl + V</kbd> 粘贴截图</b>
+          <p style="color:var(--sys-text-sub);font-size:12px;margin:6px 0 0 0">建议：上传清晰完整的券商持仓或交割单截图，避免非股票文本干扰</p>
+        </div>
+        <input type="file" id="ocrFileInput" accept="image/*" style="display:none" onchange="handleImageUpload(this.files[0]); this.value='';">
+
+      </div>
+    </div>
+
+    <!-- 识别解析结果确认列表 (统一确认面板) -->
+    <div id="ocrResultBox" style="margin-top:16px;max-height:220px;overflow-y:auto;display:none;background:var(--sys-bg-card-inner);border:1px solid var(--sys-border-hover);border-radius:8px;padding:12px">
+      <h4 style="font-size:12px;color:#3fb950;margin:0 0 10px 0;display:flex;align-items:center;gap:6px">
+        <i class="ri-checkbox-circle-fill"></i>
+        <span>提取到以下待同步持仓标的，确认参数无误后点击下方入库：</span>
+      </h4>
+      <div id="ocrResultList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
+    <!-- 底部操作按钮 -->
+    <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:12px;border-top:1px solid var(--sys-border);padding-top:16px">
+      <button class="btn btn-outline" style="width:auto;padding:8px 20px;font-size:13px;border-radius:6px" onclick="closeUploadModal()">关闭</button>
+      <button class="btn btn-blue" id="confirmSyncBtn" style="width:auto;padding:8px 24px;font-size:13px;font-weight:700;border-radius:6px;display:none;align-items:center;gap:6px" onclick="confirmBatchSync()">
+        <i class="ri-rocket-line"></i>
+        <span>确认同步至实盘持仓并诊断</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ==================== 手动添加持仓弹窗 ==================== -->
+<div id="addPositionModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-solid-card" style="width:90%;max-width:460px;padding:26px;position:relative">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--sys-border);padding-bottom:12px;margin-bottom:18px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <i class="ri-add-circle-line" style="font-size:18px;color:var(--sys-accent)"></i>
+        <h3 style="margin:0;color:var(--sys-text-title);font-size:16px;font-weight:700">手动录入 / 修改实盘持仓</h3>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);cursor:pointer;font-size:18px;width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center" onclick="closeAddPositionModal()">✕</button>
+    </div>
+
+    
+    <div class="form-row">
+      <label>股票代码 / 名称 / 拼音快速联想</label>
+      <div style="position:relative">
+        <input type="text" id="manualPosSymbol" placeholder="例如：贵州茅台、比亚迪、600519、1810.HK" autocomplete="off">
+        <div id="manualPosSuggest" class="autocomplete-dropdown" style="display:none"></div>
+      </div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="form-row">
+        <label>持仓股数 (股 / 份)</label>
+        <input type="number" id="manualPosShares" value="1000" step="100">
+      </div>
+      <div class="form-row">
+        <label>买入成本均价 (元)</label>
+        <input type="number" id="manualPosCost" value="10.0" step="0.01">
+      </div>
+    </div>
+    
+    <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:12px;border-top:1px solid var(--sys-border);padding-top:16px">
+      <button class="btn btn-outline" style="width:auto;padding:8px 18px;font-size:13px;border-radius:6px" onclick="closeAddPositionModal()">取消</button>
+      <button class="btn btn-blue" style="width:auto;padding:8px 22px;font-size:13px;font-weight:700;border-radius:6px" onclick="saveManualPosition()">保存持仓并测算诊断</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 板块全息画像与成分股主营业务透视弹窗 ==================== -->
+<div id="sectorDetailModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-solid-card" style="width:94%;max-width:1050px;max-height:88vh;display:flex;flex-direction:column;padding:26px">
+
+    <!-- 头部 -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--sys-border);padding-bottom:12px;margin-bottom:14px">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ri-building-4-line" style="font-size:20px;color:var(--sys-accent)"></i>
+          <h2 id="modalSectorTitle" style="margin:0;font-size:18px;color:var(--sys-text-title);font-weight:700">板块全息画像与成分股透视</h2>
+          <span id="modalSectorBadge" style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:rgba(9,105,218,0.12);color:var(--sys-accent)">板块</span>
+        </div>
+        <div id="modalSectorDesc" style="margin-top:6px;font-size:12px;color:var(--sys-text-sub);line-height:1.5">正在加载板块产业逻辑...</div>
+      </div>
+      <span style="cursor:pointer;color:var(--sys-text-sub);font-size:22px;padding:2px 8px" onclick="closeSectorDetailModal()">✕</span>
+    </div>
+
+    <!-- 驱动逻辑与搜索过滤栏 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div id="modalSectorCatalysts" style="font-size:12px;color:var(--sys-text-primary);background:var(--sys-bg-card-inner);padding:8px 14px;border-radius:6px;border:1px solid var(--sys-border);flex:1;display:flex;align-items:center;gap:6px">
+        <i class="ri-lightbulb-line" style="color:#e3b341"></i>
+        <span><b>核心驱动：</b><span id="modalCatalystsText">加载中...</span></span>
+      </div>
+      <input type="text" id="modalStockFilter" placeholder="在此板块内搜索股票/主营看点..." style="width:260px;font-size:12px;padding:6px 12px;background:var(--sys-input-bg);border:1px solid var(--sys-border);border-radius:6px;color:var(--sys-text-primary)" oninput="filterModalStocks(this.value)">
+    </div>
+
+    <!-- 即时量化买卖点测算卡片抽屉 (点击成分股[测算]即时在此展示) -->
+    <div id="modalStockCalcResultCard" style="display:none;margin-bottom:12px;background:var(--sys-bg-card-inner);border:1px solid var(--sys-accent);border-radius:8px;padding:14px 18px;box-shadow:var(--sys-glow)">
+      <!-- 动态渲染测算结果 -->
+    </div>
+
+    <!-- 成分股与主营表格列表 (可滚动) -->
+    <div style="flex:1;overflow-y:auto;border:1px solid var(--sys-border);border-radius:6px;background:var(--sys-bg-card-inner)">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left">
+        <thead style="position:sticky;top:0;background:var(--sys-table-header);border-bottom:1px solid var(--sys-border);z-index:2">
+          <tr style="color:var(--sys-text-sub);font-size:12px">
+            <th style="padding:10px 12px;width:18%">股票代码 / 名称</th>
+
+            <th style="padding:10px 12px;width:12%;text-align:right">实时现价</th>
+            <th style="padding:10px 12px;width:12%;text-align:right">今日涨跌幅</th>
+            <th style="padding:10px 12px;width:42%">主营业务与核心看点（干啥的）</th>
+            <th style="padding:10px 12px;width:16%;text-align:center;display:flex;align-items:center;justify-content:center;gap:4px">
+              <i class="ri-flashlight-fill" style="color:#e3b341"></i>
+              <span>操作决策</span>
+            </th>
+          </tr>
+        </thead>
+
+        <tbody id="modalStocksTableBody">
+          <tr><td colspan="5" style="text-align:center;padding:30px;color:#8b949e"><span class="spinner"></span> 正在拉取成分股与企业主营档案...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 底部：分页控制器与关闭按钮 -->
+    <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <span style="font-size:12px;color:#8b949e" id="modalStockCountText">共 0 家成分股</span>
+
+      <!-- 分页控制按钮组 -->
+      <div id="modalPagination" style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-outline" style="width:auto;padding:4px 10px;font-size:11px" id="modalPrevPageBtn" onclick="changeModalPage(-1)">◀ 上一页</button>
+        <span style="font-size:12px;color:#e6edf3" id="modalPageInfo">第 1 / 1 页</span>
+        <button class="btn btn-outline" style="width:auto;padding:4px 10px;font-size:11px" id="modalNextPageBtn" onclick="changeModalPage(1)">下一页 ▶</button>
+      </div>
+
+      <button class="btn btn-outline" style="width:auto;padding:6px 20px" onclick="closeSectorDetailModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 5. 🏦 东方财富账户系统级全自动直连与守护中枢弹窗 ==================== -->
+<div id="eastMoneyModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-adaptive-card" style="width:580px;max-width:94vw;padding:24px;position:relative">
+    
+    <!-- 头部 -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid var(--sys-border);padding-bottom:12px">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#10b981,#0969da);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px">
+            <i class="ri-bank-card-fill"></i>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--sys-text-title)">东方财富账户系统级全自动直连中枢</h3>
+              <span id="emModalStatusTag" style="background:rgba(16,185,129,0.12);color:#10b981;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px">
+                <i class="ri-shield-check-fill"></i> 守护进程运行中
+              </span>
+            </div>
+            <p style="margin:4px 0 0 0;font-size:12px;color:var(--sys-text-sub)">零手工录入 · 盘中每 10 秒自动静默同步持仓、成交与自选股</p>
+          </div>
+        </div>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);cursor:pointer;font-size:20px;padding:2px 6px" onclick="closeEastMoneyModal()">
+        <i class="ri-close-line"></i>
+      </button>
+    </div>
+
+
+    <!-- 运行状态信息卡片 -->
+    <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+        <div>
+          <span style="color:var(--sys-text-sub)">关联实盘账户：</span>
+          <b id="emModalUser" style="color:var(--sys-text-primary)">陈一辉 (2829)</b>
+        </div>
+        <div>
+          <span style="color:var(--sys-text-sub)">同步调度模式：</span>
+          <b style="color:var(--sys-accent)">后台常驻守护 (10秒/次)</b>
+        </div>
+        <div>
+          <span style="color:var(--sys-text-sub)">最近同步时间：</span>
+          <span id="emModalLastSync" style="font-family:monospace;color:var(--sys-text-primary)">刚刚</span>
+        </div>
+        <div>
+          <span style="color:var(--sys-text-sub)">自动同步开关：</span>
+          <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+            <input type="checkbox" id="emAutoSyncToggle" checked onchange="toggleEmAutoSync(this.checked)">
+            <b style="color:#10b981">实时静默同步</b>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 操作按钮组 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px">
+      <button class="btn btn-outline" style="width:auto;font-size:12px;padding:8px 16px;color:#f85149;border-color:rgba(248,81,73,0.3);display:flex;align-items:center;gap:6px" onclick="unbindEastMoney()">
+        <i class="ri-link-unlink-m" style="font-size:14px"></i>
+        <span>断开东财直连</span>
+      </button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" style="width:auto;font-size:12px;padding:8px 16px" onclick="closeEastMoneyModal()">关闭</button>
+        <button class="btn btn-blue" id="emSyncNowBtn" style="width:auto;font-size:12px;font-weight:700;padding:8px 20px;display:flex;align-items:center;gap:6px" onclick="triggerEmSyncNow()">
+          <i class="ri-flashlight-line" style="font-size:14px"></i>
+          <span>立即全量同步一次</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ==================== 🤖 全天候常驻：AI 首席操盘顾问悬浮球入口 ==================== -->
+<div id="aiChatFloatingTrigger" onclick="openAiChatDrawer()" style="position:fixed;bottom:30px;right:30px;z-index:9990;display:flex;align-items:center;gap:10px;padding:10px 18px;background:linear-gradient(135deg,#8957e5,#388bfd);color:#fff;border-radius:30px;cursor:pointer;box-shadow:0 8px 24px rgba(56,139,253,0.35);border:1px solid rgba(255,255,255,0.25);transition:all 0.2s;font-family:'Plus Jakarta Sans',sans-serif" onmouseover="this.style.transform='translateY(-3px) scale(1.03)'" onmouseout="this.style.transform='none'">
+  <div style="width:26px;height:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;color:#8957e5;font-size:15px;box-shadow:0 0 10px rgba(255,255,255,0.8)">
+    <i class="ri-robot-2-fill"></i>
+  </div>
+  <div style="display:flex;flex-direction:column;text-align:left">
+    <b style="font-size:13px;letter-spacing:0.5px">AI 首席操盘顾问</b>
+    <span style="font-size:10px;opacity:0.85">问买什么 · 诊断持仓 · 个股研判</span>
+  </div>
+  <span style="width:8px;height:8px;border-radius:50%;background:#3fb950;box-shadow:0 0 8px #3fb950"></span>
+</div>
+
+
+<!-- ==================== 💬 官方 Gemini 架构：AI 首席量化操盘顾问全功能工作台 ==================== -->
+<div id="aiChatDrawerBackdrop" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9998;backdrop-filter:blur(6px)" onclick="closeAiChatDrawer()"></div>
+<div id="aiChatDrawer" style="display:none;position:fixed;top:0;right:0;width:95%;max-width:980px;height:100vh;background:var(--sys-bg-panel);border-left:1px solid var(--sys-border);box-shadow:var(--sys-shadow-popover);z-index:9999;flex-direction:row;overflow:hidden">
+  
+  <!-- 1. 左侧：Gemini 风格会话历史侧边栏 (可折叠) -->
+  <div id="geminiSidebar" style="width:260px;min-width:240px;background:var(--sys-bg-card-inner);border-right:1px solid var(--sys-border);display:flex;flex-direction:column;transition:all 0.2s">
+    <!-- 顶部新建对话按钮 -->
+    <div style="padding:16px 14px;border-bottom:1px solid var(--sys-border)">
+      <button class="btn btn-blue" style="width:100%;padding:9px 12px;font-size:13px;font-weight:700;border-radius:20px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 10px rgba(56,139,253,0.3)" onclick="createNewGeminiSession()">
+        <i class="ri-add-line" style="font-size:16px"></i>
+        <span>新建研判会话</span>
+      </button>
+    </div>
+
+    <!-- 历史会话分组列表 -->
+    <div style="padding:10px 14px 4px 14px;font-size:11px;color:var(--sys-text-sub);font-weight:700;letter-spacing:0.5px;display:flex;align-items:center;gap:4px">
+      <i class="ri-history-line"></i>
+      <span>历史研判会话</span>
+    </div>
+    <div id="geminiSessionList" style="flex:1;overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:4px">
+      <!-- 动态渲染多会话列表 -->
+    </div>
+
+    <!-- 底部功能栏 -->
+    <div style="padding:12px;border-top:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center;font-size:12px">
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;color:#f85149;border-color:rgba(248,81,73,0.3);display:flex;align-items:center;gap:4px" onclick="clearAllGeminiSessions()">
+        <i class="ri-delete-bin-line"></i>
+        <span>清空全部</span>
+      </button>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;color:var(--sys-accent);border-color:var(--sys-border);display:flex;align-items:center;gap:4px" onclick="exportCurrentSessionMarkdown()">
+        <i class="ri-download-2-line"></i>
+        <span>导出当前</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 2. 右侧：Gemini 风格主对话研判工作台 -->
+  <div style="flex:1;display:flex;flex-direction:column;background:var(--sys-bg-panel);overflow:hidden">
+    
+    <!-- 顶部 Header -->
+    <div style="padding:12px 20px;background:var(--sys-bg-card-inner);border-bottom:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="geminiToggleSidebarBtn" style="background:var(--sys-bg-panel);border:1px solid var(--sys-border);color:var(--sys-text-primary);padding:4px 8px;border-radius:6px;cursor:pointer;font-size:14px" onclick="toggleGeminiSidebar()" title="展开/收起侧边栏">
+          <i class="ri-menu-line"></i>
+        </button>
+        <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#58a6ff,#8957e5);display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff">
+          <i class="ri-robot-2-fill"></i>
+        </div>
+        <div>
+          <h3 id="geminiCurrentTitle" style="margin:0;font-size:15px;color:var(--sys-text-title);font-weight:700">新研判会话</h3>
+          <div style="font-size:11px;color:var(--sys-text-sub);margin-top:2px;display:flex;align-items:center;gap:6px">
+            <span style="color:#10b981;font-weight:600">● 实时联动实盘持仓</span>
+            <span>·</span>
+            <span id="geminiModelBadge" style="color:var(--sys-accent);font-weight:600">通俗大白话模式</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;font-weight:700;color:#f59e0b;border-color:rgba(245,158,11,0.4);border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:4px" onclick="openGlossaryModal()">
+          <i class="ri-book-open-line"></i>
+          <span>术语大白话字典</span>
+        </button>
+        <button style="background:none;border:none;color:var(--sys-text-sub);font-size:22px;cursor:pointer;padding:2px 8px;margin-left:4px" onclick="closeAiChatDrawer()">
+          <i class="ri-close-line"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- 消息列表流式区域 -->
+    <div id="aiChatMessagesList" style="flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:20px;background:var(--sys-bg-panel)">
+      <!-- 动态渲染消息流 -->
+    </div>
+
+    <!-- 底部 Gemini 风格多功能扩展输入坞 -->
+    <div style="padding:14px 20px;background:var(--sys-bg-card-inner);border-top:1px solid var(--sys-border);display:flex;flex-direction:column;gap:10px">
+      
+      <!-- 快捷数据注入与战法 Prompt 标签 -->
+      <div style="display:flex;gap:8px;align-items:center;overflow-x:auto;white-space:nowrap;padding-bottom:2px">
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;font-weight:700;border-radius:14px;border-color:rgba(16,185,129,0.4);color:#10b981;cursor:pointer;display:flex;align-items:center;gap:4px" onclick="injectPortfolioDataToPrompt()">
+          <i class="ri-attachment-2"></i>
+          <span>注入实盘持仓数据</span>
+        </button>
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;font-weight:700;border-radius:14px;border-color:rgba(88,166,255,0.4);color:#388bfd;cursor:pointer;display:flex;align-items:center;gap:4px" onclick="injectSectorFlowsToPrompt()">
+          <i class="ri-funds-line"></i>
+          <span>注入大盘板块资金流</span>
+        </button>
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;font-weight:600;border-radius:14px;border-color:rgba(163,113,247,0.4);color:#8957e5;cursor:pointer;display:flex;align-items:center;gap:4px" onclick="quickAskAi('明天最看好哪几只放量突破黄金标的？请用大白话讲清楚理由！')">
+          <i class="ri-focus-3-line"></i>
+          <span>明天推荐什么标的？</span>
+        </button>
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;font-weight:600;border-radius:14px;border-color:rgba(245,158,11,0.4);color:#f59e0b;cursor:pointer;display:flex;align-items:center;gap:4px" onclick="quickAskAi('请用最通俗的大白话诊断我的实盘持仓，明天到底该怎么做T和防守止损？')">
+          <i class="ri-briefcase-4-line"></i>
+          <span>帮我诊断持仓做T</span>
+        </button>
+      </div>
+
+      <!-- 核心输入框与发送按钮 -->
+      <div style="display:flex;gap:10px;align-items:flex-end;background:var(--sys-bg-panel);border:1px solid var(--sys-border);border-radius:12px;padding:8px 12px;box-shadow:inset 0 1px 3px rgba(0,0,0,0.05)">
+        <textarea id="aiChatInputText" rows="2" placeholder="给 AI 首席操盘顾问发送指令或提问 (如: 300308 中际旭创明天怎么操作？支持注入持仓数据)..." style="flex:1;background:transparent;border:none;color:var(--sys-text-title);font-size:14px;line-height:1.5;resize:none;outline:none;padding:4px 0" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendAiChatMessage();}"></textarea>
+        <button class="btn btn-blue" id="aiChatSendBtn" style="padding:8px 18px;font-size:13px;font-weight:700;border-radius:8px;height:38px;display:flex;align-items:center;gap:6px" onclick="sendAiChatMessage()">
+          <span>发送</span>
+          <i class="ri-send-plane-2-fill" style="font-size:14px"></i>
+        </button>
+      </div>
+
+
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#8b949e">
+        <span>💡 Enter 发送 · Shift + Enter 换行 · 可直接点击上方按钮将实时持仓数据喂给模型</span>
+        <span>本地 Qwen2.5 / 646部战法大典驱动</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ==================== 📚 炒股实战知识库与六大闭环战法大典沉浸式弹窗 ==================== -->
+<div id="knowledgeBaseModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-adaptive-card" style="width:95%;max-width:1100px;max-height:88vh;display:flex;flex-direction:column;padding:24px">
+    
+    <!-- 头部：标题与统计徽章 -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--sys-border);padding-bottom:12px;margin-bottom:14px">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#8957e5,#da3633);display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff">
+            <i class="ri-book-read-line"></i>
+          </div>
+          <div>
+            <h2 style="margin:0;font-size:18px;color:var(--sys-text-title);font-weight:700">炒股实战知识库与六大闭环战法大典</h2>
+            <div style="font-size:11px;color:var(--sys-text-sub);margin-top:2px">
+              基于外接盘 <b>646 部经典名著与课程</b> 深度提炼 · <span style="color:#3fb950;font-weight:600">已收录 40,474 条高精度战法切片</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button style="background:none;border:none;color:var(--sys-text-sub);font-size:22px;cursor:pointer;padding:2px 6px" onclick="closeKnowledgeBaseModal()">
+        <i class="ri-close-line"></i>
+      </button>
+    </div>
+
+    <!-- 顶部双 Tab 切换器 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px">
+      <div style="display:flex;gap:8px;background:var(--sys-bg-card-inner);padding:3px;border-radius:20px;border:1px solid var(--sys-border)">
+        <button id="kbTabPlaybooks" class="btn" style="background:var(--sys-accent);color:#fff;font-size:12px;font-weight:600;padding:6px 16px;border-radius:16px;display:flex;align-items:center;gap:4px" onclick="switchKbTab('playbooks')">
+          <i class="ri-trophy-line"></i>
+          <span>六大闭环战法 (我的打法)</span>
+        </button>
+        <button id="kbTabBooks" class="btn btn-outline" style="border:none;color:var(--sys-text-sub);font-size:12px;padding:6px 16px;border-radius:16px;display:flex;align-items:center;gap:4px" onclick="switchKbTab('books')">
+          <i class="ri-search-eye-line"></i>
+          <span>646部原著知识检索</span>
+        </button>
+      </div>
+      <div style="font-size:12px;color:var(--sys-text-sub);display:flex;gap:14px">
+        <span>原著: <b style="color:var(--sys-text-primary)">646 部</b></span>
+        <span>知识切片: <b style="color:#3fb950">40,474 条</b></span>
+        <span>索引库: <b style="color:var(--sys-accent)">227 MB</b></span>
+      </div>
+    </div>
+
+    <!-- Tab 1: 六大闭环战法体系 -->
+    <div id="kbPanelPlaybooks" style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;padding-right:4px">
+
+      <!-- 战法 1 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px;color:#58a6ff;display:flex;align-items:center;gap:4px">
+            <i class="ri-focus-3-line"></i>
+            <span>集合竞价爆量弱转强龙头战法</span>
+          </b>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(88,166,255,0.15);color:#58a6ff">超短打板流</span>
+        </div>
+        <div style="font-size:11px;color:var(--sys-text-sub)"><b>出处：</b>《短线交易秘笈》·《分时盘口语言解码》</div>
+        <div style="font-size:12px;color:var(--sys-text-primary);line-height:1.6;background:var(--sys-bg-panel);padding:10px;border-radius:6px;border:1px solid var(--sys-border)">
+          <b>1. 触发信号：</b>昨日大分歧甚至烂板/炸板，今日 09:25 竞价量比>5.0，高开 +2%~+5%。<br>
+          <b>2. 确定买点：</b>开盘 9:30~9:35 分时秒板或放量突破竞价高点直接扫单挂单上车。<br>
+          <b>3. 仓位上限：</b>2~3 成（严禁单票重仓）。<br>
+          <b>4. 做T节奏：</b>次日冲高 +6% 以上不封板减半锁利，急杀回踩均线做 T+0。<br>
+          <b>5. 目标止盈：</b>首板次日大肉即走，连板龙头锁仓至第一次放量断板清仓。<br>
+          <span style="color:#f85149"><b>6. 铁血止损：</b>开盘跌破竞价开盘价超 -2.5% 或 9:45 未能封板，盘中反抽坚决割肉！</span>
+        </div>
+      </div>
+
+      <!-- 战法 2 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px;color:#3fb950;display:flex;align-items:center;gap:4px">
+            <i class="ri-line-chart-line"></i>
+            <span>趋势波段·回踩5日均线低吸战法</span>
+          </b>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(63,185,80,0.15);color:#3fb950">中线成长流</span>
+        </div>
+        <div style="font-size:11px;color:var(--sys-text-sub)"><b>出处：</b>《笑傲股市(威廉·欧奈尔)》·《趋势交易大师》</div>
+        <div style="font-size:12px;color:var(--sys-text-primary);line-height:1.6;background:var(--sys-bg-panel);padding:10px;border-radius:6px;border:1px solid var(--sys-border)">
+          <b>1. 触发信号：</b>主线龙头/ETF 处于健康多头趋势（MA5>MA10>MA20），涨幅<30%。<br>
+          <b>2. 确定买点：</b>股价缩量回踩 5 日均线附近（±0.5%），分时出现明显承接托单时分批建仓。<br>
+          <b>3. 仓位上限：</b>3~4 成。<br>
+          <b>4. 做T节奏：</b>盘中急拉远离 5 日线 +3% 抛出日内仓位，回落接回，持续摊薄成本。<br>
+          <b>5. 目标止盈：</b>波段止盈防守线上移至 5 日线，收盘不破 5 日线一路坚定持有。<br>
+          <span style="color:#f85149"><b>6. 铁血止损：</b>有效跌破 10 日均线超 2 个交易日，无条件减仓 50% 防守！</span>
+        </div>
+      </div>
+
+      <!-- 战法 3 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px;color:#d2a8ff;display:flex;align-items:center;gap:4px">
+            <i class="ri-flashlight-line"></i>
+            <span>一红定江山·倍量突破前高战法</span>
+          </b>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(210,168,255,0.15);color:#d2a8ff">主升突破流</span>
+        </div>
+        <div style="font-size:11px;color:var(--sys-text-sub)"><b>出处：</b>《专业投机原理》·《量价真经》</div>
+        <div style="font-size:12px;color:var(--sys-text-primary);line-height:1.6;background:var(--sys-bg-panel);padding:10px;border-radius:6px;border:1px solid var(--sys-border)">
+          <b>1. 触发信号：</b>横盘整理 >15 个交易日，单日成交量较前 5 日均量翻倍（>2.0x），长阳突破平台箱顶。<br>
+          <b>2. 确定买点：</b>尾盘 14:45 确认放量长阳突破未回落，或者次日早盘小幅回踩箱顶时买入。<br>
+          <b>3. 仓位上限：</b>3 成。<br>
+          <b>4. 做T节奏：</b>突破后前 3 天一般为加速浪，不轻易做丢筹码，第 4 天高开分歧再做 T。<br>
+          <b>5. 目标止盈：</b>第一目标位为箱体高度的 1.618 倍对称拓展位。<br>
+          <span style="color:#f85149"><b>6. 铁血止损：</b>收盘重回突破箱体下沿以下，判定为假突破，果断认错止损！</span>
+        </div>
+      </div>
+
+      <!-- 战法 4 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px;color:#f85149;display:flex;align-items:center;gap:4px">
+            <i class="ri-arrow-down-circle-line"></i>
+            <span>龙头断板首阴·反包低吸战法</span>
+          </b>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(248,81,73,0.15);color:#f85149">游资接力流</span>
+        </div>
+        <div style="font-size:11px;color:var(--sys-text-sub)"><b>出处：</b>《游资操盘实录》·《龙头战法心法》</div>
+        <div style="font-size:12px;color:var(--sys-text-primary);line-height:1.6;background:var(--sys-bg-panel);padding:10px;border-radius:6px;border:1px solid var(--sys-border)">
+          <b>1. 触发信号：</b>3连板以上市场总龙头，第一次出现断板大阴线（换手充分，非一字断头铡）。<br>
+          <b>2. 确定买点：</b>首阴次日早盘低开 -3%~-6% 惯性下杀企稳时分批低吸 1/2 仓位。<br>
+          <b>3. 仓位上限：</b>2 成。<br>
+          <b>4. 做T节奏：</b>盘中冲高反包拉升 +5% 以上坚决做日内 T 卖出底仓锁定利润。<br>
+          <b>5. 目标止盈：</b>次日若反包涨停则持股待涨，若未能反包冲高全部离场。<br>
+          <span style="color:#f85149"><b>6. 铁血止损：</b>放量跌破 20 日均线超 2 个交易日坚决减仓！</span>
+        </div>
+      </div>
+
+
+    </div>
+
+    <!-- Tab 2: 646部原著知识检索 -->
+    <div id="kbPanelBooks" style="display:none;flex:1;flex-direction:column;gap:12px;overflow:hidden">
+      <div style="display:flex;gap:10px">
+        <input type="text" id="kbSearchInput" placeholder="在 40,474 条战法切片中搜索 (例如: 集合竞价, 一红定江山, 突破, 缠论)..." style="flex:1;background:var(--sys-bg-panel);border:1px solid var(--sys-border);border-radius:6px;padding:8px 12px;color:var(--sys-text-primary);font-size:13px" onkeydown="if(event.key==='Enter')searchKbDocs()">
+        <button class="btn btn-blue" onclick="searchKbDocs()" style="padding:8px 18px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px">
+          <i class="ri-book-read-line"></i>
+          <span>检索名著</span>
+        </button>
+      </div>
+      <div id="kbSearchResultsList" style="flex:1;overflow-y:auto;background:var(--sys-bg-panel);border:1px solid var(--sys-border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px">
+        <div style="text-align:center;color:var(--sys-text-sub);padding:40px 0;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px">
+          <i class="ri-lightbulb-line" style="color:#e3b341"></i>
+          <span>请在上方输入任意战法关键词，支持从 646 部名著与 40,474 条切片中秒级提取原著段落！</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== 全能量化与操盘术语大白话通俗速查字典 (全域三系统自适应) ==================== -->
+<div id="glossaryModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-adaptive-card" style="width:94%;max-width:920px;max-height:88vh;display:flex;flex-direction:column;padding:24px">
+    
+    <!-- 头部 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--sys-border);padding-bottom:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#8957e5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">
+          <i class="ri-book-open-fill"></i>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <h3 style="margin:0;font-size:18px;font-weight:800;color:var(--sys-text-title)">交易与量化术语 · 通俗大白话速查字典</h3>
+            <span style="font-size:11px;background:rgba(245,158,11,0.15);color:#f59e0b;padding:2px 8px;border-radius:10px;font-weight:600;border:1px solid rgba(245,158,11,0.3)">小白友好 · 秒懂每一个量化概念</span>
+          </div>
+          <span style="font-size:12px;color:var(--sys-text-sub);margin-top:2px;display:block">告别晦涩难懂的专业黑话，炒股概念一目了然 · 随时搜索查阅</span>
+        </div>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);font-size:22px;cursor:pointer;padding:2px 6px" onclick="closeGlossaryModal()">
+        <i class="ri-close-line"></i>
+      </button>
+    </div>
+
+    <!-- 搜索与分类过滤栏 -->
+    <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div style="position:relative;flex:1;min-width:240px">
+        <input type="text" id="glossarySearchInput" placeholder="快速搜索术语（如：做T、均线多头、盈亏比、回撤、1%风险、放量...）" style="width:100%;font-size:13px;padding:7px 12px" oninput="filterGlossaryTerms()">
+      </div>
+      <div style="display:flex;gap:6px;overflow-x:auto" id="glossaryCategoryTabs">
+        <button class="btn btn-blue" style="padding:5px 12px;font-size:12px" onclick="filterGlossaryCategory('all', this)">全部术语</button>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="filterGlossaryCategory('alpha', this)">
+          <i class="ri-focus-3-line"></i>
+          <span>尾盘选股</span>
+        </button>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="filterGlossaryCategory('risk', this)">
+          <i class="ri-shield-check-line"></i>
+          <span>风控与仓位</span>
+        </button>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="filterGlossaryCategory('tech', this)">
+          <i class="ri-line-chart-line"></i>
+          <span>技术与形态</span>
+        </button>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="filterGlossaryCategory('dragon', this)">
+          <i class="ri-vip-crown-fill" style="color:#e3b341"></i>
+          <span>游资战法</span>
+        </button>
+      </div>
+    </div>
+
+
+    <!-- 术语对照列表卡片容器 -->
+    <div id="glossaryListContainer" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-right:6px">
+
+      <!-- ================= 1. 🎯 尾盘选股与决策 ================= -->
+      <div class="glossary-item" data-cat="alpha" data-keywords="尾盘选股 14:45 买卖决策 确定性 隔夜溢价 冲高卖出" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #0969da;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-time-line" style="color:#0969da"></i> 尾盘 14:45 选股决策</b>
+          <span style="font-size:11px;background:rgba(9,105,218,0.12);color:var(--sys-accent);padding:2px 8px;border-radius:4px;font-weight:600">尾盘核心模式</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6;margin-bottom:8px">
+          <b style="color:var(--sys-accent)">💡 大白话解释：</b>早盘冲高最容易遇到主力诱多炸板吃大面。到了下午 14:45，全天的多空胜负已定，收盘形态基本确立（主力想砸盘的时间不够了，假突破极少）。在 14:45 选出形态好的股票买入，次日早盘趁主力冲高顺势卖出获利，确定性最高！
+        </div>
+        <div style="font-size:12px;color:var(--sys-text-sub);background:var(--sys-code-bg);border:1px solid var(--sys-border);padding:8px 10px;border-radius:6px">
+          📝 <b>实战口诀：</b>上午多看少动，尾盘定夺乾坤；次日早盘冲高不恋战，利润落袋为安。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-cat="alpha" data-keywords="均线多头排列 ma5 ma10 ma20 上升通道 主升浪" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #0969da;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-line-chart-line" style="color:#0969da"></i> 均线多头排列 (5日 > 10日 > 20日)</b>
+          <span style="font-size:11px;background:rgba(9,105,218,0.12);color:var(--sys-accent);padding:2px 8px;border-radius:4px;font-weight:600">形态判断</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6;margin-bottom:8px">
+          <b style="color:var(--sys-accent)">💡 大白话解释：</b>5日均价在10日均价上面，10日在20日上面，像梯子一样顺畅向上爬。说明最近买的人全都赚了钱，持股意愿极强，没有解套抛压，属于标准的“主升浪”顺势交易环境。
+        </div>
+        <div style="font-size:12px;color:var(--sys-text-sub);background:var(--sys-code-bg);border:1px solid var(--sys-border);padding:8px 10px;border-radius:6px">
+          📝 <b>判定标准：</b>现价 $\ge$ 5日线 且 5日线 $>$ 10日线 $>$ 20日线，坚决不做均线向下发散的阴跌股票。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-cat="alpha" data-keywords="放量突破平台 突破箱体 量能 成交量翻倍" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #0969da;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-flashlight-line" style="color:#0969da"></i> 放量突破箱体平台</b>
+          <span style="font-size:11px;background:rgba(9,105,218,0.12);color:var(--sys-accent);padding:2px 8px;border-radius:4px;font-weight:600">量能进攻信号</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6;margin-bottom:8px">
+          <b style="color:var(--sys-accent)">💡 大白话解释：</b>股票横盘整理了很久，今天全天成交量突然暴增到前5天平均量的 1.8 倍以上，并且股价一举冲破了前期的最高阻力点。说明主力大资金在真金白银向上建仓抢筹，这是最可靠的起飞信号！
+        </div>
+        <div style="font-size:12px;color:var(--sys-text-sub);background:var(--sys-code-bg);border:1px solid var(--sys-border);padding:8px 10px;border-radius:6px">
+          📝 <b>判定标准：</b>今日成交量 $\ge 1.8 \times$ 前5日均量，且收盘价创近 20 个交易日新高。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-cat="alpha" data-keywords="缩量回踩企稳 洗盘 均线支撑 无抛压" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #0969da;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-shield-check-line" style="color:#0969da"></i> 缩量回踩关键均线企稳</b>
+          <span style="font-size:11px;background:rgba(9,105,218,0.12);color:var(--sys-accent);padding:2px 8px;border-radius:4px;font-weight:600">洗盘低吸机会</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6;margin-bottom:8px">
+          <b style="color:var(--sys-accent)">💡 大白话解释：</b>好股票涨了一波后出现回调，但回调到 5日或10日 均线就跌不动了，而且全天成交量明显萎缩（缩量20%以上）。这代表主力只是洗洗盘，散户抛盘已经出尽，回踩支撑点就是绝佳的低吸上车点。
+        </div>
+        <div style="font-size:12px;color:var(--sys-text-sub);background:var(--sys-code-bg);border:1px solid var(--sys-border);padding:8px 10px;border-radius:6px">
+          📝 <b>判定标准：</b>收盘价稳在 5日线 之上，且成交量 $\le$ 5日均量的 80%。
+        </div>
+      </div>
+
+      <!-- ================= 2. 🛡️ 风险控制与仓位管理 ================= -->
+      <div class="glossary-item" data-cat="risk" data-keywords="1%风险模型 单笔风险 R 仓位倒算法 本金保护" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #10b981;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-shield-keyhole-line" style="color:#10b981"></i> 华尔街 1% 风险倒算仓位法</b>
+          <span style="font-size:11px;background:rgba(16,185,129,0.12);color:#10b981;padding:2px 8px;border-radius:4px;font-weight:600">风控圣经</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6;margin-bottom:8px">
+          <b style="color:#10b981">💡 大白话解释：</b>在买入之前，<b>先确定如果这笔交易失败触及止损，我最多只能亏多少钱</b>（比如 100 万账户最多只能亏 1 万元，即 1%）。然后拿 1 万元除以（买入价 - 止损价），直接倒算出这只股票最多只能买多少股！绝不盲目满仓一把梭，即便连续止损 10 次也不会伤筋动骨。
+        </div>
+        <div style="font-size:12px;color:var(--sys-text-sub);background:var(--sys-code-bg);border:1px solid var(--sys-border);padding:8px 10px;border-radius:6px">
+          📝 <b>计算公式：</b>建议买入股数 $= \frac{\text{账户总资金} \times 1\%}{\text{买入价} - \text{止损价}}$（向下取 100 股整数倍）。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-cat="risk" data-keywords="预期盈亏比 盈亏比 风险报酬比 拦截 1.5:1" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #10b981;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-scales-3-line" style="color:#10b981"></i> 预期盈亏比 (最低 $\ge 1.5:1$)</b>
+          <span style="font-size:11px;background:rgba(16,185,129,0.12);color:#10b981;padding:2px 8px;border-radius:4px;font-weight:600">交易门槛</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6;margin-bottom:8px">
+          <b style="color:#10b981">💡 大白话解释：</b>做一笔交易前，拿“潜在能赚到的钱”去比“万一亏损要赔的钱”。如果赚只能赚 2 个点，亏却可能亏 4 个点，盈亏比只有 0.5:1，这种赔本买卖绝不下单！只有预期能赚 6% 以上，止损仅 3%（盈亏比 $\ge 2:1$）的高胜率机会才值得出手。
+        </div>
+        <div style="font-size:12px;color:var(--sys-text-sub);background:var(--sys-code-bg);border:1px solid var(--sys-border);padding:8px 10px;border-radius:6px">
+          📝 <b>计算公式：</b>盈亏比 $= \frac{\text{第一目标止盈价} - \text{买入价}}{\text{买入价} - \text{硬性止损价}}$。低于 1.5 系统自动拦截！
+        </div>
+      </div>
+
+      <div class="glossary-item" data-cat="risk" data-keywords="硬性防守止损价 止损 认错底线 不扛单" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #10b981;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-close-circle-line" style="color:#10b981"></i> 硬性防守止损价</b>
+          <span style="font-size:11px;background:rgba(16,185,129,0.12);color:#10b981;padding:2px 8px;border-radius:4px;font-weight:600">保命底线</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6">
+          <b style="color:#10b981">💡 大白话解释：</b>买入股票后设定的“绝对撤退线”（通常为买入价下浮 3.5% 或跌破前一日最低价）。一旦收盘跌破这个价位，说明买入逻辑被证伪，必须无条件坚决止损，绝不心存侥幸死扛！
+        </div>
+      </div>
+
+      <!-- ================= 3. 📈 技术与实战操作 ================= -->
+      <div class="glossary-item" data-cat="tech" data-keywords="逢低做T 日内T+0 降低成本 浮亏摊薄 差价" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #8957e5;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-swap-line" style="color:#8957e5"></i> 逢低日内做 T+0 摊薄成本</b>
+          <span style="font-size:11px;background:rgba(137,87,229,0.15);color:#8957e5;padding:2px 8px;border-radius:4px;font-weight:600">核心解套技能</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6;margin-bottom:8px">
+          <b style="color:#8957e5">💡 大白话解释：</b>股票被套了千万别死扛！早盘当它急跌到低位支撑时，用备用资金<b>先买入一小笔</b>（比如买 1000 股），等它盘中反弹两三个点时，<b>立马把原来套着的 1000 股卖掉</b>。你手里的股票数量没变，但成功赚到了差价，把买入均价拉低了！
+        </div>
+        <div style="font-size:12px;color:var(--sys-text-sub);background:var(--sys-code-bg);border:1px solid var(--sys-border);padding:8px 10px;border-radius:6px">
+          📝 <b>实战举例：</b>中证证券浮亏 9%，成本 ¥1.182。早盘跌到 ¥1.05 时买 1000 股，下午拉到 ¥1.08 卖 1000 股，单日赚 300 元，成本自动降到 ¥1.152！
+        </div>
+      </div>
+
+      <div class="glossary-item" data-cat="tech" data-keywords="移动止盈 止盈线上移 利润最大化" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #8957e5;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-arrow-up-circle-line" style="color:#8957e5"></i> 移动止盈防守线上移</b>
+          <span style="font-size:11px;background:rgba(137,87,229,0.15);color:#8957e5;padding:2px 8px;border-radius:4px;font-weight:600">利润放大器</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6">
+          <b style="color:#8957e5">💡 大白话解释：</b>股票在赚钱时先不要急着全部卖掉！每天把【5 日均线】当作你的安全底线，只要每天收盘股价没有跌破 5 日均线，就一直坚定拿住，让利润继续奔跑！一旦哪天收盘跌破 5 日线，再从容卖出锁定利润。
+        </div>
+      </div>
+
+      <!-- ================= 4. 👑 游资与情绪战法 ================= -->
+      <div class="glossary-item" data-cat="dragon" data-keywords="龙头首阴 弱转强 游资战法 情绪周期 妖股" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #f59e0b;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-fire-line" style="color:#f59e0b"></i> 龙头首阴 / 竞价弱转强</b>
+          <span style="font-size:11px;background:rgba(245,158,11,0.15);color:#f59e0b;padding:2px 8px;border-radius:4px;font-weight:600">游资高阶战法</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6">
+          <b style="color:#f59e0b">💡 大白话解释：</b>
+          • <b>龙头首阴：</b>连续多个涨停板的人气龙头股第一次出现断板大阴线，主力往往还没来得及出货，次日早盘急跌低吸抢反包的胜率极高！<br>
+          • <b>竞价弱转强：</b>昨天股票冲高回落走得很烂，今天 09:25 开盘集合竞价突然爆量高开，代表主力资金反手抢筹，逆市反转信号！
+        </div>
+      </div>
+
+      <div class="glossary-item" data-cat="dragon" data-keywords="中军标的 板块容量 机构 游资" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #f59e0b;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:15px;color:var(--sys-text-title)"><i class="ri-community-line" style="color:#f59e0b"></i> 板块中军与容量核心</b>
+          <span style="font-size:11px;background:rgba(245,158,11,0.15);color:#f59e0b;padding:2px 8px;border-radius:4px;font-weight:600">大资金主战场</span>
+        </div>
+        <div style="font-size:13px;color:var(--sys-text-primary);line-height:1.6">
+          <b style="color:#f59e0b">💡 大白话解释：</b>市值 500 亿以上、能容纳几十亿公募、私募和外资大资金进出的大市值龙头（如中际旭创、宁德时代、工业富联）。这类股票不会天天涨停，但走势极其稳健，是主线行情的“定海神针”。
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 底部按钮 -->
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--sys-text-sub)" id="glossaryCountLabel">共收录常用炒股与量化核心术语</span>
+      <button class="btn btn-blue" style="padding:7px 22px;font-size:13px;font-weight:700" onclick="closeGlossaryModal()">我懂了，返回操盘！</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 8. 🌟 全系统标题·功能与实战用法保姆级深度大白话指南弹窗 ==================== -->
+<div id="featureGuideModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-adaptive-card" style="width:680px;max-width:94vw;padding:24px;position:relative">
+    
+    <!-- 头部 -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid var(--sys-border);padding-bottom:12px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="fgIcon" style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#0969da,#10b981);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">
+          <i class="ri-lightbulb-flash-line"></i>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <h3 id="fgTitle" style="margin:0;font-size:17px;font-weight:800;color:var(--sys-text-title)">功能大白话用法详解</h3>
+            <span id="fgBadge" style="background:rgba(9,105,218,0.12);color:var(--sys-accent);padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">系统核心功能</span>
+          </div>
+          <p id="fgSubtitle" style="margin:4px 0 0 0;font-size:12px;color:var(--sys-text-sub)">一分钟听懂 · 能干什么 · 手把手实战教程</p>
+        </div>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);cursor:pointer;font-size:22px;padding:2px 6px" onclick="closeFeatureGuideModal()">
+        <i class="ri-close-line"></i>
+      </button>
+    </div>
+
+    <!-- 弹窗主体内容区 (由 JS 动态注入极其通俗的大白话) -->
+    <div id="fgBodyContent" style="display:flex;flex-direction:column;gap:14px;max-height:65vh;overflow-y:auto;padding-right:4px">
+      <!-- 动态内容 -->
+    </div>
+
+    <!-- 底部操作按钮 -->
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--sys-text-sub)">点击全系统任意标题旁的 ⓘ 可随时调出本指南</span>
+      <button class="btn btn-blue" style="padding:7px 22px;font-size:13px;font-weight:700" onclick="closeFeatureGuideModal()">
+        <i class="ri-check-line"></i> 我全明白了，去实操！
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== 9. 🤖 7人多智能体协同矩阵全景弹窗 ==================== -->
+<div id="agentMatrixModal" class="modal-solid-wrapper" style="display:none">
+  <div class="modal-adaptive-card" style="width:860px;max-width:95vw;padding:26px;position:relative">
+    
+    <!-- 头部 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:1px solid var(--sys-border);padding-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#8957e5,#58a6ff);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">
+          <i class="ri-robot-line"></i>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <h3 style="margin:0;font-size:18px;font-weight:800;color:var(--sys-text-title)">7 人多智能体协同矩阵全景</h3>
+            <span style="background:rgba(188,140,255,0.18);color:#d2a8ff;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;border:1px solid rgba(188,140,255,0.35)">智能协同旗舰版</span>
+          </div>
+          <p style="margin:4px 0 0 0;font-size:12px;color:var(--sys-text-sub)">全市场 5200+ 标的 · 4 层漏斗严选 · 7 岗位协同流水线</p>
+        </div>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);cursor:pointer;font-size:22px;padding:4px 8px" onclick="closeAgentMatrixModal()">
+        <i class="ri-close-line"></i>
+      </button>
+    </div>
+
+    <!-- 7人智能体矩阵卡片网格 -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));gap:12px;max-height:60vh;overflow-y:auto;padding-right:4px">
+      
+      <!-- 智能体 1 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #e3b341;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="color:#e3b341;font-size:14px;display:flex;align-items:center;gap:6px">
+            <i class="ri-vip-crown-fill"></i> 01. 复盘组长 (主裁定调)
+          </b>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(227,179,65,0.15);color:#e3b341">决策大脑</span>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--sys-text-primary);line-height:1.55">
+          <b>职责大白话：</b>统领全盘，综合两市量能、涨跌中位数与隔夜外盘，给出今日多空胜负定调与次日早盘 09:15 进攻/防守推演。
+        </p>
+      </div>
+
+      <!-- 智能体 2 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #58a6ff;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="color:#58a6ff;font-size:14px;display:flex;align-items:center;gap:6px">
+            <i class="ri-calculator-line"></i> 02. 量化打分师 (日内评分)
+          </b>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(88,166,255,0.15);color:#58a6ff">数学模型</span>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--sys-text-primary);line-height:1.55">
+          <b>职责大白话：</b>对全市场 5200 只股票的分时量比、封单强度、换手率进行秒级数学打分，排斥成交低迷的僵尸股。
+        </p>
+      </div>
+
+      <!-- 智能体 3 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #ff7b72;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="color:#ff7b72;font-size:14px;display:flex;align-items:center;gap:6px">
+            <i class="ri-fire-fill"></i> 03. 题材挖掘师 (板块穿透)
+          </b>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,123,114,0.15);color:#ff7b72">主线雷达</span>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--sys-text-primary);line-height:1.55">
+          <b>职责大白话：</b>实时追踪机构与主力资金正在抢筹哪个核心板块，锁定身位龙头与容量中军，过滤后排跟风杂毛。
+        </p>
+      </div>
+
+      <!-- 智能体 4 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #d2a8ff;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="color:#d2a8ff;font-size:14px;display:flex;align-items:center;gap:6px">
+            <i class="ri-links-line"></i> 04. 归因配对师 (逻辑溯源)
+          </b>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(210,168,255,0.15);color:#d2a8ff">互斥归因</span>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--sys-text-primary);line-height:1.55">
+          <b>职责大白话：</b>将涨停个股严格按“连板土特产、美股映射、政策利好、主力抢筹”四类互斥归因，查明暴涨真相。
+        </p>
+      </div>
+
+      <!-- 智能体 5 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #d29922;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="color:#d29922;font-size:14px;display:flex;align-items:center;gap:6px">
+            <i class="ri-ghost-line"></i> 05. 邪修雷达师 (活人因子)
+          </b>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(210,153,34,0.15);color:#d29922">游资捕捉</span>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--sys-text-primary);line-height:1.55">
+          <b>职责大白话：</b>专抓无利好、无研报但在盘中突发异常放量扫盘、地天板反包的游资主力操盘痕迹，捕捉弱转强套利。
+        </p>
+      </div>
+
+      <!-- 智能体 6 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #3fb950;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="color:#3fb950;font-size:14px;display:flex;align-items:center;gap:6px">
+            <i class="ri-shield-check-line"></i> 06. 排雷风控师 (一票否决)
+          </b>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(63,185,80,0.15);color:#3fb950">风控卫士</span>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--sys-text-primary);line-height:1.55">
+          <b>职责大白话：</b>严查财务非标、立案调查、违规减持、退市警示等重大地雷，只要触发风险底线一律一票否决淘汰。
+        </p>
+      </div>
+
+      <!-- 智能体 7 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #388bfd;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="color:#388bfd;font-size:14px;display:flex;align-items:center;gap:6px">
+            <i class="ri-file-list-3-line"></i> 07. 交割解码师 (战法提炼)
+          </b>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(56,139,253,0.15);color:#388bfd">实战复盘</span>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--sys-text-primary);line-height:1.55">
+          <b>职责大白话：</b>逐笔解码真实交割单与对账单，在分时图上还原买卖点，计算真实盈亏比并映射为经典实战战法。
+        </p>
+      </div>
+
+    </div>
+
+    <!-- 底部确认 -->
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--sys-text-sub)">7 位小智能体每日收盘后全自动并发推演</span>
+      <button class="btn btn-blue" style="padding:7px 22px;font-size:13px;font-weight:700" onclick="closeAgentMatrixModal()">
+        <i class="ri-check-line"></i> 我已了解，返回复盘！
+      </button>
+    </div>
+
+  </div>
+</div>

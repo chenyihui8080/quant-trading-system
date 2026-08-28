@@ -1,0 +1,482 @@
+<!-- ==================== 🎯 系统一：Alpha 盘中实战交易系统 (独立根容器) ==================== -->
+<div id="sysSectionAlpha" class="system-root-section">
+  <!-- 专属氛围横幅 (极简实战·去除冗余口号) -->
+  <div id="heroBannerAlpha" class="sys-hero-banner hero-alpha">
+    <div style="display:flex;align-items:center;gap:8px">
+      <i class="ri-radar-line" style="font-size:20px;color:#58a6ff"></i>
+      <b class="clickable-feature-title" onclick="openFeatureGuideModal('alpha_main')" style="font-size:15px;color:var(--sys-text-title);display:inline-flex;align-items:center;gap:6px">
+        <span>Alpha 盘中实战交易系统</span>
+        <i class="ri-information-line feature-info-btn"></i>
+      </b>
+    </div>
+
+    <!-- 右侧专属交互按钮 -->
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="hero-action-btn" onclick="openSystemSyncModal()" style="color:#58a6ff;background:rgba(9,105,218,0.15);border-color:rgba(88,166,255,0.35)">
+        <i class="ri-flashlight-line"></i>
+        <span>行情通道状态</span>
+      </button>
+      <button class="hero-action-btn" onclick="openFeatureGuideModal('position_review')" style="color:#3fb950;background:rgba(46,160,67,0.15);border-color:rgba(46,160,67,0.35)">
+        <i class="ri-shield-check-line"></i>
+        <span>风控规则</span>
+      </button>
+    </div>
+  </div>
+
+
+
+  <!-- Alpha 实战子分类独立切换导航条 -->
+  <div class="tabs" id="alphaSubTabs">
+    <div class="tab active" id="subTabBtnPos" onclick="switchAlphaSubTab('pos')" style="display:flex;align-items:center;gap:6px">
+      <i class="ri-wallet-3-line"></i>
+      <span>我的实盘持仓诊断</span>
+    </div>
+    <div class="tab" id="subTabBtnSector" onclick="switchAlphaSubTab('sector')" style="display:flex;align-items:center;gap:6px">
+      <i class="ri-funds-box-line"></i>
+      <span>大盘板块资金流动</span>
+    </div>
+    <div class="tab" id="subTabBtnDecision" onclick="switchAlphaSubTab('decision')" style="display:flex;align-items:center;gap:6px">
+      <i class="ri-focus-3-line"></i>
+      <span>尾盘 14:45 选股决策</span>
+    </div>
+  </div>
+
+  <!-- ==================== 1. 我的实盘持仓与买卖深度诊断页面 ==================== -->
+<div class="container tab-content alpha-sub-content active" id="tab-alpha-pos">
+  <div class="grid-full" style="gap:16px">
+    
+    <!-- 实盘持仓看板 -->
+    <div class="panel" style="border:1px solid var(--sys-border);box-shadow:var(--sys-shadow-card)">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div>
+          <h2 class="clickable-feature-title" onclick="openFeatureGuideModal('review_portfolio')" title="点击查看【实盘持仓与买卖量化诊断】大白话用法指南" style="border:none;margin-bottom:2px;padding-bottom:0;font-size:16px;color:#3fb950;display:flex;align-items:center;gap:6px">
+            <i class="ri-wallet-3-fill"></i>
+            <span>我的实盘持仓与买卖/减仓量化深度诊断</span>
+            <i class="ri-information-line feature-info-btn"></i>
+          </h2>
+          <p style="font-size:12px;color:#8b949e;margin:0">实时监控持仓盈亏，基于交易纪律自动输出【精确操作指令】、【建议买卖股数】与【3大底层量化逻辑】</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-blue" style="width:auto;padding:7px 16px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px" onclick="openEastMoneyModal()">
+            <i class="ri-bank-card-line"></i>
+            <span>东方财富直连设置</span>
+          </button>
+          <button class="btn btn-outline" style="width:auto;padding:7px 14px;font-size:12px;display:flex;align-items:center;gap:6px" onclick="triggerEmSyncNow()">
+            <i class="ri-refresh-line"></i>
+            <span>立即刷新最新行情</span>
+          </button>
+        </div>
+      </div>
+
+
+
+      <!-- 全自动托管提示条 (替代旧的手动录入与截图提示) -->
+      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sys-text-primary)">
+          <span style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981"></span>
+          <span><b>实盘自动托管中：</b>系统后台每隔 10 秒静默同步东方财富实盘持仓与成交，手机端交易后 10 秒内自动感知！</span>
+        </div>
+        <button class="btn btn-outline" style="width:auto;padding:3px 10px;font-size:11px;color:#10b981;border-color:rgba(16,185,129,0.4)" onclick="openEastMoneyModal()">管理直连 ➔</button>
+      </div>
+
+
+      <!-- 东方财富实盘账户 6 大核心资产与盈亏概览条 -->
+      <div id="portfolioSummaryBar" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px;margin-bottom:16px">
+        <div style="background:var(--sys-bg-card-inner);padding:10px 14px;border-radius:6px;border:1px solid var(--sys-border)">
+          <span style="font-size:11px;color:var(--sys-text-sub)">总资产 (元)</span>
+          <div style="font-size:18px;font-weight:800;color:var(--sys-text-title)" id="summaryTotalAsset">¥20,000.00</div>
+        </div>
+        <div style="background:var(--sys-bg-card-inner);padding:10px 14px;border-radius:6px;border:1px solid var(--sys-border)">
+          <span style="font-size:11px;color:var(--sys-text-sub)">持仓总市值 (元)</span>
+          <div style="font-size:18px;font-weight:800;color:var(--sys-text-title)" id="summaryMarketVal">¥16,446.00</div>
+        </div>
+        <div style="background:var(--sys-bg-card-inner);padding:10px 14px;border-radius:6px;border:1px solid var(--sys-border)">
+          <span style="font-size:11px;color:var(--sys-text-sub)">当日参考盈亏 (元)</span>
+          <div style="font-size:18px;font-weight:800" id="summaryTodayPnl">-¥200.50 (-1.20%)</div>
+        </div>
+        <div style="background:var(--sys-bg-card-inner);padding:10px 14px;border-radius:6px;border:1px solid var(--sys-border)">
+          <span style="font-size:11px;color:var(--sys-text-sub)">累计持仓盈亏 (元)</span>
+          <div style="font-size:18px;font-weight:800" id="summaryTotalPnl">-¥1,035.32 (-5.92%)</div>
+        </div>
+        <div style="background:var(--sys-bg-card-inner);padding:10px 14px;border-radius:6px;border:1px solid var(--sys-border)">
+          <span style="font-size:11px;color:var(--sys-text-sub)">可用资金 (元)</span>
+          <div style="font-size:18px;font-weight:800;color:var(--sys-text-title)" id="summaryCash">¥3,554.00</div>
+        </div>
+        <div style="background:var(--sys-bg-card-inner);padding:10px 14px;border-radius:6px;border:1px solid var(--sys-border)">
+          <span style="font-size:11px;color:var(--sys-text-sub)">总仓位占比</span>
+          <div style="font-size:18px;font-weight:800;color:var(--sys-accent)" id="summaryRatio">82.23%</div>
+        </div>
+      </div>
+
+
+      <!-- 持仓深度诊断卡片列表 -->
+      <div id="positionDiagCards" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">
+        <div style="color:var(--sys-text-sub);text-align:center;padding:30px">正在加载持仓与量化诊断建议...</div>
+      </div>
+
+      <!-- 📜 东方财富实盘成交与买卖历史流水看板 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:var(--sys-card-radius);padding:14px;margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="clickable-feature-title" onclick="openFeatureGuideModal('trade_history')" title="点击查看【实盘交易历史成交流水】大白话用法详解" style="display:flex;align-items:center;gap:6px">
+            <i class="ri-file-history-line" style="font-size:16px;color:var(--sys-accent)"></i>
+            <b style="font-size:14px;color:var(--sys-text-title)">东方财富实盘交易历史成交流水</b>
+            <i class="ri-information-line feature-info-btn"></i>
+            <span style="font-size:11px;color:var(--sys-text-sub)">· 自动同步建仓与调仓明细</span>
+          </div>
+          <span style="font-size:11px;color:var(--sys-accent);background:rgba(9,105,218,0.1);padding:2px 8px;border-radius:4px;border:1px solid var(--sys-border);display:flex;align-items:center;gap:4px">
+            <i class="ri-checkbox-circle-fill" style="color:#2da44e"></i>
+            <span>自动关联记账</span>
+          </span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left">
+            <thead>
+              <tr style="border-bottom:1px solid var(--sys-border);color:var(--sys-text-sub);background:var(--sys-bg-nav)">
+                <th style="padding:6px 8px">成交时间</th>
+                <th style="padding:6px 8px">证券代码 / 名称</th>
+                <th style="padding:6px 8px;text-align:center">操作类型</th>
+                <th style="padding:6px 8px;text-align:right">成交均价</th>
+                <th style="padding:6px 8px;text-align:right">成交数量</th>
+                <th style="padding:6px 8px;text-align:right">发生金额 (元)</th>
+                <th style="padding:6px 8px;text-align:center">状态</th>
+              </tr>
+            </thead>
+            <tbody id="tradeHistoryTbody">
+              <tr><td colspan="7" style="text-align:center;padding:16px;color:var(--sys-text-sub)">正在加载历史成交记录...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- 我的自选监控池 -->
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h2 class="clickable-feature-title" onclick="openFeatureGuideModal('watchlist')" title="点击查看【我的自选监控池】大白话用法详解" style="border:none;margin-bottom:0;padding-bottom:0;display:flex;align-items:center;gap:6px">
+          <i class="ri-star-fill" style="color:#e3b341;font-size:16px"></i>
+          <span>我的自选监控池</span>
+          <i class="ri-information-line feature-info-btn"></i>
+        </h2>
+
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="position:relative">
+            <input type="text" id="addWatchInput" placeholder="输入股票/ETF代码或名称" style="width:220px;font-size:12px;padding:6px 10px" autocomplete="off">
+            <div id="addWatchSuggest" class="autocomplete-dropdown" style="display:none"></div>
+          </div>
+          <button class="btn btn-blue" style="width:auto;padding:6px 14px;font-size:12px" onclick="quickAddWatchlist()">加入自选</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left">
+          <thead>
+            <tr style="border-bottom:1px solid #30363d;color:#8b949e;background:#131722">
+              <th style="padding:8px">代码 / 名称</th>
+              <th style="padding:8px">当前最新价</th>
+              <th style="padding:8px">今日涨跌幅</th>
+              <th style="padding:8px">自选跟踪备注</th>
+              <th style="padding:8px;text-align:center">操作</th>
+            </tr>
+          </thead>
+          <tbody id="watchlistTableBody">
+            <tr><td colspan="5" style="text-align:center;padding:20px;color:#8b949e">暂无自选标的</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== 2. 大盘板块主力资金流动监控页面 ==================== -->
+<div class="container tab-content alpha-sub-content" id="tab-alpha-sector">
+
+  <div class="grid-full" style="gap:16px">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div>
+          <h2 class="clickable-feature-title" onclick="openFeatureGuideModal('sector_fund_flow')" title="点击查看【大盘与板块主力资金流动监控】大白话用法详解" style="border:none;margin-bottom:2px;padding-bottom:0;font-size:16px;color:var(--sys-accent);display:flex;align-items:center;gap:6px">
+            <i class="ri-funds-box-line" style="color:var(--sys-accent);font-size:18px"></i>
+            <span>大盘与板块主力资金流动监控</span>
+            <i class="ri-information-line feature-info-btn"></i>
+          </h2>
+          <p style="font-size:12px;color:var(--sys-text-sub);margin:0">实时追踪全市场各大商户与机构主力资金抢筹方向 · 洞察超大单动向与领涨龙头</p>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <!-- 板块智能联想搜索框 (与系统搜索体验完全对齐，防浏览器密码自动填充) -->
+          <div style="position:relative;display:flex;align-items:center">
+            <input type="search" id="sectorSearchInput" placeholder="搜索板块/题材/龙头..." style="width:220px;font-size:12px;padding:6px 28px 6px 10px;background:var(--sys-input-bg);border:1px solid var(--sys-border);border-radius:6px;color:var(--sys-text-primary)" autocomplete="new-password" data-lpignore="true" data-form-type="other" value="">
+            <span id="sectorSearchClearBtn" style="position:absolute;right:8px;cursor:pointer;color:var(--sys-text-sub);font-size:13px;display:none" onclick="clearSectorSearch()">✕</span>
+            <div id="sectorSearchSuggest" class="autocomplete-dropdown" style="display:none"></div>
+          </div>
+
+
+          <!-- 行业 / 概念 切换标签 -->
+          <div style="display:flex;background:var(--sys-bg-nav);padding:2px;border-radius:6px;border:1px solid var(--sys-border)">
+            <button id="sectorTabInd" class="btn" style="background:var(--sys-accent);color:#fff;font-size:11px;padding:5px 12px;border-radius:4px;display:flex;align-items:center;gap:4px" onclick="switchSectorType('industry')">
+              <i class="ri-building-4-line"></i>
+              <span>行业板块</span>
+            </button>
+            <button id="sectorTabCpt" class="btn btn-outline" style="border:none;color:var(--sys-text-sub);font-size:11px;padding:5px 12px;border-radius:4px;display:flex;align-items:center;gap:4px" onclick="switchSectorType('concept')">
+              <i class="ri-lightbulb-line"></i>
+              <span>概念板块</span>
+            </button>
+          </div>
+
+          <!-- 刷新按钮 -->
+          <button class="btn btn-outline" style="width:auto;padding:5px 12px;font-size:11px;display:flex;align-items:center;gap:4px" onclick="loadSectorFlows()">
+            <i class="ri-refresh-line"></i>
+            <span>刷新数据</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table style="width:100%;min-width:880px;table-layout:fixed;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="border-bottom:1px solid var(--sys-border);color:var(--sys-text-sub);background:var(--sys-table-header);font-size:12px;user-select:none">
+              <th style="padding:10px 8px;width:20%;text-align:left;cursor:pointer" onclick="sortSectorFlows('sector_name')">板块名称 / 属性 <span id="sort_sector_name"></span></th>
+              <th style="padding:10px 8px;width:12%;text-align:right;cursor:pointer" onclick="sortSectorFlows('change_pct')">今日涨跌幅 <span id="sort_change_pct">↕</span></th>
+              <th style="padding:10px 8px;width:15%;text-align:right;cursor:pointer" onclick="sortSectorFlows('net_inflow_amount')">主力净流入额 <span id="sort_net_inflow_amount" style="color:var(--sys-accent)">▼</span></th>
+              <th style="padding:10px 8px;width:13%;text-align:right;cursor:pointer" onclick="sortSectorFlows('inflow_amount')">流入资金 <span id="sort_inflow_amount">↕</span></th>
+              <th style="padding:10px 8px;width:13%;text-align:right;cursor:pointer" onclick="sortSectorFlows('outflow_amount')">流出资金 <span id="sort_outflow_amount">↕</span></th>
+              <th style="padding:10px 8px;width:11%;text-align:right;cursor:pointer" onclick="sortSectorFlows('company_count')">成分股数 <span id="sort_company_count">↕</span></th>
+              <th style="padding:10px 8px;width:16%;text-align:right;cursor:pointer" onclick="sortSectorFlows('leader_stock_change')">领涨龙头股 <span id="sort_leader_stock_change">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="sectorFlowsTableBody">
+            <tr><td colspan="7" style="text-align:center;padding:25px;color:var(--sys-text-sub)"><span class="spinner"></span> 正在实时抓取各大板块资金流动数据...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 主表企业级分页控制器 -->
+      <div id="sectorFlowsPagination" style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:4px 2px;border-top:1px solid var(--sys-border);padding-top:12px">
+        <span style="font-size:12px;color:var(--sys-text-sub)" id="sectorFlowsCountText">共 0 个板块</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline" style="width:auto;padding:4px 12px;font-size:11px" id="sectorFlowsPrevBtn" onclick="changeSectorFlowsPage(-1)">◀ 上一页</button>
+          <span style="font-size:12px;color:var(--sys-text-primary)" id="sectorFlowsPageInfo">第 1 / 1 页</span>
+          <button class="btn btn-outline" style="width:auto;padding:4px 12px;font-size:11px" id="sectorFlowsNextBtn" onclick="changeSectorFlowsPage(1)">下一页 ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- ==================== 4. 尾盘 14:45 选股与决策系统页面 ==================== -->
+<div class="container tab-content alpha-sub-content" id="tab-alpha-decision">
+
+  <div class="grid-full" style="gap:16px">
+    
+    <!-- 顶部操作区 -->
+    <div class="panel" style="background:var(--sys-bg-panel);border:1px solid var(--sys-border);padding:16px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <h2 class="clickable-feature-title" onclick="openFeatureGuideModal('alpha_system')" title="点击查看【尾盘 14:45 买卖决策系统】保姆级大白话实战指南" style="border:none;margin-bottom:4px;padding-bottom:0;font-size:18px;color:var(--sys-accent);display:flex;align-items:center;gap:6px">
+            <i class="ri-focus-3-line" style="color:var(--sys-accent);font-size:20px"></i>
+            <span>尾盘 14:45 买卖决策系统</span>
+            <i class="ri-information-line feature-info-btn"></i>
+          </h2>
+          <p style="font-size:13px;color:var(--sys-text-sub);margin:0">
+            拒绝黑盒与情绪追涨杀跌 · 100% 严格执行个人交易纪律 · 自动化计算买入区间、硬性止损、分批止盈与 1% 风险倒算仓位
+          </p>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-blue" style="width:auto;padding:8px 20px;display:flex;align-items:center;gap:6px" onclick="scanAlphaCandidates()" id="alphaScanBtn">
+            <i class="ri-search-line"></i>
+            <span>立即全市场扫描</span>
+          </button>
+          <button class="btn btn-outline" style="width:auto;padding:8px 16px;display:flex;align-items:center;gap:6px" onclick="pushAlphaAlert()" id="alphaPushBtn">
+            <i class="ri-notification-3-line"></i>
+            <span>尾盘卡片推送</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- 上半部分：规则配置引擎 + 个股即时测算器 -->
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px">
+      
+      <!-- 规则量化过滤配置 -->
+      <div class="panel">
+        <h2 class="clickable-feature-title" onclick="openFeatureGuideModal('alpha_rule_engine')" title="点击查看【选股规则过滤引擎配置】大白话用法详解" style="display:flex;align-items:center;gap:6px">
+          <i class="ri-sound-module-line" style="color:var(--sys-accent)"></i>
+          <span>选股规则过滤引擎配置</span>
+          <i class="ri-information-line feature-info-btn"></i>
+        </h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+          <div>
+            <label style="color:var(--sys-text-sub);font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+              <i class="ri-shield-check-line" style="color:#2da44e"></i>
+              <span>1. 硬性排雷池</span>
+            </label>
+            <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
+              <label title="自动剔除 ST、*ST 和濒临退市风险股票"><input type="checkbox" id="alphaFilterSt" checked> 剔除 ST / 风险警示 / 退市整理</label>
+              <label title="锁定 50亿~400亿 流通市值，游资机构主力最喜欢拉升做主升浪的区间"><input type="checkbox" id="alphaEnableThunder" checked> 流通市值 50亿 ~ 400亿</label>
+              <label title="全天成交额不低于 3.5 亿元，保证进出自由，杜绝没有流动性的僵尸股"><input type="checkbox" id="alphaMinAmount" checked> 日成交额 ≥ 3.5 亿元</label>
+            </div>
+          </div>
+
+          <div>
+            <label style="color:var(--sys-text-sub);font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+              <i class="ri-building-4-line" style="color:var(--sys-accent)"></i>
+              <span>2. 板块风格筛选</span>
+            </label>
+            <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
+              <label><input type="checkbox" id="alphaAllowMain" checked> 主板 (60/00 代码)</label>
+              <label><input type="checkbox" id="alphaAllowGem" checked> 创业板 (30 代码)</label>
+              <label><input type="checkbox" id="alphaAllowStar" checked> 科创板 (68 代码)</label>
+            </div>
+          </div>
+
+          <div>
+            <label style="color:var(--sys-text-sub);font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+              <i class="ri-line-chart-line" style="color:var(--sys-accent)"></i>
+              <span>3. 形态与量能池</span>
+            </label>
+            <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
+              <label title="5日均线 > 10日均线 > 20日均线，且价格在20日线上方，属于稳健上升通道"><input type="checkbox" id="alphaEnableMaTrend" checked> 均线多头排列 (5日>10日>20日)</label>
+              <label title="今日成交量 ≥ 过去5日平均成交量的 1.8 倍，主力真金白银放量进攻"><input type="checkbox" id="alphaEnableVolBreak" checked> 放量突破箱体平台 (≥ 1.8倍量)</label>
+              <label title="14:45 涨幅在 +3.0%~+6.5% 之间，既确立强势又未封死涨停，留有次日获利空间"><input type="checkbox" id="alphaEnableTail"> 尾盘稳健收红 (尾盘涨幅 3%~6.5%)</label>
+            </div>
+          </div>
+
+          <div>
+            <label style="color:var(--sys-text-sub);font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+              <i class="ri-scales-3-line" style="color:var(--sys-accent)"></i>
+              <span>4. 账户与风控参数</span>
+            </label>
+            <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div>
+                <span style="font-size:11px;color:var(--sys-text-sub)" title="当前量化账户的总可用本金">总资产 (元)</span>
+                <input type="number" id="alphaCapital" value="1000000" step="10000" style="padding:4px 6px;font-size:12px">
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--sys-text-sub)" title="任何单笔交易最大允许亏损的本金比例（默认 1.0%）">单笔风险比例 (%)</span>
+                <input type="number" id="alphaRiskR" value="1.0" step="0.1" style="padding:4px 6px;font-size:12px">
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--sys-text-sub)" title="硬性防守止损比例，跌破底线坚决离场">硬性止损比例 (%)</span>
+                <input type="number" id="alphaStopLoss" value="3.5" step="0.5" style="padding:4px 6px;font-size:12px">
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--sys-text-sub)" title="第一目标止盈涨幅">第一止盈目标 (%)</span>
+                <input type="number" id="alphaTarget1" value="5.0" step="0.5" style="padding:4px 6px;font-size:12px">
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--sys-text-sub)" title="第二波段止盈涨幅">第二止盈目标 (%)</span>
+                <input type="number" id="alphaTarget2" value="10.0" step="1.0" style="padding:4px 6px;font-size:12px">
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--sys-text-sub)" title="止盈空间与止损风险之比，低于此值系统自动拦截放弃">最低盈亏比门槛</span>
+                <input type="number" id="alphaMinRR" value="1.5" step="0.1" style="padding:4px 6px;font-size:12px">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;justify-content:flex-end">
+          <button class="btn btn-outline" style="width:auto;padding:6px 16px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="saveAlphaConfig()">
+            <i class="ri-save-3-line"></i>
+            <span>保存规则配置</span>
+          </button>
+        </div>
+      </div>
+
+
+      <!-- 个股即时买卖点与仓位计算器 -->
+      <div class="panel">
+        <h2 class="clickable-feature-title" onclick="openFeatureGuideModal('alpha_risk_calc')" title="点击查看【单笔 1% 风险倒算买卖点测算器】大白话用法详解" style="display:flex;align-items:center;gap:6px">
+          <i class="ri-calculator-line" style="color:var(--sys-accent)"></i>
+          <span>华尔街 1% 风险买卖点测算器</span>
+          <i class="ri-information-line feature-info-btn"></i>
+        </h2>
+        <div style="position:relative;display:flex;gap:8px;align-items:center">
+          <div style="position:relative;flex:1">
+            <input type="text" id="alphaCalcInput" placeholder="输入股票/ETF名称/代码/拼音，如：机器人、中际旭创、512570" style="width:100%;font-size:13px" autocomplete="off">
+            <div id="alphaCalcSuggest" class="autocomplete-dropdown" style="display:none"></div>
+          </div>
+          <button class="btn btn-blue" style="width:auto;padding:8px 18px" onclick="calculateAlphaSingle()">测算</button>
+        </div>
+        <div id="alphaCalcResult" style="margin-top:12px;background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:var(--sys-card-radius);padding:12px;min-height:160px;font-size:13px">
+          <div style="color:var(--sys-text-sub);text-align:center;padding:40px 0">输入股票名称或代码，即时计算买入区间、硬性止损、目标止盈与建仓股数</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 下半部分：决策指令看板表格 -->
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h2 class="clickable-feature-title" onclick="openFeatureGuideModal('alpha_dashboard')" title="点击查看【尾盘 14:45 选股决策指令单】大白话用法详解" style="border:none;margin-bottom:0;padding-bottom:0;display:flex;align-items:center;gap:6px">
+          <i class="ri-file-list-3-line" style="color:var(--sys-accent)"></i>
+          <span>尾盘 14:45 选股操盘决策指令单</span>
+          <i class="ri-information-line feature-info-btn"></i>
+        </h2>
+        <span id="alphaScanStatus" style="font-size:12px;color:var(--sys-text-sub)">尚未扫描</span>
+      </div>
+
+
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left">
+          <thead>
+            <tr style="border-bottom:1px solid var(--sys-border);color:var(--sys-text-sub);background:var(--sys-table-header)">
+              <th style="padding:10px 8px">代码 / 股票名称</th>
+              <th style="padding:10px 8px" title="鼠标悬停在标签上可查看该规则的具体量化计算逻辑与判定依据">
+                触发规则 <i class="ri-information-line" style="cursor:help;font-size:12px;color:var(--sys-accent)"></i>
+              </th>
+              <th style="padding:10px 8px">当前价</th>
+              <th style="padding:10px 8px" title="当前撮合价上下浮动 0.5% 的安全建仓区间，避免冲动追高">
+                建议买入区间 <i class="ri-information-line" style="cursor:help;font-size:12px;color:var(--sys-accent)"></i>
+              </th>
+              <th style="padding:10px 8px" title="结合 3.5% 固定风控底线与前一日最低价、MA5 支撑位智能测算，跌破必须果断认错">
+                硬性防守止损价 <i class="ri-information-line" style="cursor:help;font-size:12px;color:var(--sys-accent)"></i>
+              </th>
+              <th style="padding:10px 8px" title="短线波段第一止盈目标位 (+5.0%)，达到后建议减仓锁定利润">
+                第一目标止盈位 <i class="ri-information-line" style="cursor:help;font-size:12px;color:var(--sys-accent)"></i>
+              </th>
+              <th style="padding:10px 8px" title="止盈空间 ÷ 止损风险敞口，必须 ≥ 1.5:1 才能执行">
+                预期盈亏比 <i class="ri-information-line" style="cursor:help;font-size:12px;color:var(--sys-accent)"></i>
+              </th>
+              <th style="padding:10px 8px" title="华尔街 1% 风险倒算模型：(账户总资产 × 1%) ÷ (买入价 - 止损价)，保证单笔最大亏损不超 1%">
+                建议建仓股数 (资金) <i class="ri-information-line" style="cursor:help;font-size:12px;color:var(--sys-accent)"></i>
+              </th>
+              <th style="padding:10px 8px">执行状态</th>
+            </tr>
+          </thead>
+          <tbody id="alphaTableBody">
+            <tr>
+              <td colspan="9" style="text-align:center;padding:30px;color:var(--sys-text-sub)">点击右上角「立即全市场扫描」获取尾盘操盘指令</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 尾盘 14:45 决战简报预览卡片 -->
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h2 style="border:none;margin-bottom:0;padding-bottom:0;display:flex;align-items:center;gap:6px">
+          <i class="ri-notification-3-line" style="color:var(--sys-accent)"></i>
+          <span>尾盘 14:45 决战简报与机器人推送预览</span>
+        </h2>
+        <button class="btn btn-outline" style="width:auto;padding:4px 12px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="copyAlphaCardText()">
+          <i class="ri-file-copy-line"></i>
+          <span>一键复制简报</span>
+        </button>
+
+      </div>
+      <div id="alphaCardPreview" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:var(--sys-card-radius);padding:14px;font-size:13px;line-height:1.7;color:var(--sys-text-primary);white-space:pre-wrap">点击「立即全市场扫描」后生成尾盘简报预览</div>
+    </div>
+
+
+
+  </div>
+</div>
+</div>

@@ -1,0 +1,46 @@
+<!-- ==================== 登录 / 注册浮层组件 ==================== -->
+<div class="login-overlay" id="loginOverlay" style="display:none">
+  <div class="login-box">
+    <h2>量化投研与实盘决策系统</h2>
+    <div class="subtitle">Quantitative Research & Alpha Execution System</div>
+    
+    <!-- 登录表单 -->
+    <form id="loginForm" onsubmit="doLogin(event); return false;" autocomplete="on">
+      <div class="form-row">
+        <label>用户名</label>
+        <input type="text" id="loginUsername" placeholder="请输入用户名 (默认: admin)" autocomplete="username" value="admin" spellcheck="false">
+      </div>
+      <div class="form-row">
+        <label>登录密码</label>
+        <input type="password" id="loginPassword" placeholder="请输入密码 (默认: admin123)" autocomplete="current-password" value="admin123" spellcheck="false">
+      </div>
+      <div class="error-msg" id="loginError"></div>
+      
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="button" class="btn" style="flex:1;background:#2da44e;font-size:13px;font-weight:700;padding:10px" onclick="doLogin(event)">🚀 一键直接进入系统</button>
+        <button type="submit" class="btn" id="loginSubmitBtn" style="flex:1;font-size:13px;font-weight:700;padding:10px">登 录</button>
+      </div>
+      
+      <div class="switch" style="margin-top:16px">还没有账号？<a onclick="showRegister()" style="cursor:pointer;color:var(--sys-accent)">立即注册新用户</a></div>
+    </form>
+    
+    <!-- 注册表单 -->
+    <form id="registerForm" class="hidden" onsubmit="doRegister(event); return false;" autocomplete="off">
+      <div class="form-row">
+        <label>用户名</label>
+        <input type="text" id="regUsername" placeholder="至少3位字符" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="form-row">
+        <label>登录密码</label>
+        <input type="password" id="regPassword" placeholder="至少6位密码" autocomplete="new-password" spellcheck="false">
+      </div>
+      <div class="form-row">
+        <label>确认密码</label>
+        <input type="password" id="regPassword2" placeholder="再次输入密码" autocomplete="new-password" spellcheck="false">
+      </div>
+      <div class="error-msg" id="registerError"></div>
+      <button type="submit" class="btn" style="width:100%;margin-top:12px;font-size:14px;font-weight:700;padding:10px">注 册 并 登 录</button>
+      <div class="switch" style="margin-top:16px">已有账号？<a onclick="showLogin()" style="cursor:pointer;color:var(--sys-accent)">返回直接登录</a></div>
+    </form>
+  </div>
+</div>

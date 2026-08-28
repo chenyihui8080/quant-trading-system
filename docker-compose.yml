@@ -3,7 +3,7 @@ services:
     build: .
     container_name: quant-backtest
     ports:
-      - "8000:8000"
+      - "18000:18000"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

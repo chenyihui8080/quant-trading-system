@@ -870,16 +870,23 @@ def _fallback_stock_search(text: str) -> list[tuple[str, str]]:
 
         code = None
         candidate = None
+        EXCLUDE_STOCK_WORDS = {
+            "突破", "跌破", "站上", "下穿", "金叉", "死叉", "买入", "卖出", "买进", "卖掉",
+            "止损", "止盈", "减仓", "加仓", "放量", "缩量", "均线", "布林", "超买", "超卖",
+            "涨幅", "跌幅", "如果", "那么", "连续", "连跌", "连涨", "创新", "日线", "月线", "周线"
+        }
+
         # 从长到短尝试，找到第一个匹配的股票名
         for length in range(len(full_candidate), 1, -1):
             test_name = full_candidate[:length]
-            if test_name in used_names:
+            if test_name in used_names or test_name in EXCLUDE_STOCK_WORDS:
                 continue
             found = _try_sina_search(test_name)
             if found:
                 code = found
                 candidate = test_name
                 break
+
 
         if code and candidate:
             _NAME_TO_CODE[candidate] = code

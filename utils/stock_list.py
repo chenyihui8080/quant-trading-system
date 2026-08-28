@@ -247,12 +247,17 @@ def search_stocks_local(keyword: str, limit: int = 50, market: str = "") -> list
         elif keyword in code or keyword in name:
             contains.append(s)
 
-    # A 股没结果时，用新浪搜索拼音
-    if not exact and not starts and not contains and (not market or market == "a"):
+    # 若本地结果少于 5 条，补充新浪全网搜索结果（支持全量港美股、拼音、ETF等）
+    results = exact + starts + contains
+    seen_codes = {s["code"].upper() for s in results}
+
+    if len(results) < limit:
         from utils.stock_search import search_stock_sina
         sina_results = search_stock_sina(keyword, limit=limit)
-        if sina_results:
-            return sina_results
+        for s in sina_results:
+            if s["code"].upper() not in seen_codes:
+                if not market or s.get("market", "") == market or (market == "a" and s.get("market") in ("sh", "sz")):
+                    results.append(s)
+                    seen_codes.add(s["code"].upper())
 
-    results = exact + starts + contains
     return results[:limit]

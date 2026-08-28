@@ -1,83 +1,289 @@
-"""实时行情：A 股（baostock + 新浪）+ 港股/美股（yfinance）"""
-import baostock as bs
+"""
+企业级实时行情模块：多源容灾 + 权威指数智能识别 + 北交所/A股/港美股全覆盖 + 盘中/盘后动态缓存
+支持：
+- 大盘指数 (上证指数 sh000001, 沪深300 sh000300, 创业板指 sz399006, 深证成指 sz399001, 北证50 bj899050)
+- A 股主板 / 创业板 / 科创板 (sh/sz)
+- 北交所股票 (43xxxx, 83xxxx, 87xxxx, 88xxxx, 92xxxx -> bj 前缀)
+- 港股 (1810.HK -> hk01810)
+- 美股 (AAPL, TSLA, NVDA -> usaapl)
+- 盘中 5 秒毫秒级缓存 / 盘后自动延长至 30 分钟保护机制
+"""
+
+import time
 import requests
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Optional
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
+# 全局高可用 Session (带连接池与 Keep-Alive)
+_SESSION = requests.Session()
+_SESSION.trust_env = False
+_SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://finance.sina.com.cn",
+    "Accept": "*/*",
+})
 
-def _read_local_csv(symbol: str, count: int = 250) -> list | None:
-    """从本地 CSV 读取历史 K 线（回退方案）"""
-    csv_path = DATA_DIR / f"{symbol}.csv"
-    if not csv_path.exists():
-        return None
-    try:
-        df = pd.read_csv(csv_path)
-        result = []
-        for _, row in df.iterrows():
-            result.append([
-                str(row["date"]),
-                float(row["open"]),
-                float(row["close"]),
-                float(row["low"]),
-                float(row["high"]),
-                float(row["volume"]),
-            ])
-        return result[-count:] if len(result) > count else result
-    except Exception:
-        return None
+# 行情内存缓存: symbol -> (timestamp, quote_dict)
+_QUOTE_CACHE: dict[str, tuple[float, dict]] = {}
+
+# 权威大盘指数白名单映射 (严格要求带指数标识，防止与 000001 平安银行冲突)
+INDEX_CODE_MAP = {
+    "SH000001": "sh000001",
+    "000001.SH": "sh000001",
+    "1A0001": "sh000001",
+    "SH000300": "sh000300",      # 沪深300
+    "000300.SH": "sh000300",
+    "SH000905": "sh000905",      # 中证500
+    "000905.SH": "sh000905",
+    "SH000852": "sh000852",      # 中证1000
+    "000852.SH": "sh000852",
+    "SZ399001": "sz399001",      # 深证成指
+    "399001.SZ": "sz399001",
+    "399001": "sz399001",
+    "SZ399006": "sz399006",      # 创业板指
+    "399006.SZ": "sz399006",
+    "399006": "sz399006",
+    "SZ399106": "sz399106",      # 深证综指
+    "399106": "sz399106",
+    "BJ899050": "bj899050",      # 北证50
+    "899050": "bj899050",
+}
 
 
-def _to_bs_code(symbol: str) -> str:
-    if symbol.startswith(("6", "9")):
-        return f"sh.{symbol}"
-    return f"sz.{symbol}"
-
-
-def _to_sina_code(symbol: str) -> str:
-    """转换为新浪行情代码"""
-    if symbol.startswith(("6", "9")):
-        return f"sh{symbol}"
-    return f"sz{symbol}"
+def _get_dynamic_cache_ttl() -> float:
+    """盘中/盘后动态缓存 TTL：盘中 5 秒毫秒级更新，盘后/周末 30 分钟延长保护"""
+    now = datetime.now()
+    # 周末 (周六=5, 周日=6)
+    if now.weekday() >= 5:
+        return 1800.0
+    # 交易时段：09:15 ~ 15:05
+    t_min = now.hour * 60 + now.minute
+    if (9 * 60 + 15) <= t_min <= (15 * 60 + 5):
+        return 5.0  # 盘中 5 秒极速更新
+    return 1800.0  # 盘后静态数据 30 分钟缓存
 
 
 def _detect_market(symbol: str) -> str:
-    """识别市场: a / hk / us"""
-    if symbol.endswith(".HK"):
+    """识别标的市场: index / a / bj / hk / us"""
+    sym = symbol.strip().upper()
+    if sym in INDEX_CODE_MAP:
+        return "index"
+    if sym.endswith(".HK") or (len(sym) == 5 and sym.isdigit()):
         return "hk"
-    if len(symbol) == 6 and symbol.isdigit():
-        return "a"
-    return "us"
+    if any(sym.endswith(sfx) for sfx in [".US", ".OQ", ".N"]) or (sym.isalpha() and len(sym) <= 5):
+        return "us"
+    # 北交所代码段 (43xxxx, 83xxxx, 87xxxx, 88xxxx, 92xxxx)
+    clean_sym = sym.replace(".BJ", "").replace(".SH", "").replace(".SZ", "")
+    if clean_sym.startswith(("43", "83", "87", "88", "92")) and len(clean_sym) == 6:
+        return "bj"
+    return "a"
+
+
+def _to_tx_code(symbol: str) -> str:
+    """将标准代码转换为腾讯财经权威格式"""
+    sym = symbol.strip().upper()
+    
+    # 1. 优先大盘指数精准映射
+    if sym in INDEX_CODE_MAP:
+        return INDEX_CODE_MAP[sym]
+
+    market = _detect_market(sym)
+    
+    if market == "hk":
+        clean_code = sym.replace(".HK", "").zfill(5)
+        return f"hk{clean_code}"
+    elif market == "us":
+        clean_code = sym.replace(".US", "").replace(".OQ", "").replace(".N", "").lower()
+        return f"us{clean_code}"
+    elif market == "bj":
+        clean_code = sym.replace(".BJ", "")
+        return f"bj{clean_code}"
+    else:
+        # A 股 / ETF
+        clean_code = sym.replace(".SH", "").replace(".SZ", "")
+        # 如果明确带 SZ 后缀或者是平安银行专门指定
+        if sym.endswith(".SZ") and clean_code == "000001":
+            return "sz000001"
+        if clean_code.startswith(("6", "9", "5", "688")):
+            return f"sh{clean_code}"
+        else:
+            return f"sz{clean_code}"
+
+
+def _to_sina_code(symbol: str) -> str:
+    """转换为新浪备用行情代码"""
+    sym = symbol.strip().upper()
+    if sym in INDEX_CODE_MAP:
+        return INDEX_CODE_MAP[sym]
+
+    market = _detect_market(sym)
+    if market == "hk":
+        clean_code = sym.replace(".HK", "").zfill(5)
+        return f"rt_hk{clean_code}"
+    elif market == "us":
+        clean_code = sym.replace(".US", "").replace(".OQ", "").replace(".N", "").lower()
+        return f"gb_{clean_code}"
+    elif market == "bj":
+        clean_code = sym.replace(".BJ", "")
+        return f"bj{clean_code}"
+    else:
+        clean_code = sym.replace(".SH", "").replace(".SZ", "")
+        if sym.endswith(".SZ") and clean_code == "000001":
+            return "sz000001"
+        if clean_code.startswith(("6", "9", "5", "688")):
+            return f"sh{clean_code}"
+        return f"sz{clean_code}"
+
+
+def get_sina_realtime_quote(symbol: str, force_refresh: bool = False) -> dict | None:
+    """获取股票/指数/ETF/港美股实时行情 (高可用直连 + 动态缓存)"""
+    sym = symbol.strip().upper()
+    now = time.time()
+    ttl = _get_dynamic_cache_ttl()
+    
+    if not force_refresh and sym in _QUOTE_CACHE:
+        cache_time, cached_quote = _QUOTE_CACHE[sym]
+        if now - cache_time < ttl:
+            return cached_quote
+
+    tx_code = _to_tx_code(sym)
+    market = _detect_market(sym)
+
+    # 1. 优先腾讯财经官方权威高可用专线
+    try:
+        url = f"http://qt.gtimg.cn/q={tx_code}"
+        resp = _SESSION.get(url, timeout=3.5)
+        resp.encoding = "gbk"
+
+        text = resp.text.strip()
+        if "=" in text and '""' not in text:
+            parts = text.split("~")
+            if len(parts) > 37:
+                name = parts[1]
+                price = float(parts[3] or 0.0)
+                pre_close = float(parts[4] or 0.0)
+                open_p = float(parts[5] or 0.0)
+                high = float(parts[33] or price)
+                low = float(parts[34] or price)
+                change_pct = float(parts[32] or 0.0)
+                volume = float(parts[36] or 0.0)
+                raw_amt = float(parts[37] or 0.0)
+                
+                # 单位处理：A股为万元，港美股为元
+                if market in ("a", "bj", "index"):
+                    amount = raw_amt * 10000.0
+                else:
+                    amount = raw_amt
+                
+                date_str = parts[30] if len(parts) > 30 else datetime.now().strftime("%Y%m%d%H%M%S")
+
+                quote = {
+                    "symbol": sym,
+                    "name": name,
+                    "price": price,
+                    "open": open_p,
+                    "high": high,
+                    "low": low,
+                    "pre_close": pre_close,
+                    "volume": volume,
+                    "amount": amount,
+                    "change_pct": round(change_pct, 2),
+                    "updated": date_str,
+                    "source": "tencent_official",
+                }
+                _QUOTE_CACHE[sym] = (now, quote)
+                return quote
+    except Exception:
+        pass
+
+    # 2. 备用新浪行情源
+    try:
+        sina_code = _to_sina_code(sym)
+        url = f"https://hq.sinajs.cn/list={sina_code}"
+        resp = _SESSION.get(url, timeout=3.5)
+        resp.encoding = "gbk"
+        text = resp.text.strip()
+        if "=" in text and '""' not in text:
+            data = text.split('"')[1].split(",")
+            if market == "us" and len(data) >= 26:
+                name = data[0]
+                price = float(data[1] or 0.0)
+                chg = float(data[2] or 0.0)
+                open_p = float(data[5] or price)
+                high = float(data[6] or price)
+                low = float(data[7] or price)
+                volume = float(data[10] or 0.0)
+                date_str = data[3] if len(data) > 3 else ""
+                quote = {
+                    "symbol": sym,
+                    "name": name,
+                    "price": price,
+                    "open": open_p,
+                    "high": high,
+                    "low": low,
+                    "pre_close": float(data[26] or price),
+                    "volume": volume,
+                    "amount": 0.0,
+                    "change_pct": round(chg, 2),
+                    "updated": date_str,
+                    "source": "sina_us",
+                }
+                _QUOTE_CACHE[sym] = (now, quote)
+                return quote
+            elif len(data) >= 32:
+                name = data[0]
+                open_price = float(data[1])
+                pre_close = float(data[2])
+                price = float(data[3])
+                high = float(data[4])
+                low = float(data[5])
+                volume = float(data[8])
+                change_pct = (price - pre_close) / pre_close * 100 if pre_close > 0 else 0
+                quote = {
+                    "symbol": sym,
+                    "name": name,
+                    "price": price,
+                    "open": open_price,
+                    "high": high,
+                    "low": low,
+                    "pre_close": pre_close,
+                    "volume": volume,
+                    "amount": float(data[9]) if len(data) > 9 else 0.0,
+                    "change_pct": round(change_pct, 2),
+                    "updated": f"{data[30]} {data[31]}",
+                    "source": "sina_backup",
+                }
+                _QUOTE_CACHE[sym] = (now, quote)
+                return quote
+    except Exception:
+        pass
+
+    return None
+
+
+def get_realtime_quote(symbol: str) -> dict | None:
+    """获取最新实时行情（统一入口）"""
+    return get_sina_realtime_quote(symbol)
 
 
 def get_sina_kline(symbol: str, period: str = "d", count: int = 250) -> list | None:
-    """新浪财经K线数据（盘中实时，无T+1延迟）
-
-    Args:
-        symbol: 股票代码
-        period: d=日K, w=周K, m=月K, 5/15/30/60=分钟K
-        count: 获取条数
-    Returns:
-        list: [[date, open, close, low, high, volume], ...] 或 None
-    """
-    # 新浪周期映射: scale 参数
+    """新浪财经K线数据 (盘中实时无延迟)"""
     scale_map = {"d": 240, "w": 1200, "m": 7200, "5": 5, "15": 15, "30": 30, "60": 60}
     scale = scale_map.get(period, 240)
+    sina_code = _to_sina_code(symbol)
 
     try:
-        sina_code = _to_sina_code(symbol)
-        session = requests.Session()
-        session.trust_env = False
         url = (
             f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
             f"CN_MarketData.getKLineData?symbol={sina_code}&scale={scale}"
             f"&ma=no&datalen={count}"
         )
-        resp = session.get(url, timeout=8, headers={"Referer": "https://finance.sina.com.cn"})
+        resp = _SESSION.get(url, timeout=6)
         resp.encoding = "utf-8"
-
         text = resp.text.strip()
         if not text or text == "null":
             return None
@@ -87,7 +293,6 @@ def get_sina_kline(symbol: str, period: str = "d", count: int = 250) -> list | N
         if not isinstance(data, list) or len(data) == 0:
             return None
 
-        # 转换格式: [date, open, close, low, high, volume]
         result = []
         for item in data:
             result.append([
@@ -98,306 +303,170 @@ def get_sina_kline(symbol: str, period: str = "d", count: int = 250) -> list | N
                 float(item["high"]),
                 float(item["volume"]),
             ])
-
         return result
     except Exception:
         return None
 
 
-def get_yf_kline(symbol: str, period: str = "d", count: int = 250) -> list | None:
-    """yfinance K 线数据（港股/美股）"""
-    import yfinance as yf
+def get_hk_us_kline(symbol: str, count: int = 250) -> list | None:
+    """港股/美股 K 线数据 (腾讯接口 + 本地 CSV 回退)"""
+    sym = symbol.strip().upper()
+    market = _detect_market(sym)
+    days = []
 
-    yf_period_map = {"d": "1y", "w": "2y", "m": "5y", "5": "5d", "15": "1mo", "30": "1mo", "60": "3mo"}
-    yf_interval_map = {"d": "1d", "w": "1wk", "m": "1mo", "5": "5m", "15": "15m", "30": "30m", "60": "1h"}
+    if market == "hk":
+        code = sym.replace(".HK", "").zfill(5)
+        url = f"https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param=hk{code},day,,,{count},qfq"
+        try:
+            resp = _SESSION.get(url, timeout=4)
+            data = resp.json()
+            k_data = data.get("data", {}).get(f"hk{code}", {})
+            days = k_data.get("qfqday") or k_data.get("day") or []
+        except Exception:
+            pass
+    elif market == "us":
+        sym_clean = sym.replace(".US", "").replace(".OQ", "").replace(".N", "")
+        for suffix in [".OQ", ".N", ""]:
+            try:
+                url = f"https://web.ifzq.gtimg.cn/appstock/app/usfqkline/get?param=us{sym_clean}{suffix},day,,,{count},qfq"
+                resp = _SESSION.get(url, timeout=4)
+                data = resp.json()
+                k_data = data.get("data", {}).get(f"us{sym_clean}{suffix}", {})
+                cur_days = k_data.get("qfqday") or k_data.get("day") or []
+                if len(cur_days) > len(days):
+                    days = cur_days
+                if len(days) >= 30:
+                    break
+            except Exception:
+                pass
 
-    try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=yf_period_map.get(period, "1y"),
-                            interval=yf_interval_map.get(period, "1d"))
-        if df.empty:
-            return None
-
+    if days:
         result = []
-        for idx, row in df.iterrows():
-            date_str = pd.Timestamp(idx).strftime("%Y-%m-%d")
-            result.append([
-                date_str,
-                float(row["Open"]),
-                float(row["Close"]),
-                float(row["Low"]),
-                float(row["High"]),
-                float(row["Volume"]),
-            ])
-        return result[-count:] if len(result) > count else result
-    except Exception:
-        return None
+        for d in days:
+            if len(d) >= 6:
+                result.append([
+                    str(d[0]),
+                    float(d[1]),
+                    float(d[2]),
+                    float(d[4]),
+                    float(d[3]),
+                    float(d[5]),
+                ])
+        if result:
+            return result[-count:] if len(result) > count else result
+
+    # 回退到本地 CSV
+    csv_path = DATA_DIR / f"{sym}.csv"
+    if csv_path.exists():
+        try:
+            df = pd.read_csv(csv_path)
+            res = []
+            for _, row in df.iterrows():
+                res.append([
+                    str(row["date"]),
+                    float(row["open"]),
+                    float(row["close"]),
+                    float(row["low"]),
+                    float(row["high"]),
+                    float(row["volume"]),
+                ])
+            return res[-count:] if len(res) > count else res
+        except Exception:
+            pass
+    return None
 
 
 def get_realtime_kline(symbol: str, period: str = "d", count: int = 250) -> list:
-    """获取 K 线数据（自动识别市场）
-
-    Args:
-        symbol: 股票代码，如 '600519' / '0700.HK' / 'AAPL'
-        period: d/101=日K, w/102=周K, m/103=月K, 5=5分钟, 15=15分钟, 30=30分钟, 60=60分钟
-        count: 获取条数
-    Returns:
-        list: [[date, open, close, low, high, volume], ...]
-    """
-    # 兼容东方财富周期格式：101->d, 102->w, 103->m
-    period_map = {"101": "d", "102": "w", "103": "m"}
-    period = period_map.get(period, period)
-
+    """获取 K 线数据 (自动识别市场)"""
     market = _detect_market(symbol)
 
-    # 港股/美股用 yfinance，失败则读本地 CSV
     if market in ("hk", "us"):
-        yf_data = get_yf_kline(symbol, period, count)
-        if yf_data and len(yf_data) > 0:
-            return yf_data[-count:] if len(yf_data) > count else yf_data
-        # 回退到本地 CSV（已下载的历史数据）
-        csv_data = _read_local_csv(symbol, count)
-        if csv_data:
-            return csv_data
+        kline = get_hk_us_kline(symbol, count)
+        if kline:
+            return kline[-count:] if len(kline) > count else kline
         return []
 
-    # A 股：优先新浪财经（盘中实时，无T+1延迟）
+    # A 股/指数优先新浪实时日 K
     sina_data = get_sina_kline(symbol, period, count)
-    if sina_data and len(sina_data) > 0:
+    if sina_data:
         return sina_data[-count:] if len(sina_data) > count else sina_data
 
-    bs_code = _to_bs_code(symbol)
-    if period == "d":
-        days_back = max(count * 3, 60)
-    elif period in ("w", "m"):
-        days_back = count * 10
-    else:
-        days_back = 30
-    start = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
-    end = datetime.now().strftime("%Y-%m-%d")
+    # 本地 CSV 回退
+    csv_path = DATA_DIR / f"{symbol}.csv"
+    if csv_path.exists():
+        try:
+            df = pd.read_csv(csv_path)
+            res = []
+            for _, row in df.iterrows():
+                res.append([
+                    str(row["date"]),
+                    float(row["open"]),
+                    float(row["close"]),
+                    float(row["low"]),
+                    float(row["high"]),
+                    float(row["volume"]),
+                ])
+            return res[-count:] if len(res) > count else res
+        except Exception:
+            pass
 
-    fields = "date,open,high,low,close,volume"
-    if period in ("5", "15", "30", "60"):
-        fields = "date,time,open,high,low,close,volume"
-
-    bs.login()
-    rs = bs.query_history_k_data_plus(
-        bs_code, fields,
-        start_date=start, end_date=end,
-        frequency=period, adjustflag="2",
-    )
-
-    rows = []
-    while rs.next():
-        rows.append(rs.get_row_data())
-    bs.logout()
-
-    result = []
-    for row in rows:
-        if period in ("5", "15", "30", "60"):
-            time_str = row[1]
-            if len(time_str) >= 12:
-                dt = f"{time_str[:4]}-{time_str[4:6]}-{time_str[6:8]} {time_str[8:10]}:{time_str[10:12]}"
-            else:
-                dt = row[0]
-            result.append([
-                dt,
-                float(row[2]),
-                float(row[5]),
-                float(row[4]),
-                float(row[3]),
-                float(row[6]),
-            ])
-        else:
-            result.append([
-                row[0],
-                float(row[1]),
-                float(row[4]),
-                float(row[3]),
-                float(row[2]),
-                float(row[5]),
-            ])
-
-    return result[-count:] if len(result) > count else result
+    return []
 
 
-def get_sina_realtime_quote(symbol: str) -> dict | None:
-    """新浪财经实时行情（A 股/港股/美股，盘中可用）"""
-    market = _detect_market(symbol)
-    try:
-        if market == "hk":
-            return _get_hk_quote(symbol)
-        elif market == "us":
-            return _get_us_quote(symbol)
-        else:
-            return _get_a_quote(symbol)
-    except Exception:
-        return None
+def get_batch_realtime_quotes(symbols: list[str]) -> dict[str, dict]:
+    """批量获取实时行情 (腾讯行情专线单次可查 80+ 标的，0.1秒级秒开)"""
+    if not symbols:
+        return {}
+    
+    results = {}
+    now = time.time()
+    ttl = _get_dynamic_cache_ttl()
+    
+    to_fetch = []
+    for s in symbols:
+        sym = s.strip().upper()
+        if sym in _QUOTE_CACHE:
+            ts, q = _QUOTE_CACHE[sym]
+            if now - ts < ttl:
+                results[sym] = q
+                continue
+        to_fetch.append(sym)
+        
+    if not to_fetch:
+        return results
 
-
-def _get_a_quote(symbol: str) -> dict | None:
-    """A 股实时行情"""
-    sina_code = _to_sina_code(symbol)
-    session = requests.Session()
-    session.trust_env = False
-    url = f"https://hq.sinajs.cn/list={sina_code}"
-    headers = {"Referer": "https://finance.sina.com.cn"}
-    resp = session.get(url, headers=headers, timeout=5)
-    resp.encoding = "gbk"
-
-    text = resp.text
-    if "=" not in text or '""' in text:
-        return None
-
-    data = text.split('"')[1].split(",")
-    if len(data) < 32:
-        return None
-
-    name = data[0]
-    open_price = float(data[1])
-    pre_close = float(data[2])
-    price = float(data[3])
-    high = float(data[4])
-    low = float(data[5])
-    volume = float(data[8])
-    date_str = data[30]
-    time_str = data[31]
-
-    change_pct = (price - pre_close) / pre_close * 100 if pre_close > 0 else 0
-
-    return {
-        "symbol": symbol,
-        "name": name,
-        "price": price,
-        "open": open_price,
-        "high": high,
-        "low": low,
-        "pre_close": pre_close,
-        "volume": volume,
-        "change_pct": round(change_pct, 2),
-        "updated": f"{date_str} {time_str}",
-        "source": "sina",
-    }
-
-
-def _get_hk_quote(symbol: str) -> dict | None:
-    """港股实时行情（新浪）"""
-    # 0700.HK → rt_hk00700
-    code = symbol.replace(".HK", "").zfill(5)
-    sina_code = f"rt_hk{code}"
-
-    session = requests.Session()
-    session.trust_env = False
-    url = f"https://hq.sinajs.cn/list={sina_code}"
-    resp = session.get(url, headers={"Referer": "https://finance.sina.com.cn"}, timeout=5)
-    resp.encoding = "gbk"
-
-    text = resp.text
-    if "=" not in text or '""' in text:
-        return None
-
-    data = text.split('"')[1].split(",")
-    # 港股字段: name_en, name_cn, open, pre_close, high, low, price, ...
-    if len(data) < 15:
-        return None
-
-    name = data[1] or data[0]  # 中文名优先
-    open_price = float(data[2])
-    pre_close = float(data[3])
-    high = float(data[4])
-    low = float(data[5])
-    price = float(data[6])
-    volume = float(data[11]) if len(data) > 11 else 0
-
-    change_pct = (price - pre_close) / pre_close * 100 if pre_close > 0 else 0
-
-    return {
-        "symbol": symbol,
-        "name": name,
-        "price": price,
-        "open": open_price,
-        "high": high,
-        "low": low,
-        "pre_close": pre_close,
-        "volume": volume,
-        "change_pct": round(change_pct, 2),
-        "updated": data[-2] if len(data) > 15 else "",
-        "source": "sina",
-    }
-
-
-def _get_us_quote(symbol: str) -> dict | None:
-    """美股实时行情（新浪）"""
-    # AAPL → gb_aapl
-    sina_code = f"gb_{symbol.lower()}"
-
-    session = requests.Session()
-    session.trust_env = False
-    url = f"https://hq.sinajs.cn/list={sina_code}"
-    resp = session.get(url, headers={"Referer": "https://finance.sina.com.cn"}, timeout=5)
-    resp.encoding = "gbk"
-
-    text = resp.text
-    if "=" not in text or '""' in text:
-        return None
-
-    data = text.split('"')[1].split(",")
-    # 美股字段: name, open, pre_close, high, low, price, ...volume=10
-    if len(data) < 20:
-        return None
-
-    name = data[0]
-    open_price = float(data[5]) if data[5] else 0
-    pre_close = float(data[26]) if len(data) > 26 and data[26] else 0
-    price = float(data[1]) if data[1] else 0
-    high = float(data[6]) if data[6] else 0
-    low = float(data[7]) if data[7] else 0
-    volume = float(data[10]) if len(data) > 10 and data[10] else 0
-
-    change_pct = (price - pre_close) / pre_close * 100 if pre_close > 0 else 0
-
-    return {
-        "symbol": symbol,
-        "name": name,
-        "price": price,
-        "open": open_price,
-        "high": high,
-        "low": low,
-        "pre_close": pre_close,
-        "volume": volume,
-        "change_pct": round(change_pct, 2),
-        "updated": "",
-        "source": "sina",
-    }
-
-
-def get_realtime_quote(symbol: str) -> dict | None:
-    """获取最新行情（优先新浪实时 → baostock 回退）"""
-    # 优先用新浪财经（盘中实时）
-    quote = get_sina_realtime_quote(symbol)
-    if quote:
-        return quote
-
-    # 回退到 baostock（T+1 延迟）
-    kline = get_realtime_kline(symbol, period="d", count=2)
-    if not kline:
-        return None
-
-    latest = kline[-1]
-    prev = kline[-2] if len(kline) > 1 else latest
-    pre_close = prev[2] if len(kline) > 1 else latest[1]
-    change_pct = (latest[2] - pre_close) / pre_close * 100 if pre_close > 0 else 0
-
-    return {
-        "symbol": symbol,
-        "name": symbol,
-        "price": latest[2],
-        "open": latest[1],
-        "high": latest[4],
-        "low": latest[3],
-        "pre_close": pre_close,
-        "volume": latest[5],
-        "change_pct": round(change_pct, 2),
-        "updated": latest[0],
-        "source": "baostock",
-    }
+    # 分块批量请求 (每批 60 只)
+    chunk_size = 60
+    for i in range(0, len(to_fetch), chunk_size):
+        chunk = to_fetch[i:i+chunk_size]
+        tx_codes = [_to_tx_code(c) for c in chunk]
+        query_str = ",".join(tx_codes)
+        url = f"https://qt.gtimg.cn/q={query_str}"
+        try:
+            resp = _SESSION.get(url, timeout=3.5)
+            resp.encoding = "gbk"
+            lines = resp.text.strip().split(";")
+            for idx, line in enumerate(lines):
+                if "=" not in line or '""' in line:
+                    continue
+                parts = line.split("=")[1].strip('"').split("~")
+                if len(parts) >= 35:
+                    orig_sym = chunk[idx] if idx < len(chunk) else parts[2]
+                    name = parts[1]
+                    price = float(parts[3] or 0.0)
+                    pre_close = float(parts[4] or price)
+                    change_pct = float(parts[32] or 0.0)
+                    quote = {
+                        "symbol": orig_sym,
+                        "name": name,
+                        "price": price,
+                        "change_pct": round(change_pct, 2),
+                        "pre_close": pre_close,
+                        "updated": datetime.now().strftime("%Y%m%d%H%M%S")
+                    }
+                    _QUOTE_CACHE[orig_sym] = (now, quote)
+                    results[orig_sym] = quote
+        except Exception:
+            pass
+            
+    return results

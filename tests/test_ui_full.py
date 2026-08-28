@@ -22,7 +22,7 @@ import pytest
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "..", "screenshots")
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:18000"
 
 # 环境变量 UI_SHOT=0 时禁用截图，节省 20-50 秒
 _UI_SHOT_ENABLED = os.environ.get("UI_SHOT", "1") != "0"

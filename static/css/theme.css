@@ -1,0 +1,1076 @@
+/* ==========================================================================
+   🎯 全域动态设计系统 (Theme & Design Tokens System)
+   支持三大独立业务系统物理隔离视觉：
+   1. theme-alpha  : 华尔街白金浅色实盘操盘风格
+   2. theme-review : 深空紫水晶小红书 1:1 复盘中枢风格
+   3. theme-quant  : 瑞士石板香槟金量化回测引擎风格
+   ========================================================================== */
+
+/* ==================== 1. 全局设计变量定义 ==================== */
+:root {
+  --sys-font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --sys-font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
+  --sys-card-radius: 8px;
+  --sys-transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 🎯 系统一主题：华尔街白金浅色实战操盘 (Wall Street Platinum Light) */
+body.theme-alpha {
+  --sys-bg-app: #f4f6f8;
+  --sys-bg-header: #ffffff;
+  --sys-bg-nav: #eef2f6;
+  --sys-bg-card: #ffffff;
+  --sys-bg-panel: #ffffff;
+  --sys-bg-card-inner: #f8fafc;
+  --sys-bg-hover: #e2e8f0;
+  
+  --sys-input-bg: #ffffff;
+  --sys-input-border: #cbd5e1;
+  --sys-border: #d8e2ec;
+  --sys-border-hover: #0969da;
+  --sys-border-subtle: #edf2f7;
+  --sys-modal-mask: rgba(15, 23, 42, 0.5);
+  
+  --sys-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --sys-shadow-card: 0 2px 10px rgba(0, 0, 0, 0.06);
+  --sys-shadow-popover: 0 12px 36px rgba(15, 23, 42, 0.15);
+  
+  --sys-popover-bg: #ffffff;
+  --sys-popover-border: #d0d7de;
+  --sys-popover-hover: #f3f4f6;
+  --sys-code-bg: #f6f8fa;
+  --sys-drawer-bg: #f8fafc;
+  
+  --sys-text-title: #0f172a;
+  --sys-text-primary: #1e293b;
+  --sys-text-sub: #64748b;
+  
+  --sys-accent: #0969da;
+  --sys-accent-hover: #0756b3;
+  --sys-accent-sub: #2188ff;
+  --sys-gradient-title: linear-gradient(135deg, #0969da 0%, #1a7f37 100%);
+  --sys-accent-glow: rgba(9, 105, 218, 0.18);
+}
+
+/* 👑 系统二主题：深空紫水晶与琥珀金 (WorkBuddy Deep Cosmic Purple & Gold) */
+body.theme-review {
+  --sys-bg-app: #090813;
+  --sys-bg-header: #0f0c1d;
+  --sys-bg-nav: #16122a;
+  --sys-bg-card: #15102a;
+  --sys-bg-panel: #16122a;
+  --sys-bg-card-inner: #1e173b;
+  --sys-bg-hover: #2a204e;
+  
+  --sys-input-bg: #1e173b;
+  --sys-input-border: #35265e;
+  --sys-border: #35265e;
+  --sys-border-hover: #8957e5;
+  --sys-border-subtle: #241b40;
+  --sys-modal-mask: rgba(0, 0, 0, 0.75);
+  
+  --sys-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --sys-shadow-card: 0 4px 20px rgba(137, 87, 229, 0.08);
+  --sys-shadow-popover: 0 16px 45px rgba(0, 0, 0, 0.75);
+  
+  --sys-popover-bg: #16122a;
+  --sys-popover-border: #35265e;
+  --sys-popover-hover: #221a42;
+  --sys-code-bg: #110d22;
+  --sys-drawer-bg: #0f0c1d;
+  
+  --sys-text-title: #f5f0ff;
+  --sys-text-primary: #e6ddff;
+  --sys-text-sub: #a497c6;
+  
+  --sys-accent: #8957e5;
+  --sys-accent-hover: #a371f7;
+  --sys-accent-sub: #d2a8ff;
+  --sys-gradient-title: linear-gradient(135deg, #d2a8ff 0%, #f0883e 100%);
+  --sys-accent-glow: rgba(137, 87, 229, 0.35);
+}
+
+/* 📈 系统三主题：石板灰与晨曦流火金 (Slate Champagne Gold & Carbon) */
+body.theme-quant {
+  --sys-bg-app: #0d1117;
+  --sys-bg-header: #161b22;
+  --sys-bg-nav: #1c2128;
+  --sys-bg-card: #161b22;
+  --sys-bg-panel: #161b22;
+  --sys-bg-card-inner: #21262d;
+  --sys-bg-hover: #30363d;
+  
+  --sys-input-bg: #21262d;
+  --sys-input-border: #30363d;
+  --sys-border: #30363d;
+  --sys-border-hover: #f59e0b;
+  --sys-border-subtle: #21262d;
+  --sys-modal-mask: rgba(0, 0, 0, 0.8);
+  
+  --sys-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --sys-shadow-card: 0 4px 16px rgba(0, 0, 0, 0.25);
+  --sys-shadow-popover: 0 16px 45px rgba(0, 0, 0, 0.85);
+  
+  --sys-popover-bg: #161b22;
+  --sys-popover-border: #30363d;
+  --sys-popover-hover: #262c36;
+  --sys-code-bg: #090d13;
+  --sys-drawer-bg: #0d1117;
+  
+  --sys-text-title: #ffffff;
+  --sys-text-primary: #e6edf3;
+  --sys-text-sub: #8b949e;
+  
+  --sys-accent: #f59e0b;
+  --sys-accent-hover: #d97706;
+  --sys-accent-sub: #fbbf24;
+  --sys-gradient-title: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  --sys-accent-glow: rgba(245, 158, 11, 0.25);
+}
+
+
+
+/* ==================== 2. 全局基础重置与排版 ==================== */
+* { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+}
+
+body {
+  font-family: var(--sys-font-sans);
+  background: var(--sys-bg-app);
+  color: var(--sys-text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  transition: background 0.25s ease, color 0.25s ease;
+  overflow-x: hidden;
+}
+
+/* ==================== 3. 顶栏导航与三大系统切换器 (Header & Switcher) ==================== */
+.header {
+  background: var(--sys-bg-header);
+  border-bottom: 1px solid var(--sys-border);
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-height: 52px;
+  box-shadow: var(--sys-shadow);
+  transition: var(--sys-transition-base);
+  user-select: none;
+  overflow: visible !important;
+  position: relative;
+  z-index: 1000;
+}
+
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.header-left h1 {
+  font-size: 16px;
+  font-weight: 800;
+  background: var(--sys-gradient-title);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.2px;
+}
+
+.header-left .tag {
+  background: var(--sys-bg-nav);
+  color: var(--sys-accent);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--sys-border);
+}
+
+/* 中间：核心三大主系统切换器 (紧凑平整) */
+.sys-switcher-container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  background: var(--sys-bg-nav);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--sys-border);
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sys-card {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--sys-text-sub);
+  font-size: 12px;
+  font-weight: 600;
+  transition: var(--sys-transition-base);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sys-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--sys-text-title);
+}
+
+.sys-card-icon {
+  font-size: 14px;
+}
+
+.sys-card-title {
+  font-weight: 700;
+}
+
+/* 系统 1 激活高光 */
+.sys-card-alpha.active {
+  background: #ffffff !important;
+  border-color: #0969da !important;
+  color: #0969da !important;
+  box-shadow: 0 2px 8px rgba(9, 105, 218, 0.18) !important;
+}
+
+/* 系统 2 激活高光 */
+.sys-card-review.active {
+  background: linear-gradient(135deg, rgba(137, 87, 229, 0.45) 0%, rgba(210, 153, 34, 0.35) 100%) !important;
+  border-color: #bc8cff !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(188, 140, 255, 0.35), inset 0 0 8px rgba(188, 140, 255, 0.2) !important;
+}
+
+/* 系统 3 激活高光 */
+.sys-card-quant.active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.35) 0%, rgba(249, 115, 22, 0.45) 100%) !important;
+  border-color: #f59e0b !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.3), inset 0 0 8px rgba(245, 158, 11, 0.2) !important;
+}
+
+.sys-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.badge-alpha { background: rgba(9, 105, 218, 0.12); color: #0969da; border: 1px solid rgba(9, 105, 218, 0.3); }
+.badge-review { background: rgba(188, 140, 255, 0.2); color: #d2a8ff; border: 1px solid rgba(188, 140, 255, 0.4); }
+.badge-quant { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+
+/* 同步卡片与右侧状态栏 */
+.header-sync-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--sys-bg-nav);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--sys-border);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sync-status-badge {
+  font-size: 11px;
+  color: #2da44e;
+  font-weight: 600;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--sys-text-sub);
+  background: var(--sys-bg-nav);
+  border: 1px solid var(--sys-border);
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #3fb950;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #3fb950;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-badge {
+  background: var(--sys-bg-nav);
+  border: 1px solid var(--sys-border);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sys-text-title);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.logout-btn {
+  background: rgba(248, 81, 73, 0.1);
+  color: #f85149;
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--sys-transition-base);
+}
+
+.logout-btn:hover {
+  background: #f85149;
+  color: #ffffff;
+}
+
+.login-btn-top {
+  background: var(--sys-accent);
+  color: #ffffff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--sys-transition-base);
+}
+
+/* 响应式自适应断点优化 (保障 100% 原始比例下零溢出) */
+@media (max-width: 1400px) {
+  .sys-badge {
+    display: none !important;
+  }
+}
+@media (max-width: 1200px) {
+  .header-sync-box {
+    display: none !important;
+  }
+  .header-left .tag {
+    display: none !important;
+  }
+}
+
+
+/* ==================== 4. 专属横幅 Hero Banner ==================== */
+.sys-hero-banner {
+  padding: 10px 20px;
+  margin: 12px 20px 0 20px;
+  border-radius: var(--sys-card-radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.hero-alpha {
+  background: linear-gradient(90deg, rgba(9, 105, 218, 0.08) 0%, rgba(26, 127, 55, 0.08) 100%);
+  border: 1px solid var(--sys-border);
+  border-left: 4px solid #0969da;
+}
+
+.hero-review {
+  background: linear-gradient(90deg, rgba(137, 87, 229, 0.14) 0%, rgba(227, 179, 65, 0.12) 100%);
+  border: 1px solid rgba(188, 140, 255, 0.35);
+  border-left: 4px solid #bc8cff;
+}
+
+.hero-quant {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, rgba(249, 115, 22, 0.12) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-left: 4px solid #f59e0b;
+}
+
+/* 横幅专属交互按钮 (彻底解决纯展示标签像按钮却不可点的问题) */
+.hero-action-btn {
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  user-select: none;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.hero-action-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.hero-action-btn:active {
+  transform: translateY(1px);
+}
+
+.hero-action-btn i {
+  font-size: 13px;
+}
+
+/* 横幅内特性说明独立小标签 */
+.hero-pill-badge {
+  font-size: 11px;
+  color: var(--sys-text-sub);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+
+/* ==================== 5. 子标签页导航 (Tabs) ==================== */
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--sys-bg-nav);
+  padding: 4px 20px;
+  border-bottom: 1px solid var(--sys-border);
+  transition: var(--sys-transition-base);
+}
+
+.tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sys-text-sub);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: var(--sys-transition-base);
+}
+
+.tab:hover {
+  color: var(--sys-text-title);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tab.active {
+  color: var(--sys-accent);
+  background: var(--sys-bg-card);
+  border: 1px solid var(--sys-border);
+  font-weight: 700;
+  box-shadow: var(--sys-shadow-card);
+}
+
+/* ==================== 6. 面板与容器体系 (Panels & Layout) ==================== */
+.container {
+  padding: 16px 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.tab-content,
+.alpha-sub-content {
+  display: none;
+}
+
+.tab-content.active,
+.alpha-sub-content.active {
+  display: block !important;
+  animation: fadeIn 0.2s ease-out;
+}
+
+
+.system-root-section {
+  display: block;
+}
+
+.panel {
+  background: var(--sys-bg-card);
+  border: 1px solid var(--sys-border);
+  border-radius: var(--sys-card-radius);
+  padding: 18px;
+  box-shadow: var(--sys-shadow-card);
+  transition: var(--sys-transition-base);
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sys-text-title);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ==================== 7. 按钮体系 (Buttons) ==================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--sys-accent);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--sys-transition-base);
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: var(--sys-accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-blue {
+  background: #0969da;
+  color: #ffffff;
+}
+.btn-blue:hover {
+  background: #0756b3;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--sys-text-primary);
+  border: 1px solid var(--sys-border);
+}
+.btn-outline:hover {
+  background: var(--sys-bg-hover);
+  border-color: var(--sys-text-sub);
+}
+
+/* ==================== 8. 表格体系 (Tables) ==================== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  background: var(--sys-bg-nav);
+  color: var(--sys-text-sub);
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--sys-border);
+}
+
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--sys-border-subtle);
+  color: var(--sys-text-primary);
+}
+
+tr:hover td {
+  background: var(--sys-bg-card-inner);
+}
+
+/* ==================== 9. 表单与控件体系 (Forms) ==================== */
+.form-row {
+  margin-bottom: 14px;
+}
+
+.form-row label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sys-text-sub);
+  margin-bottom: 6px;
+}
+
+.form-row input, .form-row select, select, input[type="text"], input[type="password"], input[type="number"] {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--sys-bg-card-inner);
+  border: 1px solid var(--sys-border);
+  border-radius: 6px;
+  color: var(--sys-text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: var(--sys-transition-base);
+}
+
+.form-row input:focus, select:focus {
+  border-color: var(--sys-accent);
+  box-shadow: 0 0 0 2px var(--sys-accent-glow);
+}
+
+/* ==================== 10. 登录覆盖层与弹窗 (Auth Overlay & Modals) ==================== */
+.login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.login-box {
+  background: var(--sys-bg-card);
+  border: 1px solid var(--sys-border);
+  border-radius: 12px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.25s ease-out;
+}
+
+.login-box h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--sys-text-title);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.login-box .subtitle {
+  font-size: 12px;
+  color: var(--sys-text-sub);
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.login-box .error-msg {
+  color: #f85149;
+  font-size: 12px;
+  min-height: 18px;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.login-box .switch {
+  font-size: 12px;
+  color: var(--sys-text-sub);
+  text-align: center;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Toast 提示 */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #161b22;
+  color: #ffffff;
+  border: 1px solid #30363d;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast.success { border-color: #3fb950; background: #0d2818; }
+.toast.error { border-color: #f85149; background: #351314; }
+
+/* 关键帧动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==================== 模态弹窗与实色面板标准组件 (全域三系统自适应) ==================== */
+.modal-solid-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--sys-modal-mask);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+}
+
+.modal-adaptive-card {
+  background: var(--sys-bg-card) !important;
+  border: 1px solid var(--sys-border) !important;
+  color: var(--sys-text-primary) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--sys-shadow-popover) !important;
+  transition: var(--sys-transition-base);
+}
+
+.popover-adaptive {
+  background: var(--sys-popover-bg) !important;
+  border: 1px solid var(--sys-popover-border) !important;
+  box-shadow: var(--sys-shadow-popover) !important;
+  color: var(--sys-text-primary) !important;
+  border-radius: 10px !important;
+  transition: var(--sys-transition-base);
+}
+
+.popover-item {
+  color: var(--sys-text-primary) !important;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.popover-item:hover {
+  background: var(--sys-popover-hover) !important;
+}
+
+.drawer-adaptive {
+  background: var(--sys-drawer-bg) !important;
+  border-left: 1px solid var(--sys-border) !important;
+  box-shadow: var(--sys-shadow-popover) !important;
+  color: var(--sys-text-primary) !important;
+}
+
+/* ==================== 智能联想选股下拉面板 (全域自适应) ==================== */
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--sys-popover-bg) !important;
+  border: 1px solid var(--sys-popover-border) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--sys-shadow-popover) !important;
+  z-index: 9999 !important;
+  display: none;
+}
+
+.stock-search-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--sys-border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.15s ease;
+}
+
+.stock-search-item:hover {
+  background: var(--sys-popover-hover) !important;
+}
+
+.stock-search-item:last-child {
+  border-bottom: none;
+}
+
+/* ==================== AI 对话与研报术语点词成译 (Term Tooltip & Click Popover) ==================== */
+.term-tip {
+  color: var(--sys-accent) !important;
+  font-weight: 700;
+  cursor: pointer;
+  border-bottom: 1.5px dashed var(--sys-accent);
+  padding: 0 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(9,105,218,0.08);
+}
+
+.term-tip:hover {
+  background: rgba(9,105,218,0.18) !important;
+  border-bottom-style: solid;
+}
+
+.term-popover-card {
+  position: absolute;
+  z-index: 10005;
+  width: 320px;
+  max-width: 90vw;
+  background: var(--sys-popover-bg) !important;
+  border: 1px solid var(--sys-popover-border) !important;
+  box-shadow: var(--sys-shadow-popover) !important;
+  color: var(--sys-text-primary) !important;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  animation: fadeIn 0.15s ease;
+}
+
+/* ==================== 全系统标题大白话详解交互徽章 ==================== */
+.clickable-feature-title {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+}
+
+.clickable-feature-title:hover {
+  background: rgba(9,105,218,0.08) !important;
+  color: var(--sys-accent) !important;
+}
+
+.feature-info-btn {
+  font-size: 15px;
+  color: var(--sys-accent);
+  opacity: 0.75;
+  transition: all 0.15s ease;
+}
+
+.clickable-feature-title:hover .feature-info-btn {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+
+
+
+
+.form-row label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sys-text-sub);
+  margin-bottom: 6px;
+}
+
+.form-row input[type="text"],
+.form-row input[type="number"],
+.form-row textarea,
+.form-row select {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--sys-input-bg, #ffffff) !important;
+  border: 1px solid var(--sys-input-border, #cbd5e1) !important;
+  border-radius: 6px !important;
+  padding: 9px 12px !important;
+  color: var(--sys-text-primary, #0f172a) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.form-row input[type="text"]:focus,
+.form-row input[type="number"]:focus,
+.form-row textarea:focus,
+.form-row select:focus {
+  border-color: var(--sys-accent) !important;
+  box-shadow: 0 0 0 3px var(--sys-accent-glow) !important;
+}
+
+/* ==================== 8. 全局日期选择器 (Dark Mode & 高清发光日历图标) ==================== */
+html, body, :root {
+  color-scheme: dark;
+}
+
+input[type="date"] {
+  color-scheme: dark !important;
+  background: var(--sys-bg-card-inner, #161b22) !important;
+  color: #58a6ff !important;
+  border: 1px solid var(--sys-border, #30363d) !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  outline: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+input[type="date"]:hover {
+  border-color: var(--sys-accent, #388bfd) !important;
+  background: var(--sys-bg-hover, #21262d) !important;
+}
+
+input[type="date"]:focus {
+  border-color: var(--sys-accent, #388bfd) !important;
+  box-shadow: 0 0 0 2px var(--sys-accent-glow, rgba(56, 139, 253, 0.25)) !important;
+}
+
+/* 核心：彻底解决深色背景下黑色日历图标看不清的问题 (高亮亮白发光图标按钮) */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer !important;
+  filter: invert(1) brightness(2.5) contrast(1.5) drop-shadow(0 0 3px #58a6ff) !important;
+  opacity: 1 !important;
+  width: 20px !important;
+  height: 20px !important;
+  padding: 3px !important;
+  margin-left: 8px !important;
+  border-radius: 4px !important;
+  background-color: rgba(88, 166, 255, 0.2) !important;
+  border: 1px solid rgba(88, 166, 255, 0.4) !important;
+  transition: all 0.2s ease !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  background-color: #388bfd !important;
+  filter: invert(1) brightness(3) drop-shadow(0 0 8px #58a6ff) !important;
+  transform: scale(1.15) !important;
+}
+
+/* 日期包裹容器美化 */
+.date-selector-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--sys-bg-card-inner, #161b22);
+  border: 1px solid var(--sys-border, #30363d);
+  padding: 4px 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.date-selector-pill:hover {
+  border-color: var(--sys-accent, #388bfd);
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+.date-selector-pill i {
+  color: #58a6ff;
+  font-size: 16px;
+  filter: drop-shadow(0 0 4px rgba(88, 166, 255, 0.5));
+}
+
+/* ==================== 9. 复盘菜单功能悬停气泡卡片 (Hover Popover Tooltip) ==================== */
+.tab-with-hover-card {
+  position: relative;
+  cursor: pointer;
+}
+
+/* 动态挂载的全局悬停卡片容器 (加宽至340px，内容分层更清晰专业) */
+#reviewSubTabHoverCard {
+  position: fixed;
+  z-index: 10050;
+  width: 340px;
+  background: rgba(13, 17, 23, 0.98);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#reviewSubTabHoverCard.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#reviewSubTabHoverCard .hover-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+#reviewSubTabHoverCard .hover-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #58a6ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#reviewSubTabHoverCard .hover-card-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(88, 166, 255, 0.18);
+  color: #58a6ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(88, 166, 255, 0.35);
+}
+
+#reviewSubTabHoverCard .hover-card-desc {
+  font-size: 12px;
+  color: #e6edf3;
+  line-height: 1.6;
+}
+
+#reviewSubTabHoverCard .hover-card-scene {
+  font-size: 11.5px;
+  color: #c9d1d9;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 3px solid #e3b341;
+  line-height: 1.55;
+}
+
+
+

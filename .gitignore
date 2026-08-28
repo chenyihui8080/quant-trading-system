@@ -16,8 +16,12 @@ env/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+review_workbench/data/*.db
+review_workbench/data/*.db-wal
+review_workbench/data/*.db-shm
 logs/
 *.log
+
 
 # 环境变量（含密钥）
 .env

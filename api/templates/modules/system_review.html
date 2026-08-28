@@ -1,0 +1,412 @@
+<!-- ==================== 系统二：交易复盘与智能体中枢 (独立根容器) ==================== -->
+<div id="sysSectionReview" class="system-root-section" style="display:none">
+  <!-- 专属氛围横幅 (极简实战·去除冗余口号) -->
+  <div id="heroBannerReview" class="sys-hero-banner hero-review">
+    <div style="display:flex;align-items:center;gap:8px">
+      <i class="ri-vip-crown-fill" style="font-size:20px;color:#e3b341"></i>
+      <b class="clickable-feature-title" onclick="openFeatureGuideModal('review_main')" style="font-size:15px;color:var(--sys-text-title);display:inline-flex;align-items:center;gap:6px">
+        <span>交易复盘工作台</span>
+        <i class="ri-information-line feature-info-btn"></i>
+      </b>
+    </div>
+
+    <!-- 右侧专属交互按钮 -->
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="hero-action-btn" onclick="openAgentMatrixModal()" style="color:#d2a8ff;background:rgba(188,140,255,0.15);border-color:rgba(188,140,255,0.35)">
+        <i class="ri-robot-line"></i>
+        <span>智能体分工</span>
+      </button>
+      <button class="hero-action-btn" onclick="openPlaybookModal()" style="color:#e3b341;background:rgba(227,179,65,0.15);border-color:rgba(227,179,65,0.35)">
+        <i class="ri-trophy-line"></i>
+        <span>六大闭环战法</span>
+      </button>
+    </div>
+  </div>
+
+
+
+  <!-- 复盘子分类独立切换导航条 (带超级保姆级大白话悬停气泡介绍与详情直达) -->
+  <div class="tabs" id="reviewSubTabs" style="background:var(--sys-bg-nav);border-bottom:1px solid var(--sys-border);display:flex;gap:4px;overflow-x:auto;padding:6px 16px">
+    <div class="tab active tab-with-hover-card" id="rwSubBtnOverview" onclick="switchReviewSubTab('overview')" 
+         data-tooltip-title="复盘总览看板" 
+         data-tooltip-badge="全天多空全局定调"
+         data-tooltip-desc="收盘后一分钟看懂大盘是真涨还是假涨。一眼看清两市是放量还是缩量、上涨股票多还是下跌股票多、主力今天把大盘顶上去到底用了多少真金白银。"
+         data-tooltip-scene="保姆级实战指南：如果涨跌中位数大于1%且成交额放大，代表普涨行情可放胆做多；如果指数红但中位数飘绿，代表赚指数亏钱，必须严控仓位防守。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-bar-chart-2-line"></i>
+      <span>复盘总览看板</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnPortfolio" onclick="switchReviewSubTab('portfolio')" 
+         data-tooltip-title="实盘持仓与自选专属复盘" 
+         data-tooltip-badge="手把手保姆级做T"
+         data-tooltip-desc="自动连接您在东财的实盘持仓，每只票都给出具体的操作药方：被套了在哪接、拉升到几块钱该减仓、建议做T的股数和金额全部算好，绝不让您凭感觉盲目死扛。"
+         data-tooltip-scene="保姆级实战指南：早盘急跌到系统建议的【买入支撑位】先买入底仓，午后反弹两三个点到【卖出压力位】立即把底仓卖掉，零风险赚取差价拉低成本！"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="color:#58a6ff;font-weight:700;display:flex;align-items:center;gap:4px">
+      <i class="ri-briefcase-4-line"></i>
+      <span>我的持仓与自选专属复盘</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnSector" onclick="switchReviewSubTab('sector')" 
+         data-tooltip-title="核心题材板块深度穿透" 
+         data-tooltip-badge="主力热钱流向雷达"
+         data-tooltip-desc="穿透看清今天主力抱团的大本营在哪个行业。直接展示前排领涨龙头是谁、跟风小弟是谁、背后是因为国家出了什么重磅政策还在外盘映射。"
+         data-tooltip-scene="保姆级实战指南：只买板块里排名前两名的身位龙头或容量中军，千万不要碰后排杂毛，主线不倒龙头最安全。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="color:#e3b341;font-weight:700;display:flex;align-items:center;gap:4px">
+      <i class="ri-fire-fill"></i>
+      <span>核心题材板块深度穿透</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnFunnel" onclick="switchReviewSubTab('funnel')" 
+         data-tooltip-title="4层漏斗与核心观察池" 
+         data-tooltip-badge="全市场5200只选优"
+         data-tooltip-desc="把全市场 5200 多只股票像淘金一样筛 4 遍：第1层过滤死气沉沉的僵尸股，第2层过滤主力净流出的弱势股，第3层过滤假突破假放量，第4层铁血排雷剔除退市造假股。"
+         data-tooltip-scene="保姆级实战指南：4层全通关的票就是明天的黄金备选池，明天早盘 9:25 集合竞价重点从这里面抓弱转强龙头！"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-filter-3-line"></i>
+      <span>4层漏斗与核心观察池</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnNews" onclick="switchReviewSubTab('news')" 
+         data-tooltip-title="情报搜集与证据库" 
+         data-tooltip-badge="财经要闻90%去重"
+         data-tooltip-desc="把全网铺天盖地的新闻进行高精度清洗，剔除标题党和重复水文，提取出真正会影响明天股价的产业催化政策，并自动关联到您的自选股。"
+         data-tooltip-scene="保姆级实战指南：点击任何一条新闻证据标签，可以直接查看原始公告与关联龙头股票，知其然更知其所以然。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-newspaper-line"></i>
+      <span>情报搜集与证据库</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnAttr" onclick="switchReviewSubTab('attribution')" 
+         data-tooltip-title="逻辑归因与产业链图谱" 
+         data-tooltip-badge="查明个股为何暴涨"
+         data-tooltip-desc="打破砂锅问到底：今天这只股票涨停到底是因为什么？是连板情绪驱动、美股映射刺激、突发行业利好、还是量化主力暗中抢筹，四类严格互斥，杜绝买糊涂票。"
+         data-tooltip-scene="保姆级实战指南：优选【连板土特产】和【突发重磅利好驱动】的品种，避开纯蹭概念无资金认同的虚假脉冲。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-links-line"></i>
+      <span>逻辑归因与产业链图谱</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnEvil" onclick="switchReviewSubTab('evil')" 
+         data-tooltip-title="邪修深度分析" 
+         data-tooltip-badge="捕捉游资地天反包"
+         data-tooltip-desc="专抓市面上【没有新闻、没有研报、没有公告】，但是在盘中突然被神秘大单暴力抢筹、直线拉板、地天板反包的非正常操盘痕迹。"
+         data-tooltip-scene="保姆级实战指南：这属于超短激进战法，识别到游资点火信号后小仓位跟风，次日冲高即撤，绝不恋战。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-spy-line"></i>
+      <span>邪修深度分析</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnRiskMine" onclick="switchReviewSubTab('risk_mine')" 
+         data-tooltip-title="一键排雷专家" 
+         data-tooltip-badge="买入前必查安全带"
+         data-tooltip-desc="买股票最怕踩雷退市或财务造假。输入任何股票代码，1秒钟排查立案调查、大股东质押平仓、违规减持、ST退市风险与审计非标问题。"
+         data-tooltip-scene="保姆级实战指南：只要排雷结果显示【高危】或【ST警示】，哪怕技术图形走得再漂亮也坚决一股不买！"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-shield-check-line"></i>
+      <span>一键排雷专家</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnBroker" onclick="switchReviewSubTab('broker_decoder')" 
+         data-tooltip-title="从交割单到战法" 
+         data-tooltip-badge="解码实战买卖得失"
+         data-tooltip-desc="把您的券商对账单或交割单文字直接粘贴进来，系统会自动在分时图上画出买入点和卖出点，分析胜率，把随缘交易升级为标准化战法。"
+         data-tooltip-scene="保姆级实战指南：长期记录与复盘能帮您戒掉【追高被套】和【卖飞龙头】的坏习惯。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-file-list-3-line"></i>
+      <span>从交割单到战法</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnPre" onclick="switchReviewSubTab('premarket')" 
+         data-tooltip-title="盘前博弈预案" 
+         data-tooltip-badge="早盘09:15必读计划"
+         data-tooltip-desc="根据昨夜美股大宗走势与全市场复盘定调，在早盘开盘前自动为您生成今日的作战路线图：今天该防守空仓还是大举进攻，开盘前 15 分钟该看什么指标。"
+         data-tooltip-scene="保姆级实战指南：每天早上 09:15 进来看一眼预案，开盘时按部就班执行，不慌不乱。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-sun-foggy-line"></i>
+      <span>盘前博弈预案</span>
+    </div>
+
+    <div class="tab tab-with-hover-card" id="rwSubBtnAlert" onclick="switchReviewSubTab('microstructure')" 
+         data-tooltip-title="高频量价异动闪电" 
+         data-tooltip-badge="盘中分时火箭点火"
+         data-tooltip-desc="在交易时间内毫秒级监控全市场，捕捉 1 分钟内突发大单扫盘、股价瞬间垂直拉升 3% 以上或快速封死涨停的异动点火瞬间。"
+         data-tooltip-scene="保姆级实战指南：盘中开着本界面，一旦出现主线同题材的多只股票同时闪电拉升，代表主力正在发起突袭。"
+         onmouseenter="showReviewTabHoverCard(this, event)" onmouseleave="hideReviewTabHoverCard()"
+         style="display:flex;align-items:center;gap:4px">
+      <i class="ri-flashlight-fill"></i>
+      <span>高频量价异动闪电</span>
+    </div>
+  </div>
+
+
+
+
+  <div class="container" id="tab-category-review" style="padding-top:12px;max-width:1600px">
+    
+  <!-- 顶部状态栏与工具箱 -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--sys-bg-panel);padding:12px 18px;border-radius:var(--sys-card-radius);border:1px solid var(--sys-border);margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="clickable-feature-title" onclick="openFeatureGuideModal('review_main')" title="点击查看【交易复盘工作台】大白话用法详解" style="font-size:16px;font-weight:800;color:var(--sys-accent);display:flex;align-items:center;gap:6px">
+        <i class="ri-vip-crown-fill" style="color:#e3b341"></i>
+        <span>交易复盘工作台 · 7人智能体团队协同版</span>
+        <i class="ri-information-line feature-info-btn"></i>
+      </span>
+      <span style="font-size:11px;background:rgba(188,140,255,0.15);color:var(--sys-accent);border:1px solid var(--sys-border);padding:2px 8px;border-radius:4px">智能协同旗舰版</span>
+      
+      <!-- 统一深色高亮日期选择器胶囊 (彻底解决深色模式下图标看不清与弹窗白色问题) -->
+      <div class="date-selector-pill">
+        <i class="ri-calendar-check-line"></i>
+        <span style="font-size:12px;color:var(--sys-text-sub)">交易日:</span>
+        <input type="date" id="rwDateSelector" onchange="changeIntegratedReviewDate(this.value)">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-outline" style="border:1px solid var(--sys-accent);color:var(--sys-accent);font-weight:600;padding:6px 14px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="openIntegratedHistoryModal()">
+        <i class="ri-book-read-line"></i>
+        <span>历史复盘档案库</span>
+      </button>
+      <button class="btn btn-outline" style="border:1px solid var(--sys-border);color:var(--sys-text-primary);font-weight:600;padding:6px 14px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="exportIntegratedReviewTxt()">
+        <i class="ri-download-2-line"></i>
+        <span>一键导出自选股 (.txt)</span>
+      </button>
+      <button class="btn btn-blue" style="padding:6px 16px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px" onclick="triggerIntegratedPipelineA()">
+        <i class="ri-flashlight-fill"></i>
+        <span>立即执行全团复盘</span>
+      </button>
+    </div>
+  </div>
+
+
+
+
+  <!-- 历史复盘档案库模态弹窗 -->
+  <div id="rwHistoryBackdrop" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);z-index:9998;backdrop-filter:blur(4px)" onclick="closeIntegratedHistoryModal()"></div>
+  <div id="rwHistoryModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:980px;max-height:85vh;background:var(--sys-bg-panel);border:1px solid var(--sys-border);border-radius:var(--sys-card-radius);box-shadow:0 20px 40px rgba(0,0,0,0.4);z-index:9999;flex-direction:column;overflow:hidden">
+    <div style="padding:16px 20px;background:var(--sys-table-header);border-bottom:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:10px">
+        <i class="ri-book-read-line" style="font-size:20px;color:var(--sys-accent)"></i>
+        <div>
+          <h3 style="margin:0;font-size:16px;color:var(--sys-text-title)">历史复盘研报档案库 (按时间倒序)</h3>
+          <p style="margin:2px 0 0 0;font-size:11px;color:var(--sys-text-sub)">支持按起止日期范围筛选、主线赛道与空间龙关键词搜索</p>
+        </div>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);font-size:20px;cursor:pointer;padding:4px 8px" onclick="closeIntegratedHistoryModal()">✕</button>
+    </div>
+    <div style="padding:14px 20px;background:var(--sys-bg-card-inner);border-bottom:1px solid var(--sys-border);display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="date-selector-pill">
+        <i class="ri-calendar-line"></i>
+        <span style="font-size:12px;color:var(--sys-text-sub)">起始:</span>
+        <input type="date" id="historyStartDate">
+      </div>
+      <div class="date-selector-pill">
+        <i class="ri-calendar-line"></i>
+        <span style="font-size:12px;color:var(--sys-text-sub)">截止:</span>
+        <input type="date" id="historyEndDate">
+      </div>
+      <input type="text" id="historyKeyword" placeholder="搜索板块/股票/空间龙头/研判定调关键词..." style="flex:1;min-width:200px;background:var(--sys-input-bg);border:1px solid var(--sys-border);color:var(--sys-text-primary);padding:6px 12px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')loadIntegratedHistoryReports()">
+
+      <button class="btn btn-blue" style="padding:5px 14px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="loadIntegratedHistoryReports()">
+        <i class="ri-search-line"></i>
+        <span>立即筛选</span>
+      </button>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;display:flex;align-items:center;gap:4px" onclick="resetHistoryFilters()">
+        <i class="ri-refresh-line"></i>
+        <span>重置</span>
+      </button>
+    </div>
+
+    <div id="rwHistoryReportsList" style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px;max-height:calc(85vh - 190px)">
+      <div style="color:#8b949e;text-align:center;padding:30px">正在加载历史复盘记录...</div>
+    </div>
+    <div style="padding:12px 20px;background:#0d1117;border-top:1px solid #21262d;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#8b949e">
+      <div>共检索到 <span id="historyTotalCount" style="color:#58a6ff;font-weight:700">0</span> 篇历史复盘报告</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-outline" style="padding:3px 10px;font-size:11px" id="historyPrevBtn" onclick="changeHistoryPage(-1)">◀ 上一页</button>
+        <span id="historyPageIndicator" style="font-family:'JetBrains Mono',monospace;color:#e6edf3">1 / 1</span>
+        <button class="btn btn-outline" style="padding:3px 10px;font-size:11px" id="historyNextBtn" onclick="changeHistoryPage(1)">下一页 ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 复盘中枢主布局：全宽单栏主工作区 -->
+  <div style="display:flex;flex-direction:column;gap:16px;width:100%">
+
+    <!-- 仅在【复盘总览看板】展示的顶部 4 大彩色 KPI 胶囊卡片 (支持点击穿透) -->
+    <div id="reviewTopOverviewCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+      <!-- 卡片 1: 核心观察池 -->
+      <div class="panel" style="margin:0;padding:16px 20px;background:linear-gradient(135deg,rgba(56,139,253,0.12),#161b22);border:1px solid rgba(56,139,253,0.3);border-radius:10px;text-align:center;cursor:pointer;transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'" onclick="switchReviewSubTab('funnel')">
+        <div style="font-size:24px"><i class="ri-filter-3-line" style="color:#58a6ff"></i></div>
+        <div style="font-size:28px;font-weight:800;color:#58a6ff;font-family:'JetBrains Mono',monospace;margin:2px 0" id="cardKpi1">354</div>
+        <div style="font-size:12px;font-weight:700;color:#58a6ff">核心观察池</div>
+        <div style="font-size:11px;color:#8b949e;margin-top:2px">4层漏斗精选 · 点击查看池</div>
+      </div>
+
+      <!-- 卡片 2: 逻辑归因基底池 -->
+      <div class="panel" style="margin:0;padding:16px 20px;background:linear-gradient(135deg,rgba(210,153,34,0.12),#161b22);border:1px solid rgba(210,153,34,0.3);border-radius:10px;text-align:center;cursor:pointer;transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'" onclick="switchReviewSubTab('attribution')">
+        <div style="font-size:24px"><i class="ri-links-line" style="color:#d29922"></i></div>
+        <div style="font-size:28px;font-weight:800;color:#d29922;font-family:'JetBrains Mono',monospace;margin:2px 0" id="cardKpi2">330</div>
+        <div style="font-size:12px;font-weight:700;color:#d29922">逻辑归因基底池</div>
+        <div style="font-size:11px;color:#8b949e;margin-top:2px">剔除北交/ST · 产业链图谱</div>
+      </div>
+
+      <!-- 卡片 3: 涨停收盘池 -->
+      <div class="panel" style="margin:0;padding:16px 20px;background:linear-gradient(135deg,rgba(248,81,73,0.12),#161b22);border:1px solid rgba(248,81,73,0.3);border-radius:10px;text-align:center;cursor:pointer;transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'" onclick="switchReviewSubTab('overview')">
+        <div style="font-size:24px"><i class="ri-fire-fill" style="color:#f85149"></i></div>
+        <div style="font-size:28px;font-weight:800;color:#f85149;font-family:'JetBrains Mono',monospace;margin:2px 0" id="cardKpi3">60</div>
+        <div style="font-size:12px;font-weight:700;color:#f85149">涨停收盘池</div>
+        <div style="font-size:11px;color:#8b949e;margin-top:2px">涨停封板率与连板统计</div>
+      </div>
+
+      <!-- 卡片 4: 连板梯队龙头 -->
+      <div class="panel" style="margin:0;padding:16px 20px;background:linear-gradient(135deg,rgba(188,140,255,0.12),#161b22);border:1px solid rgba(188,140,255,0.3);border-radius:10px;text-align:center;cursor:pointer;transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'" onclick="switchReviewSubTab('funnel')">
+        <div style="font-size:24px"><i class="ri-rocket-line" style="color:#bc8cff"></i></div>
+        <div style="font-size:28px;font-weight:800;color:#bc8cff;font-family:'JetBrains Mono',monospace;margin:2px 0" id="cardKpi4">15</div>
+        <div style="font-size:12px;font-weight:700;color:#bc8cff">连板梯队龙头</div>
+        <div style="font-size:11px;color:#8b949e;margin-top:2px">空间高度龙头 · 情绪定调</div>
+      </div>
+    </div>
+
+
+    <!-- ========== 智能体专属主内容展示区域 (100% 满宽专业实战区) ========== -->
+    <div id="agentMainViewContainer" style="width:100%">
+      <!-- 动态由 JS 渲染各个智能体的专属原版看板 -->
+      <div style="color:#8b949e;text-align:center;padding:50px"><span class="spinner"></span> 正在渲染智能体协同工作台...</div>
+    </div>
+
+  </div>
+</div>
+
+
+
+  <!-- 新闻证据与个股深度催化量价研判模态框 (支持详尽催化·K线走势·关键买卖标点) -->
+  <div id="rwEvidenceModalBackdrop" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9998;backdrop-filter:blur(6px)" onclick="closeEvidenceDetailModal()"></div>
+  <div id="rwEvidenceModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:92%;max-width:920px;max-height:88vh;background:var(--sys-bg-card);border:1px solid var(--sys-border);border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.6);z-index:9999;flex-direction:column;overflow:hidden">
+    
+    <!-- 头部 -->
+    <div style="padding:16px 22px;background:var(--sys-bg-nav);border-bottom:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:38px;height:38px;border-radius:8px;background:linear-gradient(135deg,#0969da,#bc8cff);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">
+          <i class="ri-article-line"></i>
+        </div>
+        <div>
+          <b style="font-size:16px;color:var(--sys-text-title)" id="evidenceModalRefTag">深度资讯与催化证据详情研读</b>
+          <div style="font-size:11px;color:var(--sys-text-sub)" id="evidenceModalSourceTime">机构投研深度复盘 · 即时更新</div>
+        </div>
+      </div>
+      <button style="background:none;border:none;color:var(--sys-text-sub);font-size:22px;cursor:pointer;padding:2px 8px" onclick="closeEvidenceDetailModal()">✕</button>
+    </div>
+
+    <!-- 文章与研报主体 -->
+    <div style="flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px;background:var(--sys-bg-main)">
+      
+      <!-- 标题与核心指标 -->
+      <div>
+        <h2 style="margin:0 0 10px 0;font-size:18px;font-weight:800;color:var(--sys-text-title);line-height:1.5" id="evidenceModalTitle">资讯研报标题加载中...</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--sys-bg-card-inner);padding:8px 14px;border-radius:6px;border:1px solid var(--sys-border);font-size:12px">
+          <span style="color:var(--sys-text-sub)">AI 情绪定调: <b style="color:#3fb950" id="evidenceModalSentiment">政策/产业催化</b></span>
+          <span style="color:var(--sys-text-sub)">权威星级: <b style="color:#e3b341" id="evidenceModalRating">★★★★★</b></span>
+          <span style="color:var(--sys-text-sub)">所属板块: <b style="color:#58a6ff" id="evidenceModalSector">综合热点</b></span>
+          <span id="evidenceModalPortfolioBadge" style="display:none;background:rgba(248,81,73,0.15);color:#f85149;padding:2px 8px;border-radius:4px;font-weight:700;display:inline-flex;align-items:center;gap:4px">
+            <i class="ri-star-fill"></i>
+            <span>我的持仓/自选标的</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- 模块 1：🔥 核心催化与重磅事实证据链 (有理有据·翔实数据) -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #58a6ff;border-radius:8px;padding:14px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-weight:700;color:#58a6ff;font-size:13px">
+          <i class="ri-flashlight-fill"></i> 核心催化与重大产业事实证据链
+        </div>
+        <div id="evidenceModalCatalystBody" style="font-size:13px;color:var(--sys-text-primary);line-height:1.7;white-space:pre-wrap">
+          正在加载重磅事实证据链...
+        </div>
+      </div>
+
+      <!-- 模块 2：🧠 为什么是它当龙头？(主力与游资操盘逻辑) -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #e3b341;border-radius:8px;padding:14px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-weight:700;color:#e3b341;font-size:13px">
+          <i class="ri-vip-crown-fill"></i> 为什么是它当龙头？（主力资金逻辑）
+        </div>
+        <div id="evidenceModalWhyLeaderBody" style="font-size:13px;color:var(--sys-text-primary);line-height:1.7;white-space:pre-wrap">
+          正在分析主力资金偏好与板块身位...
+        </div>
+      </div>
+
+      <!-- 模块 3：📈 K线形态与关键量价买卖标点研判 (Canvas 走势图 + 标点详解) -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #d2a8ff;border-radius:8px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#d2a8ff;font-size:13px">
+            <i class="ri-line-chart-fill"></i> K 线形态走势与关键量价买卖标点研判
+          </div>
+          <span id="evidenceModalPatternName" style="font-size:11px;background:rgba(210,168,255,0.15);color:#d2a8ff;padding:2px 8px;border-radius:4px;font-weight:600">形态分析中</span>
+        </div>
+        
+        <!-- Canvas 专业走势图与标点 -->
+        <div style="background:#090d13;border:1px solid #21262d;border-radius:6px;padding:10px;margin-bottom:10px;position:relative">
+          <canvas id="evidenceStockKlineCanvas" width="840" height="200" style="width:100%;height:200px;display:block"></canvas>
+        </div>
+
+        <!-- 3 大买卖核心标点详解 -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(230px, 1fr));gap:8px;font-size:12px">
+          <div style="background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.25);border-radius:6px;padding:8px 10px">
+            <b style="color:#3fb950;display:flex;align-items:center;gap:4px"><i class="ri-checkbox-circle-fill"></i> 🟢 低吸买点 / 突破确认</b>
+            <div id="evidenceModalBuyPoint" style="margin-top:4px;color:var(--sys-text-primary)">--</div>
+          </div>
+          <div style="background:rgba(227,179,65,0.1);border:1px solid rgba(227,179,65,0.25);border-radius:6px;padding:8px 10px">
+            <b style="color:#e3b341;display:flex;align-items:center;gap:4px"><i class="ri-shield-fill"></i> 🟡 生命防守位 / 止损底线</b>
+            <div id="evidenceModalSupportPoint" style="margin-top:4px;color:var(--sys-text-primary)">--</div>
+          </div>
+          <div style="background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.25);border-radius:6px;padding:8px 10px">
+            <b style="color:#f85149;display:flex;align-items:center;gap:4px"><i class="ri-flag-fill"></i> 🔴 阶段压力 / 止盈目标位</b>
+            <div id="evidenceModalTargetPoint" style="margin-top:4px;color:var(--sys-text-primary)">--</div>
+          </div>
+        </div>
+
+        <div id="evidenceModalKlineSummary" style="margin-top:8px;font-size:12px;color:var(--sys-text-sub);line-height:1.6">
+          --
+        </div>
+      </div>
+
+      <!-- 模块 4：🎯 次日保姆级实战操盘指南 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-left:4px solid #388bfd;border-radius:8px;padding:14px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-weight:700;color:#388bfd;font-size:13px">
+          <i class="ri-compass-3-fill"></i> 次日早盘实战推演操作指南
+        </div>
+        <div id="evidenceModalGamePlanBody" style="font-size:13px;color:var(--sys-text-primary);line-height:1.7;white-space:pre-wrap">
+          正在制定实战操盘推演...
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div style="padding:12px 22px;background:var(--sys-bg-nav);border-top:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-outline" style="font-size:12px;display:flex;align-items:center;gap:4px" onclick="copyEvidenceContent()">
+        <i class="ri-file-copy-line"></i>
+        <span>复制研报内容</span>
+      </button>
+      <div style="display:flex;gap:10px">
+        <a id="evidenceModalOriginalLink" href="#" target="_blank" class="btn btn-blue" style="font-size:12px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+          <i class="ri-external-link-line"></i>
+          <span>在东方财富查看该股实时 K 线 ↗</span>
+        </a>
+        <button class="btn btn-outline" style="font-size:12px" onclick="closeEvidenceDetailModal()">关闭研报</button>
+      </div>
+    </div>
+  </div>
+
+
+</div>
