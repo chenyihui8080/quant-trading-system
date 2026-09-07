@@ -4,76 +4,78 @@ async function autoEnsureLogin() {
   let token = getToken();
   let user = localStorage.getItem('quant_user');
 
-  // 如果本地没有 Token，自动发起默认账号登录 (admin / admin123) 彻底杜绝卡死
-  if (!token || !user) {
-    try {
-      const resp = await fetch('/auth/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username: 'admin', password: 'admin123'})
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        setToken(data.token);
-        localStorage.setItem('quant_user', data.username);
-        token = data.token;
-        user = data.username;
-      }
-    } catch(e) {
-      console.warn('自动免密登录网络波动，等待手动重试');
-    }
+  if (token && user) {
+    showAuthenticated(token, user);
+    return;
   }
 
+  // 尝试使用本地默认开发者凭据静默获取真实有效 Token
+  try {
+    const res = await fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'admin_default_password' })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      token = data.access_token || data.token;
+      user = 'admin';
+      if (token) {
+        setToken(token);
+        localStorage.setItem('quant_user', user);
+        showAuthenticated(token, user);
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('静默认证尝试跳过，由用户手动输入:', e);
+  }
+
+  // 若静默获取失败，才展示手动登录弹窗
+  showLoginOverlay();
+  const infoEl = document.getElementById('userInfo');
+  const guestEl = document.getElementById('guestInfo');
+  if (infoEl) infoEl.style.display = 'none';
+  if (guestEl) guestEl.style.display = 'block';
+}
+
+function showAuthenticated(token, user) {
+  hideLoginOverlay();
   const infoEl = document.getElementById('userInfo');
   const guestEl = document.getElementById('guestInfo');
   const userEl = document.getElementById('displayUser');
+  if (infoEl) infoEl.style.display = 'flex';
+  if (guestEl) guestEl.style.display = 'none';
+  if (userEl) userEl.textContent = user;
 
-  if (token && user) {
-    // 1. 成功进入主界面
-    hideLoginOverlay();
-    if (infoEl) infoEl.style.display = 'flex';
-    if (guestEl) guestEl.style.display = 'none';
-    if (userEl) userEl.textContent = user;
-
-    // 2. 调度子模块安全初始化并激活用户上次离开时的系统与Tab (持久记忆)
-    if (typeof safeTriggerInit === 'function') {
-      safeTriggerInit();
-    }
-    const savedCat = localStorage.getItem('quant_active_category') || 'review';
-    if (typeof window.switchCategory === 'function') {
-      window.switchCategory(savedCat);
-    }
-
-
-
-    // 3. 启动全自动静默定时轮询
-    setInterval(() => {
-      if (typeof window.refreshPortfolioData === 'function' && getToken()) {
-        try { window.refreshPortfolioData(); } catch(e) {}
-      }
-    }, 15000); // 15秒刷新持仓
-
-    setInterval(() => {
-      if (typeof window.loadSectorFlows === 'function' && getToken()) {
-        try { window.loadSectorFlows(); } catch(e) {}
-      }
-    }, 30000); // 30秒刷新板块资金
-
-    setInterval(() => {
-      if (typeof window.loadSocialBuzz === 'function' && getToken()) {
-        try { window.loadSocialBuzz(); } catch(e) {}
-      }
-    }, 60000); // 60秒刷新社交舆情
-
-  } else {
-    // 降级展示登录弹窗
-    showLoginOverlay();
-    if (infoEl) infoEl.style.display = 'none';
-    if (guestEl) guestEl.style.display = 'block';
+  const savedCat = localStorage.getItem('quant_active_category') || 'alpha';
+  if (typeof window.switchCategory === 'function') {
+    window.switchCategory(savedCat);
   }
+
+  // 立即极速渲染持仓与自选池
+  if (typeof window.refreshPortfolioData === 'function') {
+    try { window.refreshPortfolioData(); } catch(e) {}
+  }
+
+  // 定时器保活刷新
+  setInterval(() => {
+    if (typeof window.refreshPortfolioData === 'function') {
+      try { window.refreshPortfolioData(); } catch(e) {}
+    }
+  }, 15000);
+
+  setInterval(() => {
+    if (typeof window.loadSectorFlows === 'function') {
+      try { window.loadSectorFlows(); } catch(e) {}
+    }
+  }, 30000);
 }
 
-// 自执行启动
+// 页面脚本加载完毕立即并发执行，无需等待任何其他阻塞请求
 (function() {
+  if (typeof window.refreshPortfolioData === 'function') {
+    try { window.refreshPortfolioData(); } catch(e) {}
+  }
   autoEnsureLogin();
 })();

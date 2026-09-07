@@ -1,0 +1,52 @@
+/**
+ * 全局设计系统变量 (Design Tokens)
+ * 阿里规约 & 暗黑专业交易终端视觉规范
+ */
+:root {
+  /* 基础品牌与交互色系 */
+  --primary-color: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-focus: rgba(59, 130, 246, 0.25);
+  
+  /* 多空金融业务色 (红涨绿跌 - A股标准) */
+  --bull-color: #ef4444;       /* 阳线/盈利/做多红 */
+  --bull-bg: rgba(239, 68, 68, 0.12);
+  --bear-color: #10b981;       /* 阴线/亏损/做空绿 */
+  --bear-bg: rgba(16, 185, 129, 0.12);
+  --warning-gold: #f59e0b;     /* 预警金/星标 */
+  --warning-bg: rgba(245, 158, 11, 0.12);
+
+  /* 暗黑交易终端背景体系 */
+  --bg-app: #0b0f19;          /* 全局主背景 */
+  --bg-sidebar: #0f172a;      /* 侧边导航背景 */
+  --bg-card: #1e293b;         /* 卡片面板主背景 */
+  --bg-card-hover: #24344d;   /* 卡片悬浮高亮背景 */
+  --bg-elevated: #334155;     /* 弹出层与二级面板背景 */
+  --bg-input: #0f172a;        /* 输入框底色 */
+
+  /* 文字与内容层级 */
+  --text-primary: #f8fafc;    /* 主标题与核心数字 */
+  --text-secondary: #94a3b8;  /* 二级标签与字段名 */
+  --text-muted: #64748b;      /* 弱化备注与说明文字 */
+  --text-dim: #475569;        /* 极弱占位文字 */
+
+  /* 边框与分割线 */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-focus: #3b82f6;
+
+  /* 阴影与景深 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+
+  /* 圆角与间距规范 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* 字体家族 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", Consolas, Menlo, monospace;
+}

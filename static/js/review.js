@@ -466,7 +466,7 @@ async function renderNewsAgentPanel(container) {
         <tr style="border-bottom:1px solid #21262d;transition:background 0.15s" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
           <td style="padding:12px 14px;color:#e6edf3;font-weight:600">
             ${relTag}
-            <a href="javascript:void(0)" onclick="openNewsArticleModal('${it.id || it.ref_tag}')" style="color:#e6edf3;text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='#58a6ff'" onmouseout="this.style.color='#e6edf3'">
+            <a href="javascript:void(0)" onclick="openNewsArticleModal('${jsStr(it.id || it.ref_tag)}')" style="color:#e6edf3;text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='#58a6ff'" onmouseout="this.style.color='#e6edf3'">
               ${escapeHtml(it.title)}
             </a>
           </td>
@@ -476,7 +476,7 @@ async function renderNewsAgentPanel(container) {
           <td style="padding:12px 14px"><span style="color:#3fb950">${it.sentiment}</span></td>
           <td style="padding:12px 14px;color:#e3b341;letter-spacing:1px">${it.rating_stars}</td>
           <td style="padding:12px 14px;text-align:center">
-            <button class="btn btn-blue" style="padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer" onclick="openNewsArticleModal('${it.id || it.ref_tag}')">
+            <button class="btn btn-blue" style="padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer" onclick="openNewsArticleModal('${jsStr(it.id || it.ref_tag)}')">
               详情
             </button>
           </td>
@@ -1263,7 +1263,7 @@ async function openStockDetail(stockCode) {
               ${info.summary || '财务审计无保留意见，近 1 年无违规立案，属于主线高流动性标的。'}
             </div>
             <div style="margin-top:8px">
-              <button class="btn btn-blue" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px" onclick="quickJumpToCalculate('${cleanCode}')">
+              <button class="btn btn-blue" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px" onclick="quickJumpToCalculate('${jsStr(cleanCode)}')">
                 <i class="ri-calculator-line"></i>
                 <span>立即测算买卖点与仓位</span>
               </button>
@@ -1307,7 +1307,24 @@ async function openCitationModal(refTag) {
           `
         });
       } else {
-        alert(`【${d.ref_tag}】${d.title}\n\n${d.content}\n\n来源: ${d.source}`);
+        // openDrawer 不可用时，降级为内嵌临时 Modal 展示证据详情（避免原生 alert 阻塞）
+        const existingModal = document.getElementById('_citationFallbackModal');
+        if (existingModal) existingModal.remove();
+        const modal = document.createElement('div');
+        modal.id = '_citationFallbackModal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+        modal.innerHTML = `
+          <div style="background:var(--sys-bg-card,#1a1f2e);border:1px solid var(--sys-border,#30363d);border-radius:12px;max-width:520px;width:100%;padding:24px 28px;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+              <span style="font-weight:700;font-size:14px;color:var(--sys-text-title,#e6edf3);">📖 归因证据溯源 · ${d.ref_tag}</span>
+              <button onclick="document.getElementById('_citationFallbackModal').remove()" style="background:none;border:none;color:var(--sys-text-sub,#8b949e);cursor:pointer;font-size:18px;line-height:1;">✕</button>
+            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--sys-text-primary,#c9d1d9);margin-bottom:8px;">${d.title}</div>
+            <div style="font-size:12px;color:var(--sys-text-sub,#8b949e);margin-bottom:12px;">来源: <b style="color:#58a6ff">${d.source}</b> &nbsp;·&nbsp; ${d.created_at || '--'}</div>
+            <div style="padding:12px;background:var(--sys-bg-card-inner,#161b22);border:1px solid var(--sys-border,#30363d);border-radius:6px;font-size:13px;color:var(--sys-text-primary,#c9d1d9);line-height:1.7;max-height:300px;overflow-y:auto;">${d.content}</div>
+          </div>`;
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
       }
     } else {
       showToast(`未能检索到证据【${cleanTag}】`, 'warning');
@@ -1531,8 +1548,8 @@ async function loadIntegratedWatchlistData() {
 
           return `
             <tr style="border-bottom:1px solid #21262d;transition:background 0.2s" onmouseover="this.style.background='#1c2128'" onmouseout="this.style.background='transparent'">
-              <td style="padding:10px 14px"><b style="color:#58a6ff;cursor:pointer" onclick="openStockDetail('${item.stock_code}')">${item.stock_name}</b> <span style="font-size:11px;color:#8b949e">(${item.stock_code})</span></td>
-              <td style="padding:10px 14px"><span style="background:rgba(88,166,255,0.15);color:#58a6ff;padding:2px 8px;border-radius:4px;font-size:11px">${item.sector_name || '主线科技'}</span></td>
+              <td style="padding:10px 14px"><b style="color:#58a6ff;cursor:pointer" onclick="openStockDetail('${jsStr(item.stock_code)}')">${escapeHtml(item.stock_name)}</b> <span style="font-size:11px;color:#8b949e">(${escapeHtml(item.stock_code)})</span></td>
+              <td style="padding:10px 14px"><span style="background:rgba(88,166,255,0.15);color:#58a6ff;padding:2px 8px;border-radius:4px;font-size:11px">${escapeHtml(item.sector_name || '主线科技')}</span></td>
               <td style="padding:10px 14px;font-family:'JetBrains Mono',monospace">${item.close_price ? '¥' + parseFloat(item.close_price).toFixed(2) : '--'}</td>
               <td style="padding:10px 14px;color:${chgColor};font-weight:700;font-family:'JetBrains Mono',monospace">${chgText}</td>
               <td style="padding:10px 14px;font-family:'JetBrains Mono',monospace;color:#d29922">${item.turnover_rate ? parseFloat(item.turnover_rate).toFixed(2) + '%' : '--'}</td>
@@ -1544,7 +1561,7 @@ async function loadIntegratedWatchlistData() {
                 <span style="background:rgba(63,185,80,0.15);color:#3fb950;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;border:1px solid rgba(63,185,80,0.3)">${Math.round(conf * 100)}%</span>
               </td>
               <td style="padding:10px 14px;text-align:center">
-                <button class="btn btn-outline" style="padding:3px 10px;font-size:11.5px;font-weight:700;color:#58a6ff;border-color:rgba(88,166,255,0.35);background:rgba(88,166,255,0.08);cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:4px" onclick="openStockResearchModal('${item.stock_code}')">
+                <button class="btn btn-outline" style="padding:3px 10px;font-size:11.5px;font-weight:700;color:#58a6ff;border-color:rgba(88,166,255,0.35);background:rgba(88,166,255,0.08);cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:4px" onclick="openStockResearchModal('${jsStr(item.stock_code)}')">
                   <i class="ri-newspaper-line"></i>
                   <span>查催化研报</span>
                 </button>
@@ -1953,7 +1970,7 @@ async function loadIntegratedHistoryReports() {
                 <span style="font-size:11px;color:#8b949e">主线聚焦:</span>
                 ${themesHtml || '<span style="font-size:11px;color:#8b949e">综合热点</span>'}
               </div>
-              <button class="btn btn-blue" style="padding:4px 14px;font-size:11px;font-weight:600" onclick="selectHistoryDateAndLoad('${r.trade_date}')">
+              <button class="btn btn-blue" style="padding:4px 14px;font-size:11px;font-weight:600" onclick="selectHistoryDateAndLoad('${jsStr(r.trade_date)}')">
                 📖 载入该日复盘全景
               </button>
             </div>
@@ -2173,7 +2190,7 @@ async function renderSectorDeepDivePanel(container) {
       const isSel = s.name === _selectedSectorName;
       const borderStyle = isSel ? 'border:1px solid #e3b341;background:rgba(227,179,65,0.15);color:#e3b341' : 'border:1px solid #30363d;background:#0d1117;color:#c9d1d9';
       return `
-        <button style="${borderStyle};padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s" onclick="switchSectorAndReload('${s.name}')">
+        <button style="${borderStyle};padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s" onclick="switchSectorAndReload('${jsStr(s.name)}')">
           ${s.name} <span style="font-family:'JetBrains Mono';color:${getPnlColor(s.change_pct)}">${(s.change_pct||0) >= 0 ? '+' : ''}${s.change_pct}%</span>
         </button>
       `;
@@ -2194,7 +2211,7 @@ async function renderSectorDeepDivePanel(container) {
 
     // 3. 关联证据列表 (纯中文通俗展示 + 支持点击研读)
     const evidenceHtml = evidence.map((e, idx) => `
-      <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:12px 16px;margin-bottom:8px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#58a6ff'" onmouseout="this.style.borderColor='#21262d'" onclick="openEvidenceDetailModal('${e.ref_tag}')">
+      <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:12px 16px;margin-bottom:8px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#58a6ff'" onmouseout="this.style.borderColor='#21262d'" onclick="openEvidenceDetailModal('${jsStr(e.ref_tag)}')">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <b style="color:#58a6ff;font-size:13px;display:flex;align-items:center;gap:6px">
             <i class="ri-pushpin-2-fill" style="color:var(--sys-accent)"></i>
@@ -2394,3 +2411,8 @@ window.hideReviewTabHoverCard = hideReviewTabHoverCard;
 window.openAgentMatrixModal = openAgentMatrixModal;
 window.closeAgentMatrixModal = closeAgentMatrixModal;
 window.switchSectorAndReload = switchSectorAndReload;
+window.switchReviewSubTab = switchReviewSubTab;
+window.switchAgentView = switchAgentView;
+window.loadFullAgentDashboardData = loadFullAgentDashboardData;
+window.renderCurrentAgentView = renderCurrentAgentView;
+window.changeIntegratedReviewDate = changeIntegratedReviewDate;

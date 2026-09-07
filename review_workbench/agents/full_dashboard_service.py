@@ -347,8 +347,21 @@ def check_real_stock_risk(code: str) -> dict:
             "summary": f"未在 A 股行情系统中检索到代码【{code_clean}】的有效交易记录，请确认代码是否正确。"
         }
 
-    risk_level = "⚠️ 高风险 (ST特别处理/退市预警)" if is_st else "🟢 安全评级：AAA (极低风险)"
-    audit_status = "⚠️ ST特别处理警示" if is_st else "标准无保留意见"
+    risk_level = "⚠️ 高风险 (ST特别处理/退市预警)" if is_st else "🟢 风险评估：已知数据范围内未发现高危信号"
+    audit_status = "⚠️ ST特别处理警示" if is_st else "已知数据范围内未披露审计异常"
+
+    pe_disp = pe_ratio if pe_ratio not in ("--", "", None) else "暂无"
+    pb_disp = pb_ratio if pb_ratio not in ("--", "", None) else "暂无"
+    turnover_disp = turnover if turnover not in ("--", "", None) else "暂无"
+
+    if is_st:
+        summary = f"【{stock_name} ({code_clean})】已被实施特别处理风险警示，请高度防范踩雷！"
+    else:
+        summary = (
+            f"【{stock_name} ({code_clean})】在已采集到的盘面数据中暂未发现 ST/退市信号。"
+            f"市盈率(PE)={pe_disp}，市净率(PB)={pb_disp}，换手率={turnover_disp}。"
+            f"以上仅为有限字段下的初步筛查，不构成投资建议；如需审计结论与详细估值，请另行查询公司年报与公告。"
+        )
 
     return {
         "code": code_clean,
@@ -359,7 +372,13 @@ def check_real_stock_risk(code: str) -> dict:
         "pe": pe_ratio,
         "pb": pb_ratio,
         "turnover": turnover,
-        "summary": f"【{stock_name} ({code_clean})】财务审计状态正常，市盈率 PE={pe_ratio}，换手率={turnover}，无重大退市风险。" if not is_st else f"【{stock_name}】已被实施特别处理风险警示，请高度防范踩雷！"
+        "summary": summary,
+        "data_completeness": {
+            "pe": pe_ratio not in ("--", "", None),
+            "pb": pb_ratio not in ("--", "", None),
+            "turnover": turnover not in ("--", "", None),
+            "audit_conclusion": False,
+        }
     }
 
 
@@ -1040,13 +1059,12 @@ def get_curated_news_paginated(
                         "title": title,
                         "content": content or title,
                         "source": display_source,
-                        "platform": platform,
                         "publish_time": final_pub_time,
                         "sector": sector,
                         "sentiment": sentiment,
                         "rating_stars": stars_str,
                         "stars_num": stars_count,
-                        "url": "",  # 彻底清除跳转新浪搜索的假链接
+                        "url": src_url or "",
                         "is_portfolio_related": is_rel
                     })
 
@@ -1136,20 +1154,11 @@ def get_single_news_detail(news_id_or_tag: str) -> dict:
     except Exception as e:
         logger.warning(f"从 news_curated 读取异常: {e}")
 
-    # 兜底纯新闻正文
+    # 缺少有效新闻记录时必须明确返回无数据，禁止虚构正文、时间、来源和链接
     return {
-        "code": 200,
-        "data": {
-            "id": clean_id,
-            "title": "【7x24 全球产业与政策动态】全网宏观情报",
-            "content": f"该条资讯记录编号 [{clean_id}]，内容涉及当前行业热点与主力资金动向，请持续关注相关产业链延伸催化。",
-            "source": "7x24 权威财经快讯",
-            "publish_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "sector": "综合热点",
-            "sentiment": "客观资讯",
-            "rating": "★★★★☆",
-            "url": "https://finance.sina.com.cn"
-        }
+        "code": 404,
+        "message": f"未找到证据记录：{news_id_or_tag}",
+        "data": None
     }
 
 
@@ -1173,6 +1182,11 @@ def get_single_stock_research_detail(stock_code: str) -> dict:
     chg = float(quote.get("change_pct", 0.0) or 0.0)
     turnover = float(quote.get("turnover", 0.0) or 0.0)
     amount_yi = float(quote.get("amount_yi", 0.0) or 0.0)
+    # 实时行情源以 amount（元）返回成交额，未提供 amount_yi 时按亿元换算，杜绝恒为 0
+    if amount_yi <= 0:
+        amount_yuan = float(quote.get("amount", 0.0) or 0.0)
+        if amount_yuan > 0:
+            amount_yi = round(amount_yuan / 1e8, 2)
 
     # 若查无此股且价格为0，如实返回 404
     if price == 0.0:

@@ -94,21 +94,35 @@ class PortfolioStore:
         self.today_trades: list[dict] = []
         self.history_trades: list[dict] = []  # 东方财富历史买入/卖出交易记录
         self.total_capital: float = 0.0       # 真实账户总资产 (元)，0 表示自适应持仓总市值
-        self.load()
+        self.available_cash: float = 0.0      # 真实账户可用资金 (元)
+        self.current_user = "admin"
+        self.load("admin")
 
-    def load(self):
-        """从文件加载"""
+    def load(self, username: str = "admin"):
+        """从文件加载指定用户的数据 (默认 admin，并自动兼容 default 数据)"""
+        self.current_user = username or "admin"
         if not DATA_FILE.exists():
             self.positions = {}
             self.watchlist = {}
             self.today_trades = []
             self.history_trades = []
             self.total_capital = 0.0
+            self.available_cash = 0.0
             return
 
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                raw_data = json.load(f)
+            data = {}
+            if "users" in raw_data:
+                data = raw_data["users"].get(self.current_user)
+                # 若当前用户无数据或持仓为空，自动继承 default 或 admin 的预置实盘持仓
+                if not data or not data.get("positions"):
+                    fallback_key = "default" if self.current_user != "default" else "admin"
+                    data = raw_data["users"].get(fallback_key, {})
+            elif isinstance(raw_data, dict):
+                data = raw_data
+
             self.positions = {
                 k: PositionItem(**v) for k, v in data.get("positions", {}).items()
             }
@@ -118,22 +132,69 @@ class PortfolioStore:
             self.today_trades = data.get("today_trades", [])
             self.history_trades = data.get("history_trades", [])
             self.total_capital = float(data.get("total_capital", 0.0))
+            self.available_cash = float(data.get("available_cash", 0.0))
         except Exception:
             self.positions = {}
             self.watchlist = {}
             self.today_trades = []
             self.history_trades = []
             self.total_capital = 0.0
+            self.available_cash = 0.0
 
     def save(self):
-        """保存到文件"""
+        """保存到文件（内置数据校验与断流防空覆盖保护）"""
         DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-        data = {
+        existing_data = {}
+        if DATA_FILE.exists():
+            try:
+                with open(DATA_FILE, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                existing_data = {}
+
+        if isinstance(existing_data, dict) and isinstance(existing_data.get("users"), dict):
+            users = existing_data["users"]
+        else:
+            legacy_data = existing_data if isinstance(existing_data, dict) else {}
+            users = {"default": legacy_data}
+
+        # 数据防断裂保护：若原用户存在有效持仓，而新数据因网络或Cookie掉线导致持仓为空，拒绝空数据覆写
+        old_user_data = users.get(self.current_user, {})
+        old_pos = old_user_data.get("positions", {})
+        if old_pos and len(self.positions) == 0 and len(self.history_trades) == 0:
+            logger.warning(f"⚠️ [数据保护] 检测到用户 {self.current_user} 实盘持仓异常置空，已触发熔断保护拒绝覆盖！")
+            return
+
+        # 字段自动修复与完整性校准 (cost_amount, market_value, pnl_amount)
+        clean_positions = {}
+        for k, v in self.positions.items():
+            pos_dict = v.__dict__.copy() if hasattr(v, "__dict__") else dict(v)
+            shares = int(pos_dict.get("shares", 0))
+            cost_p = float(pos_dict.get("cost_price", 0.0))
+            curr_p = float(pos_dict.get("current_price", cost_p))
+            
+            # 自愈修复缺失的关键金额字段
+            cost_amt = round(shares * cost_p, 2)
+            mkt_val = round(shares * curr_p, 2)
+            pnl_amt = round(mkt_val - cost_amt, 2)
+            pnl_pct = round((curr_p - cost_p) / cost_p * 100, 2) if cost_p > 0 else 0.0
+            
+            pos_dict["cost_amount"] = cost_amt
+            pos_dict["market_value"] = mkt_val if float(pos_dict.get("market_value", 0)) <= 0 else float(pos_dict["market_value"])
+            pos_dict["pnl_amount"] = pnl_amt if float(pos_dict.get("pnl_amount", 0)) == 0 else float(pos_dict["pnl_amount"])
+            pos_dict["pnl_pct"] = pnl_pct if float(pos_dict.get("pnl_pct", 0)) == 0 else float(pos_dict["pnl_pct"])
+            clean_positions[k] = pos_dict
+
+        users[self.current_user] = {
             "total_capital": self.total_capital,
-            "positions": {k: v.__dict__ for k, v in self.positions.items()},
+            "available_cash": self.available_cash,
+            "positions": clean_positions,
             "watchlist": {k: v.__dict__ for k, v in self.watchlist.items()},
             "today_trades": self.today_trades,
-            "history_trades": self.history_trades,
+            "history_trades": self.history_trades
+        }
+        data = {
+            "users": users,
             "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -145,9 +206,11 @@ class PortfolioStore:
         self.save()
 
 
-    def set_total_capital(self, capital: float):
-        """更新账户真实总资金"""
+    def set_total_capital(self, capital: float, cash: Optional[float] = None):
+        """更新账户真实总资金及可用现金"""
         self.total_capital = max(float(capital), 0.0)
+        if cash is not None:
+            self.available_cash = max(float(cash), 0.0)
         self.save()
 
     def add_or_update_position(self, item: PositionItem):
@@ -164,9 +227,15 @@ class PortfolioStore:
     def get_all_positions(self) -> List[PositionItem]:
         return list(self.positions.values())
 
-    def add_to_watchlist(self, item: WatchlistItem):
+    def add_to_watchlist(self, item_or_symbol, name: str = "", notes: str = ""):
+        if isinstance(item_or_symbol, WatchlistItem):
+            item = item_or_symbol
+        else:
+            item = WatchlistItem(symbol=str(item_or_symbol), name=name or str(item_or_symbol), notes=notes)
         self.watchlist[item.symbol] = item
         self.save()
+
+    add_watchlist = add_to_watchlist
 
     def remove_from_watchlist(self, symbol: str) -> bool:
         if symbol in self.watchlist:
@@ -186,22 +255,49 @@ class PortfolioAdvisor:
         self.store = store
 
     def get_effective_capital(self, total_market_value: float) -> float:
-        """获取有效的账户总资产：优先使用设定的真实资产，未设置时自适应为持仓总市值"""
+        """获取有效的账户总资产：优先使用实盘同步或设定的真实资产；若设置了可用资金则累加；若未设置，则自适应等于持仓市值"""
         if self.store.total_capital > 0:
             return self.store.total_capital
-        # 若未指定总资产，则自适应为当前持仓总市值（若市值为0则给默认值）
-        return max(total_market_value, 20_000.0)
+        if self.store.available_cash > 0:
+            return max(total_market_value + self.store.available_cash, 0.0)
+        # 若未设置真实总资产与可用现金，自适应等于持仓总市值（确保仓位与资产真实透明）
+        return max(total_market_value, 0.0)
 
-    def get_portfolio_summary(self, total_capital: Optional[float] = None) -> dict:
-        """获取账户全景统计概览 (完全对齐东方财富账户体系)"""
+    def get_portfolio_summary(self, total_capital_or_user: Any = None, preloaded_quotes: Optional[dict] = None) -> dict:
+        """
+        获取账户全景统计概览 (完全对齐东方财富账户体系，支持批量预加载行情极速秒出与智能入参)
+        智能入参兼容：
+        - 若传入字符串则识别为 username，自动加载对应用户数据；
+        - 若传入数值则识别为 total_capital；
+        - 若传入字典则识别为 preloaded_quotes。
+        """
+        total_capital = None
+        if isinstance(total_capital_or_user, str):
+            self.store.load(total_capital_or_user)
+        elif isinstance(total_capital_or_user, (int, float)):
+            total_capital = float(total_capital_or_user)
+        elif isinstance(total_capital_or_user, dict) and not preloaded_quotes:
+            preloaded_quotes = total_capital_or_user
+
         positions = self.store.get_all_positions()
         total_market_value = 0.0
         total_cost_value = 0.0
         total_pnl_amount = 0.0
         today_pnl_amount = 0.0
 
+        quotes = preloaded_quotes or {}
+        if not quotes and positions:
+            symbols = [p.symbol for p in positions]
+            try:
+                from utils.realtime import get_batch_realtime_quotes
+                quotes = get_batch_realtime_quotes(symbols)
+            except Exception:
+                quotes = {}
+
         for pos in positions:
-            quote = get_realtime_quote(pos.symbol)
+            quote = quotes.get(pos.symbol)
+            if not quote:
+                quote = get_realtime_quote(pos.symbol)
             price = float(quote.get("price", 0)) if quote else 0.0
             if price <= 0:
                 price = pos.current_price if pos.current_price > 0 else (pos.cost_price if pos.cost_price > 0 else 10.0)
@@ -213,50 +309,134 @@ class PortfolioAdvisor:
             mv = price * pos.shares
             cost_v = pos.cost_amount if pos.cost_amount > 0 else (pos.cost_price if pos.cost_price > 0 else price) * pos.shares
             pnl_v = mv - cost_v
-            today_v = (price - pre_close) * pos.shares
+            
+            # 当日盈亏计算：如果实时有价差则用实时价差；若无价差(非交易时段)则优先读取持仓记录中已记录的当日盈亏
+            if abs(price - pre_close) > 0.0001:
+                today_v = (price - pre_close) * pos.shares
+            elif getattr(pos, 'today_pnl_amount', None) is not None and pos.today_pnl_amount != 0:
+                today_v = float(pos.today_pnl_amount)
+            else:
+                today_v = (price - pre_close) * pos.shares
 
             total_market_value += mv
             total_cost_value += cost_v
             total_pnl_amount += pnl_v
             today_pnl_amount += today_v
 
-        # 动态真实总资产计算
-        eff_capital = total_capital if (total_capital and total_capital > 0) else self.get_effective_capital(total_market_value)
+        # 动态真实总资产与可用资金计算
+        if total_capital and total_capital > 0:
+            eff_capital = total_capital
+            cash_avail = max(eff_capital - total_market_value, 0.0)
+        elif self.store.total_capital > 0:
+            eff_capital = self.store.total_capital
+            cash_avail = self.store.available_cash if self.store.available_cash > 0 else max(eff_capital - total_market_value, 0.0)
+        elif self.store.available_cash > 0:
+            cash_avail = self.store.available_cash
+            eff_capital = total_market_value + cash_avail
+        else:
+            eff_capital = total_market_value
+            cash_avail = 0.0
+
         total_pnl_pct = round((total_pnl_amount / total_cost_value) * 100.0, 2) if total_cost_value > 0 else 0.0
         today_pnl_pct = round((today_pnl_amount / (total_market_value - today_pnl_amount)) * 100.0, 2) if (total_market_value - today_pnl_amount) > 0 else 0.0
+        position_ratio_pct = round((total_market_value / eff_capital) * 100.0, 2) if eff_capital > 0 else 0.0
 
-        return {
+        res_dict = {
             "total_positions": len(positions),
             "total_watchlist": len(self.store.get_all_watchlist()),
             "total_market_value": round(total_market_value, 2),
+            "market_value": round(total_market_value, 2),
             "total_cost_value": round(total_cost_value, 2),
             "today_pnl_amount": round(today_pnl_amount, 2),
+            "total_today_pnl": round(today_pnl_amount, 2),
             "today_pnl_pct": today_pnl_pct,
             "total_pnl_amount": round(total_pnl_amount, 2),
+            "total_pnl": round(total_pnl_amount, 2),
             "total_pnl_pct": total_pnl_pct,
             "total_capital": round(eff_capital, 2),
-            "cash_available": round(max(eff_capital - total_market_value, 0.0), 2),
-            "position_ratio_pct": round((total_market_value / eff_capital) * 100.0, 2) if eff_capital > 0 else 0.0,
+            "total_asset": round(eff_capital, 2),
+            "cash_available": round(cash_avail, 2),
+            "available_cash": round(cash_avail, 2),
+            "position_ratio_pct": position_ratio_pct,
+            "position_pct": position_ratio_pct,
         }
+        # 支持点号属性访问与字典访问兼容
+        class SummaryObj(dict):
+            __getattr__ = dict.get
+            __setattr__ = dict.__setitem__
+        return SummaryObj(res_dict)
 
-    def diagnose_all_positions(self) -> List[PositionDiagnostic]:
-        """批量执行全账户持仓深度诊断，并回写最新行情快照至存储"""
+    def diagnose_all_positions(self, username_or_quotes: Any = None, preloaded_quotes: Optional[dict] = None) -> List[PositionDiagnostic]:
+        """
+        批量执行全账户持仓深度诊断 (行情+kline全部并发批量，彻底消除串行阻塞与参数类型崩溃)
+        智能入参兼容：
+        - 若传入字符串则识别为 username，自动加载对应用户数据；
+        - 若传入字典则识别为 preloaded_quotes；
+        - 确保 quotes 永远为 dict 类型，杜绝 AttributeError。
+        """
         results = []
+
+        # 智能解析参数
+        actual_quotes = {}
+        if isinstance(username_or_quotes, str):
+            self.store.load(username_or_quotes)
+            if isinstance(preloaded_quotes, dict):
+                actual_quotes = preloaded_quotes
+        elif isinstance(username_or_quotes, dict):
+            actual_quotes = username_or_quotes
+        elif isinstance(preloaded_quotes, dict):
+            actual_quotes = preloaded_quotes
+
         positions = self.store.get_all_positions()
-        
+        if not positions:
+            return results
+
+        symbols = [p.symbol for p in positions]
+
+        # 并发批量拉取：行情快照 + K线数据 同时发起
+        from concurrent.futures import ThreadPoolExecutor
+        from utils.realtime import get_batch_realtime_quotes, get_realtime_kline
+
+        quotes = actual_quotes if isinstance(actual_quotes, dict) else {}
+
+        def fetch_kline(sym):
+            return sym, get_realtime_kline(sym, period="d", count=30)
+
+        with ThreadPoolExecutor(max_workers=max(len(symbols), 1)) as ex:
+            quote_future = None
+            if not quotes:
+                quote_future = ex.submit(get_batch_realtime_quotes, symbols)
+            kline_futures = {ex.submit(fetch_kline, sym): sym for sym in symbols}
+
+            if quote_future:
+                try:
+                    res_quotes = quote_future.result(timeout=5)
+                    quotes = res_quotes if isinstance(res_quotes, dict) else {}
+                except Exception:
+                    quotes = {}
+
+            klines = {}
+            for future in kline_futures:
+                try:
+                    sym, kl = future.result(timeout=5)
+                    klines[sym] = kl
+                except Exception:
+                    pass
+
         # 先统计总市值以计算真实比例
         est_market_val = sum(pos.shares * (pos.current_price if pos.current_price > 0 else pos.cost_price) for pos in positions)
         eff_capital = self.get_effective_capital(est_market_val)
 
         has_updates = False
         for pos in positions:
-            diag = self.diagnose_single_position(pos, eff_capital)
+            quote = quotes.get(pos.symbol)
+            kline = klines.get(pos.symbol)
+            diag = self.diagnose_single_position(pos, eff_capital, quote=quote, kline=kline)
             if diag:
                 results.append(diag)
-                # 回写最新价格快照 (修复 Bug 3)
-                if (pos.current_price != diag.current_price or 
-                    pos.market_value != diag.market_value or 
-                    pos.pnl_amount != diag.pnl_amount or 
+                if (pos.current_price != diag.current_price or
+                    pos.market_value != diag.market_value or
+                    pos.pnl_amount != diag.pnl_amount or
                     pos.pnl_pct != diag.pnl_pct or
                     pos.today_pnl_amount != diag.today_pnl_amount or
                     pos.today_pnl_pct != diag.today_pnl_pct):
@@ -273,13 +453,14 @@ class PortfolioAdvisor:
 
         return results
 
-    def diagnose_single_position(self, pos: PositionItem, total_capital: float = 20_000.0) -> Optional[PositionDiagnostic]:
+    def diagnose_single_position(self, pos: PositionItem, total_capital: float = 20_000.0, quote: Optional[dict] = None, kline: Optional[list] = None) -> Optional[PositionDiagnostic]:
         """针对单个持仓执行全方位诊断与买卖/减仓/止损指令计算 (支持精确成本金额与当日盈亏)"""
         symbol = pos.symbol
         shares = max(int(pos.shares), 0)
 
-        # 统一行情源获取
-        quote = get_realtime_quote(symbol)
+        # 优先使用预加载的批量行情
+        if not quote:
+            quote = get_realtime_quote(symbol)
         real_price = float(quote.get("price", 0)) if quote else 0.0
         current_price = real_price if real_price > 0 else (pos.current_price if pos.current_price > 0 else 10.0)
 
@@ -312,8 +493,9 @@ class PortfolioAdvisor:
                 holding_days = 1
 
 
-        # 获取日 K 线技术形态
-        kline = get_realtime_kline(symbol, period="d", count=30)
+        # 获取日 K 线技术形态（优先使用外部预加载，避免单票串行网络请求）
+        if kline is None:
+            kline = get_realtime_kline(symbol, period="d", count=30)
         ma5 = current_price
         ma10 = current_price
         ma20 = current_price

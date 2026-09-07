@@ -110,7 +110,8 @@ async def market_push_loop():
                     continue
 
                 try:
-                    quote = get_realtime_quote(symbol)
+                    # 严禁在 async 协程中直接同步阻塞调用网络 IO，通过 asyncio.to_thread 卸载至后台线程
+                    quote = await asyncio.to_thread(get_realtime_quote, symbol)
                     if quote:
                         await manager.broadcast(topic, quote)
                 except Exception as e:

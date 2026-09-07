@@ -407,9 +407,9 @@ def _build_details(candles: list, conditions: list) -> dict:
         left_val = _get_value(candles, cond["left"])
         right_val = _get_value(candles, cond["right"])
         details[f"条件{i+1}"] = {
-            "left": f"{cond['left'].get('indicator', cond['left'].get('value', '?'))}={left_val:.2f}" if left_val else "N/A",
+            "left": f"{cond['left'].get('indicator', cond['left'].get('value', '?'))}={left_val:.2f}" if left_val is not None else "N/A",
             "op": cond["op"],
-            "right": f"{cond['right'].get('indicator', cond['right'].get('value', '?'))}={right_val:.2f}" if right_val else "N/A",
+            "right": f"{cond['right'].get('indicator', cond['right'].get('value', '?'))}={right_val:.2f}" if right_val is not None else "N/A",
         }
     details["最新收盘价"] = candles[-1][2]
     details["日期"] = candles[-1][0]
@@ -471,7 +471,10 @@ def update_strategy(strategy_id: int, updates: dict) -> dict | None:
 def remove_strategy(strategy_id: int) -> bool:
     """删除策略"""
     data = _load_strategies()
+    original_count = len(data["strategies"])
     data["strategies"] = [s for s in data["strategies"] if s["id"] != strategy_id]
+    if len(data["strategies"]) == original_count:
+        return False
     _save_strategies(data)
     return True
 

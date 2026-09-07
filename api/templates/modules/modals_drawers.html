@@ -130,185 +130,351 @@
 </div>
 
 
-<!-- ==================== 手动添加持仓弹窗 ==================== -->
-<div id="addPositionModal" class="modal-solid-wrapper" style="display:none">
-  <div class="modal-solid-card" style="width:90%;max-width:460px;padding:26px;position:relative">
-    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--sys-border);padding-bottom:12px;margin-bottom:18px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <i class="ri-add-circle-line" style="font-size:18px;color:var(--sys-accent)"></i>
-        <h3 style="margin:0;color:var(--sys-text-title);font-size:16px;font-weight:700">手动录入 / 修改实盘持仓</h3>
+<!-- ==================== 手动添加持仓弹窗 (Element Plus 规范) ==================== -->
+<div id="addPositionModal" class="el-overlay" style="display:none">
+  <div class="el-dialog" style="width:90%;max-width:480px;position:relative">
+    <div class="el-dialog__header">
+      <div class="el-dialog__title">
+        <i class="ri-add-circle-line" style="color:var(--sys-accent);font-size:18px"></i>
+        <span>手动录入 / 修改实盘持仓</span>
       </div>
-      <button style="background:none;border:none;color:var(--sys-text-sub);cursor:pointer;font-size:18px;width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center" onclick="closeAddPositionModal()">✕</button>
+      <button class="el-dialog__headerbtn" onclick="closeAddPositionModal()">✕</button>
     </div>
 
-    
-    <div class="form-row">
-      <label>股票代码 / 名称 / 拼音快速联想</label>
-      <div style="position:relative">
-        <input type="text" id="manualPosSymbol" placeholder="例如：贵州茅台、比亚迪、600519、1810.HK" autocomplete="off">
-        <div id="manualPosSuggest" class="autocomplete-dropdown" style="display:none"></div>
+    <div class="el-dialog__body" style="padding:4px 0">
+      <div class="form-row">
+        <label class="el-form-item__label">股票代码 / 名称 / 拼音快速联想</label>
+        <div style="position:relative">
+          <input type="text" id="manualPosSymbol" class="el-input__inner" placeholder="例如：贵州茅台、比亚迪、600519、1810.HK" autocomplete="off">
+          <div id="manualPosSuggest" class="autocomplete-dropdown" style="display:none"></div>
+        </div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-row">
+          <label class="el-form-item__label">持仓股数 (股 / 份)</label>
+          <input type="number" id="manualPosShares" class="el-input__inner" value="1000" step="100">
+        </div>
+        <div class="form-row">
+          <label class="el-form-item__label">买入成本均价 (元)</label>
+          <input type="number" id="manualPosCost" class="el-input__inner" value="10.0" step="0.01">
+        </div>
       </div>
     </div>
-    
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div class="form-row">
-        <label>持仓股数 (股 / 份)</label>
-        <input type="number" id="manualPosShares" value="1000" step="100">
-      </div>
-      <div class="form-row">
-        <label>买入成本均价 (元)</label>
-        <input type="number" id="manualPosCost" value="10.0" step="0.01">
-      </div>
-    </div>
-    
-    <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:12px;border-top:1px solid var(--sys-border);padding-top:16px">
-      <button class="btn btn-outline" style="width:auto;padding:8px 18px;font-size:13px;border-radius:6px" onclick="closeAddPositionModal()">取消</button>
-      <button class="btn btn-blue" style="width:auto;padding:8px 22px;font-size:13px;font-weight:700;border-radius:6px" onclick="saveManualPosition()">保存持仓并测算诊断</button>
+
+    <div class="el-dialog__footer">
+      <button class="el-button" onclick="closeAddPositionModal()">取消</button>
+      <button class="el-button el-button--primary" onclick="saveManualPosition()">保存持仓并测算诊断</button>
     </div>
   </div>
 </div>
 
-<!-- ==================== 板块全息画像与成分股主营业务透视弹窗 ==================== -->
-<div id="sectorDetailModal" class="modal-solid-wrapper" style="display:none">
-  <div class="modal-solid-card" style="width:94%;max-width:1050px;max-height:88vh;display:flex;flex-direction:column;padding:26px">
-
+<!-- ==================== 板块全息画像与成分股主营业务透视弹窗 (Element Plus 规范) ==================== -->
+<div id="sectorDetailModal" class="el-overlay" style="display:none">
+  <div class="el-dialog" style="width:94%;max-width:1050px;max-height:88vh;display:flex;flex-direction:column;position:relative">
+    
     <!-- 头部 -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--sys-border);padding-bottom:12px;margin-bottom:14px">
+    <div class="el-dialog__header">
       <div>
-        <div style="display:flex;align-items:center;gap:10px">
+        <div class="el-dialog__title">
           <i class="ri-building-4-line" style="font-size:20px;color:var(--sys-accent)"></i>
-          <h2 id="modalSectorTitle" style="margin:0;font-size:18px;color:var(--sys-text-title);font-weight:700">板块全息画像与成分股透视</h2>
-          <span id="modalSectorBadge" style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:rgba(9,105,218,0.12);color:var(--sys-accent)">板块</span>
+          <span id="modalSectorTitle">板块全息画像与成分股透视</span>
+          <span id="modalSectorBadge" class="el-tag el-tag--primary el-tag--small" style="margin-left:6px">板块</span>
         </div>
         <div id="modalSectorDesc" style="margin-top:6px;font-size:12px;color:var(--sys-text-sub);line-height:1.5">正在加载板块产业逻辑...</div>
       </div>
-      <span style="cursor:pointer;color:var(--sys-text-sub);font-size:22px;padding:2px 8px" onclick="closeSectorDetailModal()">✕</span>
+      <button class="el-dialog__headerbtn" onclick="closeSectorDetailModal()">✕</button>
     </div>
 
     <!-- 驱动逻辑与搜索过滤栏 -->
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-      <div id="modalSectorCatalysts" style="font-size:12px;color:var(--sys-text-primary);background:var(--sys-bg-card-inner);padding:8px 14px;border-radius:6px;border:1px solid var(--sys-border);flex:1;display:flex;align-items:center;gap:6px">
-        <i class="ri-lightbulb-line" style="color:#e3b341"></i>
+      <div id="modalSectorCatalysts" style="font-size:12px;color:var(--sys-text-primary);background:var(--sys-bg-card-inner);padding:8px 14px;border-radius:4px;border:1px solid var(--sys-border);flex:1;display:flex;align-items:center;gap:6px">
+        <i class="ri-lightbulb-line" style="color:#E6A23C"></i>
         <span><b>核心驱动：</b><span id="modalCatalystsText">加载中...</span></span>
       </div>
-      <input type="text" id="modalStockFilter" placeholder="在此板块内搜索股票/主营看点..." style="width:260px;font-size:12px;padding:6px 12px;background:var(--sys-input-bg);border:1px solid var(--sys-border);border-radius:6px;color:var(--sys-text-primary)" oninput="filterModalStocks(this.value)">
+      <input type="text" id="modalStockFilter" class="el-input__inner" placeholder="在此板块内搜索股票/主营看点..." style="width:260px" oninput="filterModalStocks(this.value)">
     </div>
 
-    <!-- 即时量化买卖点测算卡片抽屉 (点击成分股[测算]即时在此展示) -->
-    <div id="modalStockCalcResultCard" style="display:none;margin-bottom:12px;background:var(--sys-bg-card-inner);border:1px solid var(--sys-accent);border-radius:8px;padding:14px 18px;box-shadow:var(--sys-glow)">
-      <!-- 动态渲染测算结果 -->
-    </div>
-
-    <!-- 成分股与主营表格列表 (可滚动) -->
-    <div style="flex:1;overflow-y:auto;border:1px solid var(--sys-border);border-radius:6px;background:var(--sys-bg-card-inner)">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left">
-        <thead style="position:sticky;top:0;background:var(--sys-table-header);border-bottom:1px solid var(--sys-border);z-index:2">
-          <tr style="color:var(--sys-text-sub);font-size:12px">
+    <!-- 成分股与主营表格列表 (Element Plus 表格) -->
+    <div style="flex:1;overflow-y:auto;border:1px solid var(--sys-border);border-radius:4px;background:var(--sys-bg-card-inner)">
+      <table class="el-table" style="width:100%;margin:0">
+        <thead style="position:sticky;top:0;z-index:2">
+          <tr>
             <th style="padding:10px 12px;width:18%">股票代码 / 名称</th>
-
             <th style="padding:10px 12px;width:12%;text-align:right">实时现价</th>
             <th style="padding:10px 12px;width:12%;text-align:right">今日涨跌幅</th>
             <th style="padding:10px 12px;width:42%">主营业务与核心看点（干啥的）</th>
-            <th style="padding:10px 12px;width:16%;text-align:center;display:flex;align-items:center;justify-content:center;gap:4px">
-              <i class="ri-flashlight-fill" style="color:#e3b341"></i>
-              <span>操作决策</span>
-            </th>
+            <th style="padding:10px 12px;width:16%;text-align:center">操作决策</th>
           </tr>
         </thead>
-
         <tbody id="modalStocksTableBody">
-          <tr><td colspan="5" style="text-align:center;padding:30px;color:#8b949e"><span class="spinner"></span> 正在拉取成分股与企业主营档案...</td></tr>
+          <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--sys-text-sub)"><span class="spinner"></span> 正在拉取成分股与企业主营档案...</td></tr>
         </tbody>
       </table>
     </div>
 
     <!-- 底部：分页控制器与关闭按钮 -->
-    <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <span style="font-size:12px;color:#8b949e" id="modalStockCountText">共 0 家成分股</span>
-
-      <!-- 分页控制按钮组 -->
+    <div class="el-dialog__footer" style="justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px">
+      <span style="font-size:12px;color:var(--sys-text-sub)" id="modalStockCountText">共 0 家成分股</span>
       <div id="modalPagination" style="display:flex;align-items:center;gap:8px">
-        <button class="btn btn-outline" style="width:auto;padding:4px 10px;font-size:11px" id="modalPrevPageBtn" onclick="changeModalPage(-1)">◀ 上一页</button>
-        <span style="font-size:12px;color:#e6edf3" id="modalPageInfo">第 1 / 1 页</span>
-        <button class="btn btn-outline" style="width:auto;padding:4px 10px;font-size:11px" id="modalNextPageBtn" onclick="changeModalPage(1)">下一页 ▶</button>
+        <button class="el-button el-button--small" id="modalPrevPageBtn" onclick="changeModalPage(-1)">◀ 上一页</button>
+        <span style="font-size:12px;color:var(--sys-text-primary)" id="modalPageInfo">第 1 / 1 页</span>
+        <button class="el-button el-button--small" id="modalNextPageBtn" onclick="changeModalPage(1)">下一页 ▶</button>
       </div>
-
-      <button class="btn btn-outline" style="width:auto;padding:6px 20px" onclick="closeSectorDetailModal()">关闭</button>
+      <button class="el-button" onclick="closeSectorDetailModal()">关闭</button>
     </div>
   </div>
 </div>
 
-<!-- ==================== 5. 🏦 东方财富账户系统级全自动直连与守护中枢弹窗 ==================== -->
-<div id="eastMoneyModal" class="modal-solid-wrapper" style="display:none">
-  <div class="modal-adaptive-card" style="width:580px;max-width:94vw;padding:24px;position:relative">
-    
-    <!-- 头部 -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid var(--sys-border);padding-bottom:12px">
-      <div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#10b981,#0969da);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px">
-            <i class="ri-bank-card-fill"></i>
+<!-- ==================== 5. 🏦 东方财富账户系统级全自动直连中枢弹窗 (Element Plus 规范) ==================== -->
+<div id="eastMoneyModal" class="el-overlay" style="display:none">
+  <div class="el-dialog" style="width:620px;max-width:94vw;position:relative">
+    <div class="el-dialog__header">
+      <div class="el-dialog__title">
+        <div style="width:28px;height:28px;border-radius:4px;background:linear-gradient(135deg,#67C23A,#409EFF);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px">
+          <i class="ri-bank-card-fill"></i>
+        </div>
+        <span>东方财富持仓与全量实时行情同步中枢</span>
+      </div>
+      <button class="el-dialog__headerbtn" onclick="closeEastMoneyModal()">✕</button>
+    </div>
+
+    <div class="el-dialog__body">
+      <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:12px;color:var(--sys-text-sub)">全量刷新持仓行情与买卖点深度诊断 · 支持东财实盘凭证自动对账</div>
+        <span id="emModalStatusTag" class="el-tag el-tag--success el-tag--small">
+          <i class="ri-pulse-line"></i> 实时行情已连通
+        </span>
+      </div>
+
+
+    <!-- 运行状态信息卡片 (未绑定与已绑定自适应切换) -->
+    <div id="emStatusCard" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:10px;padding:16px;margin-bottom:16px">
+      <!-- 状态指示条 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;margin-bottom:14px;border-bottom:1px solid var(--sys-border)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--sys-text-sub)">实盘账户：</span>
+          <b id="emModalUser" style="color:var(--sys-text-primary);font-size:13px">陈一辉</b>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--sys-text-sub)">心跳探活状态：</span>
+          <span id="emHeartbeatStatusTag" style="font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(16,185,129,0.1);color:#10b981;font-weight:600">🟢 在线保活中</span>
+        </div>
+      </div>
+
+      <!-- 选项卡切换 -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--sys-border);padding-bottom:8px">
+        <button id="emTabCookieBtn" class="btn btn-outline" style="width:auto;padding:5px 12px;font-size:12px;background:var(--sys-accent-soft);border-color:var(--sys-accent);color:var(--sys-accent);font-weight:700" onclick="switchEmTab('cookie')">
+          <i class="ri-code-box-line"></i> 完整 Cookie 粘贴 (推荐·保活12h+)
+        </button>
+        <button id="emTabAutoBtn" class="btn btn-outline" style="width:auto;padding:5px 12px;font-size:12px" onclick="switchEmTab('auto')">
+          <i class="ri-shield-keyhole-line"></i> 账号密码自动重连 (AES加密)
+        </button>
+      </div>
+
+      <!-- 选项卡 1：Cookie 绑定与探活 -->
+      <div id="emTabCookieContent">
+        <div style="background:var(--sys-bg-card);border:1px solid rgba(9,105,218,0.25);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--sys-text-primary);line-height:1.6">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <b style="color:var(--sys-accent);font-size:13px"><i class="ri-key-2-line"></i> 东方财富 Cookie 获取方式 (超简单 3 步)：</b>
           </div>
-          <div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--sys-text-title)">东方财富账户系统级全自动直连中枢</h3>
-              <span id="emModalStatusTag" style="background:rgba(16,185,129,0.12);color:#10b981;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px">
-                <i class="ri-shield-check-fill"></i> 守护进程运行中
-              </span>
+            <b>1. 打开并登录：</b>在浏览器打开 <a href="https://jywg.18.cn/Login?el=1&clear=&returl=%2fSearch%2fPosition" target="_blank" style="color:var(--sys-accent);text-decoration:underline;font-weight:700">东财证券交易登录入口 (jywg.18.cn) ↗</a> 并登录您的证券资金账号（注：社区个人中心 i.eastmoney.com 无实盘持仓凭证）<br>
+            <b>2. 打开控制台：</b>按键盘 <b>F12</b>（Mac 按 <b>Command + Option + I</b>）切换到 <b>Console(控制台)</b> 标签<br>
+            <b>3. 运行复制脚本：</b>在控制台最下方粘贴以下命令按回车，凭证将自动复制到剪贴板：
+            <div style="margin:6px 0;background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:6px;padding:6px 10px;font-family:monospace;font-size:11px;display:flex;align-items:center;justify-content:space-between">
+              <code style="color:#10b981;word-break:break-all">copy("validatekey=" + (window.validatekey || "") + "; " + document.cookie);</code>
+              <button class="btn btn-outline" style="width:auto;padding:2px 8px;font-size:11px;margin-left:8px;white-space:nowrap" onclick="navigator.clipboard.writeText('copy(\"validatekey=\" + (window.validatekey || \"\") + \"; \" + document.cookie);');showToast('已复制控制台脚本！','success')">复制脚本</button>
             </div>
-            <p style="margin:4px 0 0 0;font-size:12px;color:var(--sys-text-sub)">零手工录入 · 盘中每 10 秒自动静默同步持仓、成交与自选股</p>
+            <b>4. 粘贴并确认：</b>将剪贴板内容直接粘贴到下方输入框，点击【确认绑定并立即探活】即可！
           </div>
         </div>
-      </div>
-      <button style="background:none;border:none;color:var(--sys-text-sub);cursor:pointer;font-size:20px;padding:2px 6px" onclick="closeEastMoneyModal()">
-        <i class="ri-close-line"></i>
-      </button>
-    </div>
-
-
-    <!-- 运行状态信息卡片 -->
-    <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:10px;padding:16px;margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
-        <div>
-          <span style="color:var(--sys-text-sub)">关联实盘账户：</span>
-          <b id="emModalUser" style="color:var(--sys-text-primary)">陈一辉 (2829)</b>
+        <div class="form-row" style="margin-bottom:10px">
+          <label style="font-size:12px;font-weight:600">东方财富 Cookie 凭证文本</label>
+          <textarea id="emFullCookieInput" rows="3" placeholder="在此粘贴复制的凭证文本 (包含 ut=...; pi=...; uidal=...)" style="width:100%;font-size:11px;font-family:monospace;padding:8px;border-radius:6px;border:1px solid var(--sys-border);background:var(--sys-bg-card);color:var(--sys-text-primary);resize:vertical"></textarea>
+          <div id="emBindErrorTip" style="display:none;color:#f85149;font-size:11px;margin-top:4px"></div>
         </div>
-        <div>
-          <span style="color:var(--sys-text-sub)">同步调度模式：</span>
-          <b style="color:var(--sys-accent)">后台常驻守护 (10秒/次)</b>
-        </div>
-        <div>
-          <span style="color:var(--sys-text-sub)">最近同步时间：</span>
-          <span id="emModalLastSync" style="font-family:monospace;color:var(--sys-text-primary)">刚刚</span>
-        </div>
-        <div>
-          <span style="color:var(--sys-text-sub)">自动同步开关：</span>
-          <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px">
-            <input type="checkbox" id="emAutoSyncToggle" checked onchange="toggleEmAutoSync(this.checked)">
-            <b style="color:#10b981">实时静默同步</b>
-          </label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-blue" style="flex:1;padding:8px;font-size:12px;font-weight:700" onclick="submitBindFullCookie()">
+            <i class="ri-shield-check-line"></i> 确认绑定并立即探活
+          </button>
+          <button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:12px" onclick="triggerVerifyHeartbeat()">
+            <i class="ri-pulse-line"></i> 探活测试
+          </button>
         </div>
       </div>
+
+      <!-- 选项卡 2：Playwright 账号密码自动重连 -->
+      <div id="emTabAutoContent" style="display:none">
+        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--sys-text-primary);line-height:1.5">
+          <b>🤖 Playwright 无人值守断线自愈：</b><br>
+          账号与密码经 <b>AES-256 (Fernet)</b> 加密存储于本地设备，仅在 Session 失效时由后台无头浏览器自动重登，绝不上传云端。
+        </div>
+        <div class="form-row" style="margin-bottom:8px">
+          <label style="font-size:12px">东方财富交易账号</label>
+          <input type="text" id="emAutoAccountInput" placeholder="请输入资金账号 / 登录账号" style="font-size:12px;padding:6px 10px">
+        </div>
+        <div class="form-row" style="margin-bottom:10px">
+          <label style="font-size:12px">交易密码</label>
+          <input type="password" id="emAutoPasswordInput" placeholder="请输入交易密码 (本地AES加密)" style="font-size:12px;padding:6px 10px" autocomplete="new-password">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-blue" style="flex:1;padding:8px;font-size:12px;font-weight:700" onclick="saveBrowserCredentials()">
+            <i class="ri-save-line"></i> 安全保存配置
+          </button>
+          <button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:12px" onclick="triggerBrowserAutoLogin()">
+            <i class="ri-login-box-line"></i> 立即测试自动登录
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- 操作按钮组 -->
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px">
-      <button class="btn btn-outline" style="width:auto;font-size:12px;padding:8px 16px;color:#f85149;border-color:rgba(248,81,73,0.3);display:flex;align-items:center;gap:6px" onclick="unbindEastMoney()">
-        <i class="ri-link-unlink-m" style="font-size:14px"></i>
-        <span>断开东财直连</span>
-      </button>
+    <!-- 底部状态与操作按钮组 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;font-size:12px">
+      <div style="color:var(--sys-text-sub);display:flex;align-items:center;gap:12px">
+        <span>最近同步: <b id="emModalLastSync" style="font-family:monospace;color:var(--sys-text-primary)">--</b></span>
+        <span>保活周期: <b style="color:var(--sys-accent)">5分钟/次</b></span>
+      </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-outline" style="width:auto;font-size:12px;padding:8px 16px" onclick="closeEastMoneyModal()">关闭</button>
-        <button class="btn btn-blue" id="emSyncNowBtn" style="width:auto;font-size:12px;font-weight:700;padding:8px 20px;display:flex;align-items:center;gap:6px" onclick="triggerEmSyncNow()">
-          <i class="ri-flashlight-line" style="font-size:14px"></i>
-          <span>立即全量同步一次</span>
+        <button class="el-button is-plain" id="emUnbindBtn" style="color:#f56c6c;border-color:#fbc4c4" onclick="unbindEastMoney()">
+          <i class="ri-link-unlink-m"></i> 断开凭证
+        </button>
+        <button class="el-button" onclick="closeEastMoneyModal()">关闭</button>
+        <button class="el-button el-button--primary" id="emSyncNowBtn" onclick="triggerEmSyncNow()">
+          <i class="ri-flashlight-line"></i>
+          <span>立即全量刷新行情与诊断</span>
+        </button>
+      </div>
+    </div>
+    </div> <!-- 闭合 el-dialog__body -->
+  </div> <!-- 闭合 el-dialog -->
+</div> <!-- 闭合 eastMoneyModal el-overlay -->
+
+
+<!-- ==================== ⚡ 东方财富 Cookie 极速自动续期面板 (无样式污染·统一专业版) ==================== -->
+<!-- 快速续期与长效保活全维模态框 -->
+<div id="quickRenewModal" class="el-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);z-index:10000;align-items:center;justify-content:center">
+  <div style="width:94%;max-width:680px;max-height:92vh;overflow-y:auto;background:#ffffff;border:1px solid #e4e7ed;border-radius:12px;box-shadow:0 20px 48px rgba(0,0,0,0.18);padding:24px;position:relative;box-sizing:border-box;color:#303133;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+    
+    <!-- 弹窗头部 (Element Plus 官方风格) -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:1px solid #ebeef5;padding-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="width:40px;height:40px;border-radius:8px;background:#ecf5ff;border:1px solid #d9ecff;display:flex;align-items:center;justify-content:center;color:#409eff;font-size:22px;flex-shrink:0">
+          <svg viewBox="0 0 1024 1024" width="22" height="22" style="fill: currentColor;"><path d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896m-55.808 536.384-99.52-99.584a38.4 38.4 0 1 0-54.336 54.336l126.72 126.72a38.272 38.272 0 0 0 54.336 0l262.4-262.464a38.4 38.4 0 1 0-54.272-54.336z"/></svg>
+        </span>
+        <div>
+          <h3 style="margin:0;font-size:17px;color:#303133;font-weight:700;letter-spacing:0.2px">东方财富凭证与实盘连接管理</h3>
+          <span style="font-size:13px;color:#606266;font-weight:500;display:block;margin-top:3px">双通道物理隔离 · 实盘持仓与云自选股独立同步</span>
+        </div>
+      </div>
+      <button onclick="closeQuickRenewModal()" title="关闭窗口" style="background:#f4f4f5;border:1px solid #e4e7ed;color:#909399;width:32px;height:32px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;flex-shrink:0" onmouseover="this.style.background='#e9e9eb';this.style.color='#606266'" onmouseout="this.style.background='#f4f4f5';this.style.color='#909399'">
+        <svg viewBox="0 0 1024 1024" width="16" height="16" style="fill: currentColor;"><path d="m512 426.667 226.133-226.134a60.373 60.373 0 0 1 85.334 85.334L597.333 512l226.134 226.133a60.373 60.373 0 0 1-85.334 85.334L512 597.333l-226.133 226.134a60.373 60.373 0 0 1-85.334-85.334L426.667 512 200.533 285.867a60.373 60.373 0 0 1 85.334-85.334z"/></svg>
+      </button>
+    </div>
+
+    <!-- 🔷 通道一：金融证券交易账号（实盘持仓与资金专用通道） -->
+    <div style="background:#f0f7ff;border:1px solid #b3d8ff;border-radius:10px;padding:18px;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
+          <span style="width:30px;height:30px;border-radius:6px;background:#409eff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;flex-shrink:0">
+            <svg viewBox="0 0 1024 1024" width="18" height="18" style="fill: currentColor;"><path d="M128 224h768a64 64 0 0 1 64 64v448a64 64 0 0 1-64 64H128a64 64 0 0 1-64-64V288a64 64 0 0 1 64-64m0 64v448h768V288zm384 96a128 128 0 1 1 0 256 128 128 0 0 1 0-256m0 64a64 64 0 1 0 0 128 64 64 0 0 0 0-128"/></svg>
+          </span>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:#1e40af;display:flex;align-items:center;gap:8px">
+              <span>通道一：金融证券交易账号</span>
+              <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:#409eff;color:#ffffff;font-weight:600">实盘持仓与资产专用</span>
+            </div>
+            <div style="font-size:12.5px;color:#4b5563;margin-top:3px;font-weight:500">同步您的实盘总资产、可用资金、持仓股票数量与买入成本</div>
+          </div>
+        </div>
+        
+        <!-- 用户已验证好用的金融书签 (完全保留原版代码，一字不改) -->
+        <a href="javascript:(async function(){var h=location.hostname||'';if(!h.includes('18.cn')&&!h.includes('eastmoney.com')){if(confirm('⚠️ 提示：需要进入【东方财富网上证券交易系统】才能读取真实持仓凭证。\n\n👉 点击【确定】立即打开证券交易登录页！\n（登录后在持仓页面再点一次本书签）')){location.href='https://jywg.18.cn/Login?el=1&clear=&returl=%2fSearch%2fPosition';}return;}var c=document.cookie||'';var vk='';var m=(location.search+location.hash+location.href).match(/validatekey=([^&;#\s]+)/i);if(m)vk=m[1];if(!vk&&window.validatekey)vk=window.validatekey;if(!vk&&window.ValidateKey)vk=window.ValidateKey;if(!vk){try{vk=sessionStorage.getItem('validatekey')||localStorage.getItem('validatekey')||'';}catch(e){}}var holdings=[];var funds={total_asset:0,available_cash:0};try{var bText=document.body.innerText||'';var mAsset=bText.match(/总资产[：:\s]*([\d,.]+)/);if(mAsset)funds.total_asset=parseFloat(mAsset[1].replace(/,/g,''))||0;var mCash=bText.match(/可用资金[：:\s]*([\d,.]+)/)||bText.match(/资金余额[：:\s]*([\d,.]+)/);if(mCash)funds.available_cash=parseFloat(mCash[1].replace(/,/g,''))||0;}catch(e){}try{var tables=Array.from(document.querySelectorAll('table, .grid'));for(var tbl of tables){var rows=Array.from(tbl.querySelectorAll('tr'));if(rows.length<2)continue;var colIdx={code:-1,name:-1,shares:-1,cost:-1,price:-1};for(var r of rows){var ths=Array.from(r.querySelectorAll('th,td')).map(c=>c.innerText.trim());ths.forEach((t,i)=>{if(/证券代码|股票代码|代码/.test(t)&&colIdx.code===-1)colIdx.code=i;if(/证券名称|股票名称|名称/.test(t)&&colIdx.name===-1)colIdx.name=i;if(/证券数量|股票余额|持仓数量|实际持仓|总持仓/.test(t)&&colIdx.shares===-1)colIdx.shares=i;if(/成本价|买入成本|持仓成本|成本/.test(t)&&colIdx.cost===-1)colIdx.cost=i;if(/当前价|最新价|市价|现价/.test(t)&&colIdx.price===-1)colIdx.price=i;});if(colIdx.code!==-1&&(colIdx.shares!==-1||colIdx.name!==-1))break;}for(var r of rows){var tds=Array.from(r.querySelectorAll('td')).map(c=>c.innerText.trim());if(tds.length===0)continue;if(colIdx.code!==-1&&colIdx.shares!==-1&&tds[colIdx.code]&&/^\d{6}$/.test(tds[colIdx.code])){var sym=tds[colIdx.code];var name=colIdx.name!==-1?tds[colIdx.name]:'标的';var shares=parseInt(tds[colIdx.shares].replace(/,/g,''))||0;var cost=colIdx.cost!==-1?(parseFloat(tds[colIdx.cost].replace(/,/g,''))||0):0;var price=colIdx.price!==-1?(parseFloat(tds[colIdx.price].replace(/,/g,''))||cost):cost;if(shares>0)holdings.push({symbol:sym,name:name,shares:shares,cost_price:cost,current_price:price});}}if(holdings.length>0)break;}}catch(e){}try{var resp=await fetch('http://localhost:8000/api/eastmoney/bind-full-credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:c,validatekey:vk,base_host:location.origin,user_name:'陈一辉',direct_holdings:holdings,direct_funds:(funds.total_asset>0||funds.available_cash>0)?funds:null})});var d=await resp.json();if(holdings.length>0||funds.total_asset>0){var summary=holdings.map(h=>'• '+h.name+'('+h.symbol+'): '+h.shares+'股 | 成本¥'+h.cost_price).join('\n');alert('🎉 东方财富真实实盘持仓同步成功！\n\n共同步 '+holdings.length+' 只持仓标的，总资产: ¥'+funds.total_asset.toLocaleString()+'\n\n'+summary+'\n\n👉 切回量化系统刷新即可查看最新真实资产与深度诊断！');}else{alert('⚠️ 凭证已回传，但未能解析到持仓表格数据。\n东财反馈: '+(d.message||''));}}catch(err){alert('❌ 同步到本地量化系统异常: '+err.message);}})();" 
+           title="按住鼠标左键，直接拖拽到上方的浏览器书签栏（金融实盘持仓专用）"
+           style="flex-shrink:0;height:32px;padding:0 15px;border-radius:6px;background:#409eff;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:grab;white-space:nowrap;word-break:keep-all;box-shadow:0 3px 10px rgba(64,158,255,0.35);transition:background 0.2s"
+           onmouseover="this.style.background='#66b1ff'"
+           onmouseout="this.style.background='#409eff'">
+          <svg viewBox="0 0 1024 1024" width="15" height="15" style="fill: currentColor;"><path d="M375.467 799.573 96 669.867 870.4 128l-409.6 768-85.333-96.427zm39.68-120.746L704 288 416 672z"/></svg>
+          <span>拖我到书签栏 (金融持仓专用)</span>
+        </a>
+      </div>
+
+      <!-- 高对比度说明指引框 (白底黑字·清晰可辨) -->
+      <div style="background:#ffffff;border:1px solid #c6e2ff;border-radius:8px;padding:12px 14px;line-height:1.7;font-size:13px;color:#303133">
+        <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1e40af;margin-bottom:4px">
+          <svg viewBox="0 0 1024 1024" width="15" height="15" style="fill: currentColor;"><path d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896m0 832a384 384 0 1 0 0-768 384 384 0 0 0 0 768m178.688-562.688-85.312 256a32 32 0 0 1-18.048 18.048l-256 85.312a32 32 0 0 1-40.64-40.64l85.312-256a32 32 0 0 1 18.048-18.048l256-85.312a32 32 0 0 1 40.64 40.64M496 496a32 32 0 1 0 32 32 32 32 0 0 0-32-32"/></svg>
+          <span>使用步骤：</span>
+        </div>
+        <div style="color:#4b5563;padding-left:21px">
+          拖到书签栏后，打开 <a href="https://jywg.18.cn/Login?el=1&clear=&returl=%2fSearch%2fPosition" target="_blank" style="color:#409eff;text-decoration:underline;font-weight:700">东财证券交易登录页 ↗</a>，登录进入持仓页面，点击本书签即可秒级提取实盘持仓与资产！
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px dashed #e4e7ed;color:#15803d;font-weight:600">
+          <svg viewBox="0 0 1024 1024" width="14" height="14" style="fill: currentColor;"><path d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896m-55.808 536.384-99.52-99.584a38.4 38.4 0 1 0-54.336 54.336l126.72 126.72a38.272 38.272 0 0 0 54.336 0l262.4-262.464a38.4 38.4 0 1 0-54.272-54.336z"/></svg>
+          <span>保护机制：此通道只管理金融数据，绝不触碰自选池；后台已开启安全锁，绝不清空已有持仓！</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🟣 通道二：东方财富通行证（云自选股同步专用通道） -->
+    <div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:10px;padding:18px;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
+          <span style="width:30px;height:30px;border-radius:6px;background:#8957e5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;flex-shrink:0">
+            <svg viewBox="0 0 1024 1024" width="18" height="18" style="fill: currentColor;"><path d="m512 679.488 238.08 147.2-63.36-271.744 209.6-181.76-278.4-23.744L512 96l-105.92 253.44-278.4 23.744 209.6 181.76-63.36 271.744z"/></svg>
+          </span>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:#6b21a8;display:flex;align-items:center;gap:8px">
+              <span>通道二：东方财富自选通行证</span>
+              <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:#8957e5;color:#ffffff;font-weight:600">云自选池专用</span>
+            </div>
+            <div style="font-size:12.5px;color:#4b5563;margin-top:3px;font-weight:500">同步东财 APP / 网页端云自选股票池，与金融账号彻底物理隔离</div>
+          </div>
+        </div>
+
+        <!-- 专属东财自选股提取书签 (全自动写入剪贴板+双通道回传) -->
+        <a href="javascript:(async function(){try{var h=location.hostname||'';if(!h.includes('eastmoney.com')){alert('⚠️ 提示：请在东方财富自选股页面（https://quote.eastmoney.com/zixuan/）点击本书签！');return;}var list=[];var seen=new Set();var rows=Array.from(document.querySelectorAll('table tr, .list-tr, tbody tr, tr'));for(var r of rows){var txt=r.innerText||'';var m=txt.match(/\b(00\d{4}|60\d{4}|30\d{4}|68\d{4}|159\d{3}|51\d{4}|0\d{4})\b/);if(m){var sym=m[1];if(!seen.has(sym)){seen.add(sym);var name='';var links=Array.from(r.querySelectorAll('a, span, td')).map(function(el){return el.innerText.trim();}).filter(Boolean);for(var i=0;i<links.length;i++){var t=links[i];if(t.length>=2&&t.length<=8&&!/^\d+$/.test(t)&&!/^[+%-]/.test(t)&&!/买|卖|加|自选|股吧|行情/.test(t)){name=t;break;}}list.push({symbol:sym,name:name||sym});}}}if(list.length===0){var allLinks=Array.from(document.querySelectorAll('a'));for(var j=0;j<allLinks.length;j++){var a=allLinks[j];var href=a.href||'';var t=a.innerText.trim();var m2=href.match(/\b(00\d{4}|60\d{4}|30\d{4}|68\d{4}|159\d{3}|51\d{4})\b/)||t.match(/^\b(00\d{4}|60\d{4}|30\d{4}|68\d{4}|159\d{3}|51\d{4})\b$/);if(m2&&!seen.has(m2[1])){seen.add(m2[1]);list.push({symbol:m2[1],name:t&&t!==m2[1]?t:m2[1]});}}}if(list.length===0){alert('⚠️ 未能扫描到自选股，请确认当前网页已完全加载出自选股列表！');return;}var postData=JSON.stringify({cookie:document.cookie||'',direct_watchlist:list});var clipOk=false;try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(postData);clipOk=true;}}catch(ce){}if(!clipOk){try{var ta=document.createElement('textarea');ta.value=postData;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);clipOk=true;}catch(ce2){}}var ok=false;try{var resp=await fetch('http://localhost:8000/api/eastmoney/bind-community-cookie',{method:'POST',mode:'cors',headers:{'Content-Type':'application/json'},body:postData});if(resp.ok)ok=true;}catch(err){}var preview=list.slice(0,6).map(function(s){return '• '+s.name+' ('+s.symbol+')';}).join('\n');if(ok){alert('🎉 东方财富自选股直连同步成功！\n\n共同步 '+list.length+' 只自选标的：\n'+preview+(list.length>6?'\n...等':'')+'\n\n👉 切回量化系统刷新即可查看最新自选池！');}else{alert('📋 已成功抓取 '+list.length+' 只自选股票并【已自动复制到剪贴板】！\n\n'+preview+(list.length>6?'\n...等':'')+'\n\n👉 请切回本地量化系统，点击【📋 一键从剪贴板同步自选】即可秒级导入！');}}catch(globalErr){alert('❌ 自选股书签执行异常: '+globalErr.message);}})();"
+           title="按住鼠标左键，直接拖拽到上方的浏览器书签栏（自选股专用）"
+           style="flex-shrink:0;height:32px;padding:0 15px;border-radius:6px;background:#8957e5;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:grab;white-space:nowrap;word-break:keep-all;box-shadow:0 3px 10px rgba(137,87,229,0.35);transition:background 0.2s"
+           onmouseover="this.style.background='#9d70eb'"
+           onmouseout="this.style.background='#8957e5'">
+          <svg viewBox="0 0 1024 1024" width="15" height="15" style="fill: currentColor;"><path d="M375.467 799.573 96 669.867 870.4 128l-409.6 768-85.333-96.427zm39.68-120.746L704 288 416 672z"/></svg>
+          <span>拖我到书签栏 (自选股专用)</span>
+        </a>
+      </div>
+
+      <!-- 高对比度说明指引框 (白底黑字·清晰可辨) -->
+      <div style="background:#ffffff;border:1px solid #e9d5ff;border-radius:8px;padding:12px 14px;line-height:1.7;font-size:13px;color:#303133;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#6b21a8;margin-bottom:4px">
+          <svg viewBox="0 0 1024 1024" width="15" height="15" style="fill: currentColor;"><path d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896m0 832a384 384 0 1 0 0-768 384 384 0 0 0 0 768m178.688-562.688-85.312 256a32 32 0 0 1-18.048 18.048l-256 85.312a32 32 0 0 1-40.64-40.64l85.312-256a32 32 0 0 1 18.048-18.048l256-85.312a32 32 0 0 1 40.64 40.64M496 496a32 32 0 1 0 32 32 32 32 0 0 0-32-32"/></svg>
+          <span>使用步骤：</span>
+        </div>
+        <div style="color:#4b5563;padding-left:21px">
+          拖到书签栏后，打开 <a href="https://quote.eastmoney.com/zixuan/" target="_blank" style="color:#8957e5;text-decoration:underline;font-weight:700">东方财富自选股页面 ↗</a>，点击本书签即可秒级抓取全部 27 只自选股票（自动复制到剪贴板）！
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px dashed #e4e7ed;color:#7e22ce;font-weight:600">
+          <svg viewBox="0 0 1024 1024" width="14" height="14" style="fill: currentColor;"><path d="M224 448V320a288 288 0 0 1 576 0v128h32a64 64 0 0 1 64 64v384a64 64 0 0 1-64 64H192a64 64 0 0 1-64-64V512a64 64 0 0 1 64-64zm64 0h448V320a224 224 0 0 0-448 0zm256 224a48 48 0 1 0-64 45.248V768a32 32 0 1 0 64 0v-50.752A48 48 0 0 0 544 672"/></svg>
+          <span>隔离机制：此通道专门服务自选股，与金融账号彻底物理隔离，绝不影响实盘持仓！</span>
+        </div>
+      </div>
+
+      <!-- 手动粘贴或剪贴板同步控件 (Element Plus 规范) -->
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input id="communityCookieInput" type="text" placeholder="（备用）在此直接粘贴东财 Cookie 或股票代码..." style="flex:1;min-width:220px;height:34px;font-size:13px;font-family:'JetBrains Mono',monospace;padding:0 12px;border-radius:6px;background:#ffffff;border:1px solid #dcdfe6;color:#303133;box-sizing:border-box;outline:none" onfocus="this.style.borderColor='#8957e5'" onblur="this.style.borderColor='#dcdfe6'">
+        <button onclick="syncWatchlistFromClipboard()" style="height:34px;padding:0 14px;border-radius:6px;background:#8957e5;border:none;color:#ffffff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;transition:background 0.2s" onmouseover="this.style.background='#794bc4'" onmouseout="this.style.background='#8957e5'">
+          <svg viewBox="0 0 1024 1024" width="14" height="14" style="fill: currentColor;"><path d="M768 192V128H256v64H128v704h768V192zm-64 640H320V256h384zm-64-576v64H384v-64z"/></svg>
+          <span>一键从剪贴板同步 (27只)</span>
+        </button>
+        <button onclick="submitCommunityCookie()" style="height:34px;padding:0 12px;border-radius:6px;background:#f4f4f5;border:1px solid #dcdfe6;color:#606266;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;transition:background 0.2s" onmouseover="this.style.background='#e9e9eb'" onmouseout="this.style.background='#f4f4f5'">
+          <span>确认保存</span>
         </button>
       </div>
     </div>
 
+    <!-- 底部操作与关闭按钮 (Element Plus 经典按钮样式) -->
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;border-top:1px solid #ebeef5;padding-top:16px">
+      <button onclick="closeQuickRenewModal()" style="height:36px;padding:0 22px;border-radius:6px;background:#ffffff;border:1px solid #dcdfe6;color:#606266;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='#c6e2ff';this.style.color='#409eff';this.style.background='#ecf5ff'" onmouseout="this.style.borderColor='#dcdfe6';this.style.color='#606266';this.style.background='#ffffff'">关闭窗口</button>
+    </div>
   </div>
 </div>
-
 
 <!-- ==================== 🤖 全天候常驻：AI 首席操盘顾问悬浮球入口 ==================== -->
 <div id="aiChatFloatingTrigger" onclick="openAiChatDrawer()" style="position:fixed;bottom:30px;right:30px;z-index:9990;display:flex;align-items:center;gap:10px;padding:10px 18px;background:linear-gradient(135deg,#8957e5,#388bfd);color:#fff;border-radius:30px;cursor:pointer;box-shadow:0 8px 24px rgba(56,139,253,0.35);border:1px solid rgba(255,255,255,0.25);transition:all 0.2s;font-family:'Plus Jakarta Sans',sans-serif" onmouseover="this.style.transform='translateY(-3px) scale(1.03)'" onmouseout="this.style.transform='none'">
@@ -566,6 +732,45 @@
         </div>
       </div>
 
+      <!-- 战法 5 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px;color:#e3b341;display:flex;align-items:center;gap:4px">
+            <i class="ri-bar-chart-grouped-line"></i>
+            <span>筹码单峰密集向上发散战法</span>
+          </b>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(227,179,65,0.15);color:#e3b341">主力控盘流</span>
+        </div>
+        <div style="font-size:11px;color:var(--sys-text-sub)"><b>出处：</b>《筹码分布准确测算》·《庄家操盘手法解密》</div>
+        <div style="font-size:12px;color:var(--sys-text-primary);line-height:1.6;background:var(--sys-bg-panel);padding:10px;border-radius:6px;border:1px solid var(--sys-border)">
+          <b>1. 触发信号：</b>窄幅区间筹码密集度>70%形成单峰，获利盘快速攀升至>80%，放量向上跳空越过密集峰顶。<br>
+          <b>2. 确定买点：</b>放量突破筹码主峰最高上沿时买入半仓；回踩峰顶不破确认支撑后加满目标仓位。<br>
+          <b>3. 仓位上限：</b>3~4 成。<br>
+          <b>4. 做T节奏：</b>底部单峰筹码未向上大面积转移时坚定持股，日内急跌缩量企稳逢低做 T。<br>
+          <b>5. 目标止盈：</b>底部筹码峰彻底消失、并在高位形成新的密集分散峰时，全线清仓锁定波段大肉。<br>
+          <span style="color:#f85149"><b>6. 铁血止损：</b>股价跌回筹码密集峰下沿下方超 -3.0%，判定为主力诱多出逃，坚决止损！</span>
+        </div>
+      </div>
+
+      <!-- 战法 6 -->
+      <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px;color:#a371f7;display:flex;align-items:center;gap:4px">
+            <i class="ri-shield-cross-line"></i>
+            <span>存量震荡·日内T+0降本解套战法</span>
+          </b>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(163,113,247,0.15);color:#a371f7">防守自救流</span>
+        </div>
+        <div style="font-size:11px;color:var(--sys-text-sub)"><b>出处：</b>《分时图做T实战图解》·《战胜庄家做T秘诀》</div>
+        <div style="font-size:12px;color:var(--sys-text-primary);line-height:1.6;background:var(--sys-bg-panel);padding:10px;border-radius:6px;border:1px solid var(--sys-border)">
+          <b>1. 触发信号：</b>持仓被套浮亏，分时急跌远离 5 日线，分时 KDJ/RSI 严重超卖 (<15) 出现钝化企稳。<br>
+          <b>2. 确定买点：</b>早盘 09:30~10:00 缩量恐慌急跌考验关键支撑时，用 1/3 机动资金逢低补入等量股份。<br>
+          <b>3. 仓位上限：</b>严守【对冲闭环铁律】，日内买多少必须卖出多少老仓，隔夜总股数绝不增加。<br>
+          <b>4. 做T节奏：</b>盘中反抽冲高 +2.0%~+3.5% 触及分时均价线阻力时，立即卖出原本底仓锁定差价。<br>
+          <b>5. 目标止盈：</b>单次做 T 摊薄成本 1.5%~2.5%，通过 3~5 次成功做 T 彻底将被套标的转化为盈利出局。<br>
+          <span style="color:#f85149"><b>6. 铁血止损：</b>个股累计浮亏触及 -5.0% 且放量跌破历史最低支撑，坚决按纪律止损，绝不无底线抗单！</span>
+        </div>
+      </div>
 
     </div>
 

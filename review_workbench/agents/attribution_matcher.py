@@ -96,18 +96,18 @@ class AttributionMatcher:
                         confidence = 0.78
                         break
 
-            # 3. 技术突破与待确认兜底 (自动收录至证据库，彻底消除悬空死链)
+            # 3. 技术形态与待确认兜底 (无公开资讯催化，明示为低置信度待确认，杜绝伪装高确定性)
             if not matched_ref:
                 if chg >= 9.5 and stock.get("turnover_rate", 0) >= 4.0:
                     matched_ref = "ref:tech"
-                    matched_reason = "主力资金深度介入，分时放量封板（纯量价多头进攻形态）"
+                    matched_reason = "涨停放量但无公开资讯催化，技术形态待确认（低置信度）"
                     attr_type = "technical_breakout"
-                    confidence = 0.65
+                    confidence = 0.35
                 else:
                     matched_ref = "ref:funds"
-                    matched_reason = "日内主力资金逆势建仓，无明确公开催化，流转至邪修深度分析"
-                    attr_type = "funds_inflow"
-                    confidence = 0.45
+                    matched_reason = "日内资金波动但无明确公开催化，归因待确认（低置信度）"
+                    attr_type = "unconfirmed"
+                    confidence = 0.25
 
             # 置信度等级评定
             if confidence >= 0.80:

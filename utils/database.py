@@ -1,112 +1,16 @@
-"""SQLite 持久化存储"""
-import sqlite3
+"""
+数据库兼容桥接层 (向后兼容所有现有引用，底层无缝委派给 core.database 与 crud 模块)
+"""
 import json
-from datetime import datetime
+import sqlite3
 from pathlib import Path
-from contextlib import contextmanager
-
-DB_PATH = Path(__file__).parent.parent / "data" / "quant.db"
-
-
-@contextmanager
-def get_db():
-    """获取数据库连接（上下文管理器）"""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-def init_db():
-    """初始化数据库表结构"""
-    with get_db() as db:
-        db.executescript("""
-            -- 用户表
-            CREATE TABLE IF NOT EXISTS users (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                username    TEXT NOT NULL UNIQUE,
-                password    TEXT NOT NULL,
-                role        TEXT NOT NULL DEFAULT 'user',
-                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                last_login  TEXT
-            );
-
-            -- 回测记录
-            CREATE TABLE IF NOT EXISTS backtest_records (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                strategy    TEXT NOT NULL,
-                symbol      TEXT NOT NULL,
-                params      TEXT,
-                risk_config TEXT,
-                capital     REAL NOT NULL DEFAULT 1000000,
-                data_count  INTEGER,
-                stats       TEXT,
-                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-            );
-
-            -- 订单记录
-            CREATE TABLE IF NOT EXISTS order_records (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id        TEXT NOT NULL UNIQUE,
-                strategy_name   TEXT NOT NULL,
-                symbol          TEXT NOT NULL,
-                direction       TEXT NOT NULL,
-                offset          TEXT NOT NULL,
-                price           REAL NOT NULL,
-                volume          INTEGER NOT NULL,
-                filled_volume   INTEGER DEFAULT 0,
-                avg_price       REAL DEFAULT 0,
-                status          TEXT NOT NULL,
-                broker_order_id TEXT DEFAULT '',
-                reason          TEXT DEFAULT '',
-                created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                updated_at      TEXT
-            );
-
-            -- 因子打分记录
-            CREATE TABLE IF NOT EXISTS factor_records (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbols     TEXT NOT NULL,
-                weights     TEXT,
-                ranking     TEXT NOT NULL,
-                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-            );
-
-            -- 审计日志
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                username    TEXT NOT NULL,
-                action      TEXT NOT NULL,
-                detail      TEXT,
-                ip          TEXT,
-                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-            );
-
-            -- 用户自选股
-            CREATE TABLE IF NOT EXISTS user_favorites (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                username    TEXT NOT NULL,
-                symbol      TEXT NOT NULL,
-                name        TEXT DEFAULT '',
-                added_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                UNIQUE(username, symbol)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_backtest_strategy ON backtest_records(strategy);
-            CREATE INDEX IF NOT EXISTS idx_backtest_symbol ON backtest_records(symbol);
-            CREATE INDEX IF NOT EXISTS idx_orders_strategy ON order_records(strategy_name);
-            CREATE INDEX IF NOT EXISTS idx_orders_status ON order_records(status);
-            CREATE INDEX IF NOT EXISTS idx_audit_username ON audit_log(username);
-        """)
+from core.database import DB_PATH, get_db, init_db
+from core.datetime_utils import format_timestamp
+from crud.crud_order import save_or_update_order, get_user_order_history
+from crud.crud_user import (
+    add_user_favorite, remove_user_favorite, get_user_favorites,
+    is_user_favorite, record_audit_log, get_user_audit_logs
+)
 
 
 # ==================== 回测记录 ====================
@@ -119,13 +23,16 @@ def save_backtest(
     capital: float,
     data_count: int,
     stats: dict,
+    username: str = "admin"
 ) -> int:
     with get_db() as db:
         cursor = db.execute(
-            "INSERT INTO backtest_records (strategy, symbol, params, risk_config, capital, data_count, stats) VALUES (?,?,?,?,?,?,?)",
-            (strategy, symbol, json.dumps(params, ensure_ascii=False),
+            """INSERT INTO backtest_records (
+                username, strategy, symbol, params, risk_config, capital, data_count, stats, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (username, strategy, symbol, json.dumps(params, ensure_ascii=False),
              json.dumps(risk_config, ensure_ascii=False), capital, data_count,
-             json.dumps(stats, ensure_ascii=False, default=str)),
+             json.dumps(stats, ensure_ascii=False, default=str), format_timestamp()),
         )
         return cursor.lastrowid
 
@@ -135,9 +42,13 @@ def get_backtest_history(
     symbol: str = "",
     limit: int = 50,
     offset: int = 0,
+    username: str = ""
 ) -> list[dict]:
     conditions = []
     params = []
+    if username:
+        conditions.append("username = ?")
+        params.append(username)
     if strategy:
         conditions.append("strategy = ?")
         params.append(strategy)
@@ -150,7 +61,8 @@ def get_backtest_history(
 
     with get_db() as db:
         rows = db.execute(
-            f"SELECT * FROM backtest_records {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"""SELECT id, username, strategy, symbol, params, risk_config, capital, data_count, stats, created_at
+                FROM backtest_records {where} ORDER BY id DESC LIMIT ? OFFSET ?""",
             params,
         ).fetchall()
 
@@ -166,7 +78,10 @@ def get_backtest_history(
 
 def get_backtest_by_id(record_id: int) -> dict | None:
     with get_db() as db:
-        row = db.execute("SELECT * FROM backtest_records WHERE id = ?", (record_id,)).fetchone()
+        row = db.execute(
+            """SELECT id, username, strategy, symbol, params, risk_config, capital, data_count, stats, created_at
+               FROM backtest_records WHERE id = ?""", (record_id,)
+        ).fetchone()
     if not row:
         return None
     item = dict(row)
@@ -176,21 +91,12 @@ def get_backtest_by_id(record_id: int) -> dict | None:
     return item
 
 
-# ==================== 订单记录 ====================
+# ==================== 订单记录 (桥接至 crud_order) ====================
 
-def save_order(order_dict: dict):
-    with get_db() as db:
-        db.execute(
-            """INSERT OR REPLACE INTO order_records
-            (order_id, strategy_name, symbol, direction, offset, price, volume,
-             filled_volume, avg_price, status, broker_order_id, reason, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (order_dict["order_id"], order_dict["strategy"], order_dict["symbol"],
-             order_dict["direction"], order_dict["offset"], order_dict["price"],
-             order_dict["volume"], order_dict["filled_volume"], order_dict["avg_price"],
-             order_dict["status"], order_dict.get("broker_order_id", ""),
-             order_dict.get("reason", ""), datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-        )
+def save_order(order_dict: dict, username: str = "admin"):
+    """兼容旧 save_order 调用，智能提取并注入 username"""
+    user = order_dict.get("username") or username or "admin"
+    save_or_update_order(user, order_dict)
 
 
 def get_order_history(
@@ -198,28 +104,13 @@ def get_order_history(
     symbol: str = "",
     status: str = "",
     limit: int = 100,
+    username: str = ""
 ) -> list[dict]:
-    conditions = []
-    params = []
-    if strategy:
-        conditions.append("strategy_name = ?")
-        params.append(strategy)
-    if symbol:
-        conditions.append("symbol = ?")
-        params.append(symbol)
-    if status:
-        conditions.append("status = ?")
-        params.append(status)
-
-    where = "WHERE " + " AND ".join(conditions) if conditions else ""
-    params.append(limit)
-
-    with get_db() as db:
-        rows = db.execute(
-            f"SELECT * FROM order_records {where} ORDER BY id DESC LIMIT ?",
-            params,
-        ).fetchall()
-    return [dict(r) for r in rows]
+    """兼容旧 get_order_history 调用"""
+    if username:
+        return get_user_order_history(username, strategy=strategy, symbol=symbol, status=status, limit=limit)
+    # 若无 username 则向后兼容查询全部或 admin
+    return get_user_order_history("admin", strategy=strategy, symbol=symbol, status=status, limit=limit)
 
 
 # ==================== 因子记录 ====================
@@ -227,15 +118,17 @@ def get_order_history(
 def save_factor_ranking(symbols: list, weights: dict, ranking: list):
     with get_db() as db:
         db.execute(
-            "INSERT INTO factor_records (symbols, weights, ranking) VALUES (?,?,?)",
-            (json.dumps(symbols), json.dumps(weights), json.dumps(ranking, ensure_ascii=False)),
+            """INSERT INTO factor_records (symbols, weights, ranking, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (json.dumps(symbols), json.dumps(weights), json.dumps(ranking, ensure_ascii=False), format_timestamp()),
         )
 
 
 def get_factor_history(limit: int = 20) -> list[dict]:
     with get_db() as db:
         rows = db.execute(
-            "SELECT * FROM factor_records ORDER BY id DESC LIMIT ?", (limit,)
+            """SELECT id, symbols, weights, ranking, created_at
+               FROM factor_records ORDER BY id DESC LIMIT ?""", (limit,)
         ).fetchall()
     results = []
     for row in rows:
@@ -247,78 +140,27 @@ def get_factor_history(limit: int = 20) -> list[dict]:
     return results
 
 
-# ==================== 审计日志 ====================
+# ==================== 审计日志与自选股兼容桥接 ====================
 
 def log_audit(username: str, action: str, detail: str = "", ip: str = "", db=None):
-    """记录审计日志（db 为外部传入的连接，避免嵌套死锁）"""
-    if db:
-        db.execute(
-            "INSERT INTO audit_log (username, action, detail, ip) VALUES (?,?,?,?)",
-            (username, action, detail, ip),
-        )
-    else:
-        with get_db() as conn:
-            conn.execute(
-                "INSERT INTO audit_log (username, action, detail, ip) VALUES (?,?,?,?)",
-                (username, action, detail, ip),
-            )
+    record_audit_log(username, action, detail, ip, db)
 
 
 def get_audit_log(username: str = "", limit: int = 100) -> list[dict]:
-    if username:
-        with get_db() as db:
-            rows = db.execute(
-                "SELECT * FROM audit_log WHERE username = ? ORDER BY id DESC LIMIT ?",
-                (username, limit),
-            ).fetchall()
-    else:
-        with get_db() as db:
-            rows = db.execute(
-                "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
-            ).fetchall()
-    return [dict(r) for r in rows]
+    return get_user_audit_logs(username, limit)
 
-
-# ==================== 用户自选股 ====================
 
 def add_favorite(username: str, symbol: str, name: str = "") -> bool:
-    """添加自选股"""
-    try:
-        with get_db() as db:
-            db.execute(
-                "INSERT OR IGNORE INTO user_favorites (username, symbol, name) VALUES (?,?,?)",
-                (username, symbol, name),
-            )
-        return True
-    except Exception:
-        return False
+    return add_user_favorite(username, symbol, name)
 
 
 def remove_favorite(username: str, symbol: str) -> bool:
-    """删除自选股"""
-    with get_db() as db:
-        db.execute(
-            "DELETE FROM user_favorites WHERE username = ? AND symbol = ?",
-            (username, symbol),
-        )
-    return True
+    return remove_user_favorite(username, symbol)
 
 
 def get_favorites(username: str) -> list[dict]:
-    """获取用户自选股列表"""
-    with get_db() as db:
-        rows = db.execute(
-            "SELECT symbol, name, added_at FROM user_favorites WHERE username = ? ORDER BY added_at DESC",
-            (username,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    return get_user_favorites(username)
 
 
 def is_favorite(username: str, symbol: str) -> bool:
-    """检查是否已收藏"""
-    with get_db() as db:
-        row = db.execute(
-            "SELECT 1 FROM user_favorites WHERE username = ? AND symbol = ?",
-            (username, symbol),
-        ).fetchone()
-    return row is not None
+    return is_user_favorite(username, symbol)

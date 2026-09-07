@@ -17,8 +17,11 @@ env/
 # 1. 用户私密持仓、交易策略资产与凭证密钥
 data/*auth*.json
 data/*portfolio*.json
+data/*config*.json
 data/user_*.json
 data/strategy_versions.json
+data/*.bak*
+data/*orig*
 simnow/config.json
 *.key
 *.pem
@@ -76,6 +79,8 @@ node_modules/
 # 测试产出
 screenshots/
 test-reports/
+*.png
+*.jpg
 
 # 模型与训练工作区（大文件及权重严格排除）
 train_workspace/

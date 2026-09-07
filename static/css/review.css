@@ -1,0 +1,27 @@
+/**
+ * 模块 C 专属样式 (交易复盘工作台 & 4层漏斗观察池)
+ */
+.review-dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+.market-thermometer-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border-left: 4px solid var(--primary-color);
+}
+
+.core-watchlist-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.confidence-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}

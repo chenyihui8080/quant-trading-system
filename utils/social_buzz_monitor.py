@@ -38,6 +38,8 @@ class SocialBuzzItem:
     top_topics: list[str]     # 社交平台热门讨论标签
     sentiment_status: str     # 情绪状态 (极度狂热 / 情绪高涨 / 情绪中性 / 恐慌悲观)
     risk_warning: str         # 舆情风控与反指提示
+    data_source: str = ""     # 真实数据来源（可审计）
+    fetched_at: str = ""      # 抓取时间（可审计）
 
 
 class SocialBuzzMonitor:
@@ -92,6 +94,8 @@ class SocialBuzzMonitor:
 
     def _update_buzz_data(self):
         """抓取并聚合全网真实人气热度数据 (优先东方财富官方实时人气热搜榜)"""
+        from datetime import datetime
+        fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 1. 优先尝试东方财富官方股吧人气榜 (100% 真实数千万股民搜索讨论热度)
         try:
             import akshare as ak
@@ -105,7 +109,7 @@ class SocialBuzzMonitor:
                     name = str(row.get("股票名称", clean_code)).strip()
                     price = float(row.get("最新价", 0.0) or 0.0)
                     chg = float(row.get("涨跌幅", 0.0) or 0.0)
-                    
+
                     # 真实热度评分 (基于官方排名 1-100)
                     buzz_score = round(max(60.0, 99.5 - (rank - 1) * 1.8 + (0.5 if chg > 0 else -0.5)), 1)
                     surge = round(abs(chg) * 3.5 + (20 - rank) * 1.2, 1)
@@ -146,7 +150,9 @@ class SocialBuzzMonitor:
                         primary_source="东方财富股吧人气榜",
                         top_topics=topics,
                         sentiment_status=status,
-                        risk_warning=warning
+                        risk_warning=warning,
+                        data_source="东方财富股吧人气榜",
+                        fetched_at=fetched_at
                     )
                     buzz_list.append(asdict(item))
 
@@ -213,7 +219,9 @@ class SocialBuzzMonitor:
                         primary_source="全市场成交活跃榜",
                         top_topics=topics,
                         sentiment_status=status,
-                        risk_warning=warning
+                        risk_warning=warning,
+                        data_source="新浪全市场成交活跃榜",
+                        fetched_at=fetched_at
                     )
                     buzz_list.append(asdict(item))
 

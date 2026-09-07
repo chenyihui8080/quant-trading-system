@@ -55,7 +55,7 @@ INDEX_CODE_MAP = {
 
 
 def _get_dynamic_cache_ttl() -> float:
-    """盘中/盘后动态缓存 TTL：盘中 5 秒毫秒级更新，盘后/周末 30 分钟延长保护"""
+    """盘中/盘后动态缓存 TTL：盘中 3 秒毫秒级更新，盘后/周末 30 分钟延长保护"""
     now = datetime.now()
     # 周末 (周六=5, 周日=6)
     if now.weekday() >= 5:
@@ -63,7 +63,7 @@ def _get_dynamic_cache_ttl() -> float:
     # 交易时段：09:15 ~ 15:05
     t_min = now.hour * 60 + now.minute
     if (9 * 60 + 15) <= t_min <= (15 * 60 + 5):
-        return 5.0  # 盘中 5 秒极速更新
+        return 3.0  # 盘中 3 秒极速更新，前端 15 秒轮询 = 最坏 18 秒内必刷新
     return 1800.0  # 盘后静态数据 30 分钟缓存
 
 
@@ -139,6 +139,29 @@ def _to_sina_code(symbol: str) -> str:
         return f"sz{clean_code}"
 
 
+def _normalize_time(raw: str) -> str:
+    """统一各行情源时间字段为 'YYYY-MM-DD HH:MM:SS' 标准格式"""
+    if not raw:
+        return ""
+    raw = str(raw).strip()
+    # 腾讯/新浪紧凑格式: YYYYMMDDHHMMSS 或 YYYYMMDD
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    try:
+        if len(digits) >= 14:
+            return f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]} {digits[8:10]}:{digits[10:12]}:{digits[12:14]}"
+        if len(digits) == 8:
+            return f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]} 00:00:00"
+    except Exception:
+        pass
+    # 已带分隔符: 2026-08-29 14:30:00 或 2026/08/29 14:30:00
+    import re
+    m = re.match(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?", raw)
+    if m:
+        y, mo, d, h, mi, s = m.groups()
+        return f"{y}-{int(mo):02d}-{int(d):02d} {int(h):02d}:{mi}:{s or '00'}"
+    return raw
+
+
 def get_sina_realtime_quote(symbol: str, force_refresh: bool = False) -> dict | None:
     """获取股票/指数/ETF/港美股实时行情 (高可用直连 + 动态缓存)"""
     sym = symbol.strip().upper()
@@ -192,7 +215,7 @@ def get_sina_realtime_quote(symbol: str, force_refresh: bool = False) -> dict | 
                     "volume": volume,
                     "amount": amount,
                     "change_pct": round(change_pct, 2),
-                    "updated": date_str,
+                    "updated": _normalize_time(date_str),
                     "source": "tencent_official",
                 }
                 _QUOTE_CACHE[sym] = (now, quote)
@@ -229,7 +252,7 @@ def get_sina_realtime_quote(symbol: str, force_refresh: bool = False) -> dict | 
                     "volume": volume,
                     "amount": 0.0,
                     "change_pct": round(chg, 2),
-                    "updated": date_str,
+                    "updated": _normalize_time(date_str),
                     "source": "sina_us",
                 }
                 _QUOTE_CACHE[sym] = (now, quote)
@@ -254,7 +277,7 @@ def get_sina_realtime_quote(symbol: str, force_refresh: bool = False) -> dict | 
                     "volume": volume,
                     "amount": float(data[9]) if len(data) > 9 else 0.0,
                     "change_pct": round(change_pct, 2),
-                    "updated": f"{data[30]} {data[31]}",
+                    "updated": _normalize_time(f"{data[30]} {data[31]}"),
                     "source": "sina_backup",
                 }
                 _QUOTE_CACHE[sym] = (now, quote)
@@ -271,41 +294,59 @@ def get_realtime_quote(symbol: str) -> dict | None:
 
 
 def get_sina_kline(symbol: str, period: str = "d", count: int = 250) -> list | None:
-    """新浪财经K线数据 (盘中实时无延迟)"""
+    """A股K线数据 (腾讯专线/新浪/东财三源毫秒级容灾)"""
     scale_map = {"d": 240, "w": 1200, "m": 7200, "5": 5, "15": 15, "30": 30, "60": 60}
     scale = scale_map.get(period, 240)
     sina_code = _to_sina_code(symbol)
+    clean_sym = symbol.strip().upper().replace("SH", "").replace("SZ", "").replace("BJ", "")
 
+    # 1. 优先使用腾讯股票 K 线 (极速 50ms)
+    try:
+        tx_pfx = "sh" if (clean_sym.startswith("6") or clean_sym.startswith("51") or clean_sym.startswith("68")) else "sz"
+        tx_url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tx_pfx}{clean_sym},day,,,{count},qfq"
+        resp = _SESSION.get(tx_url, timeout=1.5)
+        k_data = resp.json().get("data", {}).get(f"{tx_pfx}{clean_sym}", {})
+        days = k_data.get("qfqday") or k_data.get("day") or []
+        if days:
+            result = []
+            for d in days:
+                if len(d) >= 6:
+                    result.append([str(d[0]), float(d[1]), float(d[2]), float(d[4]), float(d[3]), float(d[5])])
+            if result:
+                return result[-count:] if len(result) > count else result
+    except Exception:
+        pass
+
+    # 2. 备用：新浪财经 K 线接口 (1.5s 超时)
     try:
         url = (
             f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
             f"CN_MarketData.getKLineData?symbol={sina_code}&scale={scale}"
             f"&ma=no&datalen={count}"
         )
-        resp = _SESSION.get(url, timeout=6)
+        resp = _SESSION.get(url, timeout=1.5)
         resp.encoding = "utf-8"
         text = resp.text.strip()
-        if not text or text == "null":
-            return None
-
-        import json
-        data = json.loads(text)
-        if not isinstance(data, list) or len(data) == 0:
-            return None
-
-        result = []
-        for item in data:
-            result.append([
-                item["day"],
-                float(item["open"]),
-                float(item["close"]),
-                float(item["low"]),
-                float(item["high"]),
-                float(item["volume"]),
-            ])
-        return result
+        if text and text != "null":
+            import json
+            data = json.loads(text)
+            if isinstance(data, list) and len(data) > 0:
+                result = []
+                for item in data:
+                    result.append([
+                        item["day"],
+                        float(item["open"]),
+                        float(item["close"]),
+                        float(item["low"]),
+                        float(item["high"]),
+                        float(item["volume"]),
+                    ])
+                return result
     except Exception:
-        return None
+        pass
+
+    return None
+
 
 
 def get_hk_us_kline(symbol: str, count: int = 250) -> list | None:
@@ -462,7 +503,7 @@ def get_batch_realtime_quotes(symbols: list[str]) -> dict[str, dict]:
                         "price": price,
                         "change_pct": round(change_pct, 2),
                         "pre_close": pre_close,
-                        "updated": datetime.now().strftime("%Y%m%d%H%M%S")
+                        "updated": _normalize_time(datetime.now().strftime("%Y%m%d%H%M%S"))
                     }
                     _QUOTE_CACHE[orig_sym] = (now, quote)
                     results[orig_sym] = quote

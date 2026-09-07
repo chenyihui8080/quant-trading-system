@@ -10,7 +10,7 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 from dataclasses import dataclass, asdict
@@ -415,19 +415,28 @@ class VolatilityScreener:
             logger.warning(f"东财接口拉取全市场代码列表轻微异常: {e}")
 
         # 通道 2: 动态当前交易日 Baostock 兜底
+        # 非交易日（周末/节假日）当日 query_all_stock 返回空，需向前回溯最近交易日
         if not stocks or len(stocks) < 1000:
             try:
                 import baostock as bs
                 bs.login()
-                today_str = datetime.now().strftime("%Y-%m-%d")
-                rs = bs.query_all_stock(day=today_str)
-                while rs.next():
-                    row = rs.get_row_data()
-                    code_raw = row[0]
-                    if code_raw.startswith(("sh.60", "sh.68", "sz.00", "sz.30")):
-                        prefix = "sh" if code_raw.startswith("sh") else "sz"
-                        code = code_raw.split(".")[1]
-                        stocks.append(f"{prefix}{code}")
+                candidate_day = datetime.now().strftime("%Y-%m-%d")
+                for _ in range(15):
+                    rs = bs.query_all_stock(day=candidate_day)
+                    tmp = []
+                    while rs.next():
+                        row = rs.get_row_data()
+                        code_raw = row[0]
+                        if code_raw.startswith(("sh.60", "sh.68", "sz.00", "sz.30")):
+                            prefix = "sh" if code_raw.startswith("sh") else "sz"
+                            code = code_raw.split(".")[1]
+                            tmp.append(f"{prefix}{code}")
+                    if len(tmp) >= 1000:
+                        stocks = tmp
+                        break
+                    # 当日无数据，向前回退一天继续尝试
+                    dt = datetime.strptime(candidate_day, "%Y-%m-%d") - timedelta(days=1)
+                    candidate_day = dt.strftime("%Y-%m-%d")
                 bs.logout()
             except Exception as e:
                 logger.warning(f"baostock 兜底获取全市场代码轻微异常: {e}")

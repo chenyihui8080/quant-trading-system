@@ -164,11 +164,11 @@
       </span>
       <span style="font-size:11px;background:rgba(188,140,255,0.15);color:var(--sys-accent);border:1px solid var(--sys-border);padding:2px 8px;border-radius:4px">智能协同旗舰版</span>
       
-      <!-- 统一深色高亮日期选择器胶囊 (彻底解决深色模式下图标看不清与弹窗白色问题) -->
-      <div class="date-selector-pill">
-        <i class="ri-calendar-check-line"></i>
-        <span style="font-size:12px;color:var(--sys-text-sub)">交易日:</span>
-        <input type="date" id="rwDateSelector" onchange="changeIntegratedReviewDate(this.value)">
+      <!-- 统一深色高亮日期选择器胶囊 (Element Plus 规范) -->
+      <div class="el-date-editor" onclick="ElDatePicker.show(document.getElementById('rwDateSelector'), (v)=>{ if(v) changeIntegratedReviewDate(v); })" style="cursor:pointer" title="点击选择复盘交易日">
+        <i class="ri-calendar-check-line el-icon-calendar" style="color:var(--sys-accent)"></i>
+        <span style="font-size:12px;color:var(--sys-text-sub);margin-right:4px">交易日:</span>
+        <input type="text" id="rwDateSelector" readonly style="width:90px;color:var(--sys-text-primary);font-weight:600" />
       </div>
     </div>
 
@@ -205,15 +205,15 @@
       <button style="background:none;border:none;color:var(--sys-text-sub);font-size:20px;cursor:pointer;padding:4px 8px" onclick="closeIntegratedHistoryModal()">✕</button>
     </div>
     <div style="padding:14px 20px;background:var(--sys-bg-card-inner);border-bottom:1px solid var(--sys-border);display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <div class="date-selector-pill">
-        <i class="ri-calendar-line"></i>
-        <span style="font-size:12px;color:var(--sys-text-sub)">起始:</span>
-        <input type="date" id="historyStartDate">
+      <div class="el-date-editor" onclick="ElDatePicker.show(document.getElementById('historyStartDate'))" style="cursor:pointer">
+        <i class="ri-calendar-line el-icon-calendar"></i>
+        <span style="font-size:12px;color:var(--sys-text-sub);margin-right:4px">起始:</span>
+        <input type="text" id="historyStartDate" readonly style="width:85px" />
       </div>
-      <div class="date-selector-pill">
-        <i class="ri-calendar-line"></i>
-        <span style="font-size:12px;color:var(--sys-text-sub)">截止:</span>
-        <input type="date" id="historyEndDate">
+      <div class="el-date-editor" onclick="ElDatePicker.show(document.getElementById('historyEndDate'))" style="cursor:pointer">
+        <i class="ri-calendar-line el-icon-calendar"></i>
+        <span style="font-size:12px;color:var(--sys-text-sub);margin-right:4px">截止:</span>
+        <input type="text" id="historyEndDate" readonly style="width:85px" />
       </div>
       <input type="text" id="historyKeyword" placeholder="搜索板块/股票/空间龙头/研判定调关键词..." style="flex:1;min-width:200px;background:var(--sys-input-bg);border:1px solid var(--sys-border);color:var(--sys-text-primary);padding:6px 12px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')loadIntegratedHistoryReports()">
 

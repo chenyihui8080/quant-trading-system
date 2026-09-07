@@ -1,0 +1,29 @@
+/**
+ * 模块 B 专属样式 (Alpha 实战交易与买卖点倒算)
+ */
+.alpha-levels-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.alpha-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+.alpha-price-row:last-child {
+  border-bottom: none;
+}
+
+.alpha-risk-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-weight: 600;
+}

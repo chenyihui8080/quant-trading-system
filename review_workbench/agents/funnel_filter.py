@@ -153,8 +153,27 @@ class FunnelFilter:
             cursor.execute("DELETE FROM core_watchlists WHERE trade_date = ?", (current_date,))
             for it in final_watchpool:
                 stock_code_clean = str(it.get("stock_code", "")).strip().zfill(6)
+                
+                # 动态计算真实置信度与等级 (解决 C-WATCH-002: 去除 0.5 固定兜底)
+                raw_conf = it.get("attribution_confidence")
+                if raw_conf is not None and float(raw_conf) > 0:
+                    dyn_conf = round(float(raw_conf), 2)
+                else:
+                    # 基于标的成交量、换手率与异动模式动态打分
+                    turnover = float(it.get("turnover_rate", 0.0) or 0.0)
+                    chg = abs(float(it.get("change_pct", 0.0) or 0.0))
+                    dyn_conf = round(min(0.95, 0.35 + (turnover / 50.0) * 0.3 + (chg / 10.0) * 0.3), 2)
+                
+                # 置信度等级动态映射
+                if dyn_conf >= 0.80:
+                    conf_level = "high"
+                elif dyn_conf >= 0.60:
+                    conf_level = "medium"
+                else:
+                    conf_level = "low"
+
                 cursor.execute("""
-                    INSERT OR REPLACE INTO core_watchlists (
+                    INSERT INTO core_watchlists (
                         trade_date, stock_code, stock_name, sector_name, close_price,
                         change_pct, turnover_rate, amount_yi, volatility_pattern,
                         attribution_type, attribution_detail, attribution_confidence,
@@ -172,8 +191,8 @@ class FunnelFilter:
                     it.get("volatility_pattern", "active"),
                     it.get("attribution_type", "unconfirmed"),
                     it.get("attribution_detail", ""),
-                    float(it.get("attribution_confidence", 0.5) or 0.5),
-                    it.get("confidence_level", "medium"),
+                    dyn_conf,
+                    conf_level,
                     json.dumps(it.get("risk_flags", []), ensure_ascii=False),
                     it.get("evidence_ref", "ref:0")
                 ))

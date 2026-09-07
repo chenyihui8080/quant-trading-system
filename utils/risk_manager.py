@@ -63,8 +63,8 @@ class StrategyRiskGuard:
         self.daily_pnl: float = 0.0
         self.daily_reset_date: str = ""
 
-    def on_trade(self, price: float, pos: int):
-        """成交回调"""
+    def on_trade(self, price: float, pos: int, qty: int = 0):
+        """成交回调（qty 默认按 pos 增量推断；显式传入更精确）"""
         now = datetime.now().strftime("%Y-%m-%d")
         if now != self.daily_reset_date:
             self.daily_pnl = 0.0
@@ -73,9 +73,15 @@ class StrategyRiskGuard:
         if pos > 0 and self.entry_price == 0:
             self.entry_price = price
             self.highest_price = price
+        elif pos > 0 and self.entry_price > 0:
+            # 加仓：按加权平均更新成本
+            trade_qty = qty if qty > 0 else pos
+            self.entry_price = (self.entry_price * (pos - trade_qty) + price * trade_qty) / pos if pos > 0 else price
+            self.highest_price = max(self.highest_price, price)
         elif pos == 0:
-            if self.entry_price > 0:
-                self.daily_pnl += (price - self.entry_price) * pos
+            if self.entry_price > 0 and qty > 0:
+                # 平仓：按本次成交股数累计盈亏
+                self.daily_pnl += (price - self.entry_price) * qty
             self.entry_price = 0.0
             self.highest_price = 0.0
 
@@ -83,6 +89,11 @@ class StrategyRiskGuard:
         """策略层风控校验"""
         if pos <= 0:
             return passed_result()
+        if self.entry_price <= 0:
+            return RiskResult(
+                passed=False, level="strategy", rule="missing_entry",
+                message="缺少有效入场价，无法计算盈亏比",
+            )
 
         # 止损
         pnl_pct = (price - self.entry_price) / self.entry_price * 100
@@ -217,26 +228,47 @@ class PlatformRiskGuard:
             )
         return passed_result()
 
-    def check_limit_price(self, order_price: float, pre_close: float) -> RiskResult:
-        """涨跌停保护"""
+    def check_limit_price(
+        self,
+        order_price: float,
+        pre_close: float,
+        side: str | None = None,
+        market: str = "main",
+    ) -> RiskResult:
+        """涨跌停保护；显式方向优先，旧调用按委托价相对昨收价推断方向。"""
+        if side is None:
+            side = "buy" if order_price >= pre_close else "sell"
         if pre_close <= 0:
-            return passed_result()
-        upper = pre_close * (1 + self.config.limit_price_pct / 100)
-        lower = pre_close * (1 - self.config.limit_price_pct / 100)
-        if order_price >= upper:
             return RiskResult(
-                passed=False, level="platform", rule="limit_up",
-                message=f"涨停价 {upper:.2f} 禁止追买（T+1 涨跌停保护）",
+                passed=False, level="platform", rule="limit_price",
+                message="缺少昨收价，无法做涨跌停校验",
             )
-        if order_price <= lower:
-            return RiskResult(
-                passed=False, level="platform", rule="limit_down",
-                message=f"跌停价 {lower:.2f} 禁止追卖",
-            )
+        limit_pct = self.config.limit_price_pct
+        if market in ("star", "chinext", "创业板", "科创板"):
+            limit_pct = 20.0
+        elif market in ("bj", "北交所"):
+            limit_pct = 30.0
+        elif market in ("st",):
+            limit_pct = 5.0
+
+        if side == "buy":
+            upper = pre_close * (1 + limit_pct / 100)
+            if order_price >= upper:
+                return RiskResult(
+                    passed=False, level="platform", rule="limit_up",
+                    message=f"涨停价 {upper:.2f} 禁止追买（{market} 涨幅上限 {limit_pct}%）",
+                )
+        else:
+            lower = pre_close * (1 - limit_pct / 100)
+            if order_price <= lower:
+                return RiskResult(
+                    passed=False, level="platform", rule="limit_down",
+                    message=f"跌停价 {lower:.2f} 禁止追卖（{market} 跌幅上限 {limit_pct}%）",
+                )
         return passed_result()
 
-    def check_frequency(self, strategy_name: str) -> RiskResult:
-        """下单频率限制"""
+    def check_frequency(self, strategy_name: str, commit: bool = True) -> RiskResult:
+        """下单频率限制；commit=False 表示仅校验不计数（用于拒绝前不递增）"""
         now = datetime.now().timestamp()
         timestamps = self.order_timestamps.setdefault(strategy_name, [])
         # 清理 1 分钟前的记录
@@ -246,7 +278,8 @@ class PlatformRiskGuard:
                 passed=False, level="platform", rule="frequency",
                 message=f"策略 {strategy_name} 1分钟内下单 {len(timestamps)} 次，超限 {self.config.max_order_per_minute}",
             )
-        timestamps.append(now)
+        if commit:
+            timestamps.append(now)
         return passed_result()
 
     def check_t_plus_1(self, symbol: str, buy_date: str, sell_date: str) -> RiskResult:
@@ -289,8 +322,22 @@ class RiskManager:
         capital: float,
         buy_date: str = "",
         sell_date: str = "",
+        side: str = "buy",
+        market: str = "main",
     ) -> RiskResult:
-        """下单前全量风控校验（依次执行 平台→账户→策略）"""
+        """下单前全量风控校验（依次执行 平台→账户→策略）。
+        关键字段缺失时 fail-closed（直接拒绝）以避免绕过。"""
+        if not strategy_name or not symbol:
+            return RiskResult(False, "platform", "missing_field", "策略名/标的代码不能为空")
+        if order_price <= 0 or last_price <= 0:
+            return RiskResult(False, "platform", "invalid_price", "委托价/最新价必须为正")
+        if qty <= 0:
+            return RiskResult(False, "platform", "invalid_qty", "下单数量必须为正")
+        if qty % 100 != 0:
+            return RiskResult(False, "platform", "lot_size", "下单数量必须为 100 的整数倍")
+        if capital <= 0:
+            return RiskResult(False, "account", "invalid_capital", "可用资金必须为正")
+
         # 平台层
         r = self.platform.check_blacklist(symbol_name)
         if not r.passed:
@@ -300,11 +347,13 @@ class RiskManager:
         if not r.passed:
             return r
 
-        r = self.platform.check_limit_price(order_price, pre_close)
+        r = self.platform.check_limit_price(
+            order_price, pre_close, side=side, market=market
+        )
         if not r.passed:
             return r
 
-        r = self.platform.check_frequency(strategy_name)
+        r = self.platform.check_frequency(strategy_name, commit=False)
         if not r.passed:
             return r
 
@@ -312,6 +361,9 @@ class RiskManager:
             r = self.platform.check_t_plus_1(symbol, buy_date, sell_date)
             if not r.passed:
                 return r
+
+        # 全部通过后提交频率计数
+        self.platform.check_frequency(strategy_name, commit=True)
 
         # 账户层
         r = self.account.check(symbol, order_price, qty, capital)
@@ -341,13 +393,16 @@ class RiskManager:
             return result.message
         return None
 
-    def check_drawdown(self) -> str | None:
+    def check_drawdown(self, current_equity: float | None = None) -> str | None:
         """兼容旧接口：回撤检查"""
-        if self.account.peak_equity <= 0:
+        peak = self.account.peak_equity
+        if peak <= 0:
             return None
-        equity = self.account.peak_equity
-        drawdown = (equity - self.account.peak_equity) / self.account.peak_equity * 100
-        # 用当前 capital 重算
+        if current_equity is None:
+            return None
+        drawdown = (current_equity - peak) / peak * 100
+        if drawdown <= self.account.config.max_drawdown_pct:
+            return f"账户最大回撤 {drawdown:.2f}% 触发（上限 {self.account.config.max_drawdown_pct}%）"
         return None
 
     def calc_position_size(self, price: float, capital: float) -> int:

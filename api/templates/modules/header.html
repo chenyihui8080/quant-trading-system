@@ -6,58 +6,35 @@
     <b id="systemMainTitle" style="font-size:15px;color:var(--sys-text-title);white-space:nowrap;letter-spacing:0.5px">量化协同操盘</b>
   </div>
 
-  <!-- 2. 中间：三大系统切换器 (极简高雅胶囊) -->
+  <!-- 2. 中间：双核心系统切换器 (极简高雅胶囊) -->
   <div class="sys-switcher-container" style="display:flex;gap:6px;background:var(--sys-bg-card-inner);padding:3px;border-radius:24px;border:1px solid var(--sys-border)">
-    <div id="catBtnAlpha" class="sys-card sys-card-alpha active" onclick="switchCategory('alpha')" style="padding:5px 14px;border-radius:20px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
+    <div id="catBtnAlpha" class="sys-card sys-card-alpha active" onclick="switchCategory('alpha')" style="padding:5px 16px;border-radius:20px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
       <i class="ri-crosshair-2-line" style="font-size:14px"></i>
       <span>Alpha 实盘</span>
     </div>
-    <div id="catBtnReview" class="sys-card sys-card-review" onclick="switchCategory('review')" style="padding:5px 14px;border-radius:20px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
+    <div id="catBtnReview" class="sys-card sys-card-review" onclick="switchCategory('review')" style="padding:5px 16px;border-radius:20px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
       <i class="ri-trophy-line" style="font-size:14px"></i>
       <span>交易复盘</span>
     </div>
-    <div id="catBtnQuant" class="sys-card sys-card-quant" onclick="switchCategory('quant')" style="padding:5px 14px;border-radius:20px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
-      <i class="ri-line-chart-line" style="font-size:14px"></i>
-      <span>量化回测</span>
-    </div>
   </div>
 
-  <!-- 3. 右侧：状态直连、数据同步与用户 -->
-  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-    <!-- 🏦 东财直连状态胶囊 -->
-    <div id="emDaemonPill" class="sync-status-badge" style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#10b981;cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:16px;font-size:11px;font-weight:600;white-space:nowrap" onclick="openEastMoneyModal()" title="点击查看东方财富实时直连">
-      <i class="ri-shield-check-fill" style="font-size:13px;color:#10b981"></i>
+  <!-- 3. 右侧：仅保留核心的【东财直连药丸】与【用户菜单】2个入口 -->
+  <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <!-- 入口 1：🏦 东财直连状态胶囊 -->
+    <div id="emDaemonPill" class="sync-status-badge" style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#10b981;cursor:pointer;display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:18px;font-size:12px;font-weight:600;white-space:nowrap" onclick="openEastMoneyModal()" title="点击查看东方财富实时直连与账号设置">
+      <i class="ri-shield-check-fill" style="font-size:14px;color:#10b981"></i>
       <span id="emDaemonText">东财直连</span>
     </div>
 
-    <!-- 📜 历史研判推演档案库 -->
-    <button class="btn btn-outline" onclick="openAiChatHistoryModal()" id="openAiHistoryBtn" style="padding:4px 10px;font-size:11px;border-radius:16px;white-space:nowrap;border-color:rgba(88,166,255,0.4);color:#58a6ff;display:flex;align-items:center;gap:4px" title="查看AI首席操盘顾问的历史对话与研判推演档案">
-      <i class="ri-history-line" style="font-size:13px"></i>
-      <span>历史研判</span>
+    <!-- 入口 1.5：⚡ 一键续期 Cookie 极速按钮 -->
+    <button class="el-button el-button--warning is-plain" style="padding:5px 12px;height:auto;border-radius:18px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;background:rgba(230,162,60,0.1);border-color:rgba(230,162,60,0.4);color:#e6a23c" onclick="openQuickRenewModal()" title="点击一键续期/绑定东财Cookie凭证">
+      <i class="ri-flashlight-line"></i>
+      <span>一键续Cookie</span>
     </button>
 
-    <!-- 📚 炒股知识库与六大闭环战法大典 -->
-    <button class="btn btn-outline" onclick="openKnowledgeBaseModal()" id="openKbBtn" style="padding:4px 10px;font-size:11px;border-radius:16px;white-space:nowrap;border-color:rgba(163,113,247,0.4);color:#a371f7;display:flex;align-items:center;gap:4px" title="查看从646部名著中蒸馏出的六大闭环战法与4万条知识图谱">
-      <i class="ri-book-read-line" style="font-size:13px"></i>
-      <span>战法大典</span>
-    </button>
-
-    <!-- 📖 交易与量化术语大白话字典 -->
-    <button class="btn btn-outline" onclick="openGlossaryModal()" id="openGlossaryBtn" style="padding:4px 10px;font-size:11px;border-radius:16px;white-space:nowrap;border-color:rgba(245,158,11,0.4);color:#f59e0b;display:flex;align-items:center;gap:4px" title="系统所有炒股与量化术语大白话对照表，小白秒懂！">
-      <i class="ri-character-recognition-line" style="font-size:13px"></i>
-      <span>术语字典</span>
-    </button>
-
-    <!-- 查缺补漏极简按钮 -->
-    <button class="btn btn-outline" onclick="triggerSyncNow()" id="syncDataBtn" style="padding:4px 10px;font-size:11px;border-radius:16px;white-space:nowrap;display:flex;align-items:center;gap:4px" title="一键检查增量K线并补漏">
-      <i class="ri-flashlight-line" style="font-size:13px;color:#388bfd"></i>
-      <span>查缺补漏</span>
-    </button>
-
-
-    <!-- 已登录用户下拉菜单 (整合 admin 与 退出) -->
+    <!-- 入口 2：已登录用户下拉菜单 (整合 admin 与 更多设置) -->
     <div class="user-info" id="userInfo" style="position:relative;display:flex;align-items:center">
-      <div id="userDropdownTrigger" onclick="toggleUserDropdown(event)" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);padding:4px 10px 4px 6px;border-radius:18px;font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;transition:all 0.15s;user-select:none" onmouseover="this.style.borderColor='var(--sys-accent)'" onmouseout="this.style.borderColor='var(--sys-border)'" title="点击展开个人中心与操作菜单">
+      <div id="userDropdownTrigger" onclick="toggleUserDropdown(event)" style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);padding:5px 12px 5px 8px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;transition:all 0.15s;user-select:none" onmouseover="this.style.borderColor='var(--sys-accent)'" onmouseout="this.style.borderColor='var(--sys-border)'" title="点击展开个人中心与操作菜单">
         <div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#388bfd,#8957e5);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px">
           <i class="ri-user-3-fill"></i>
         </div>
@@ -66,14 +43,13 @@
       </div>
 
       <!-- 下拉浮层面板 (三系统自适应·浑然一体) -->
-      <div id="userDropdownMenu" class="popover-adaptive" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:190px;padding:6px;z-index:10001;flex-direction:column;gap:2px">
+      <div id="userDropdownMenu" class="popover-adaptive" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:200px;padding:6px;z-index:10001;flex-direction:column;gap:2px">
         <!-- 用户信息头 -->
         <div style="padding:8px 10px;border-bottom:1px solid var(--sys-border);margin-bottom:4px">
           <div style="font-size:10px;color:var(--sys-text-sub);margin-top:2px;display:flex;align-items:center;gap:4px">
             <i class="ri-vip-crown-fill" style="color:#e3b341"></i>
             <span>首席量化操盘手</span>
           </div>
-
         </div>
         <!-- 快捷选项 -->
         <div class="popover-item" onclick="openEastMoneyModal();closeUserDropdown();" style="padding:8px 10px;font-size:12px">
@@ -84,6 +60,18 @@
           <i class="ri-history-line" style="color:#a371f7;font-size:14px"></i>
           <span>历史研判档案</span>
         </div>
+        <div class="popover-item" onclick="openKnowledgeBaseModal();closeUserDropdown();" style="padding:8px 10px;font-size:12px">
+          <i class="ri-book-read-line" style="color:#3fb950;font-size:14px"></i>
+          <span>战法大典</span>
+        </div>
+        <div class="popover-item" onclick="openGlossaryModal();closeUserDropdown();" style="padding:8px 10px;font-size:12px">
+          <i class="ri-character-recognition-line" style="color:#f59e0b;font-size:14px"></i>
+          <span>术语字典</span>
+        </div>
+        <div class="popover-item" onclick="triggerSyncNow();closeUserDropdown();" style="padding:8px 10px;font-size:12px">
+          <i class="ri-flashlight-line" style="color:#58a6ff;font-size:14px"></i>
+          <span>一键增量对齐</span>
+        </div>
         <div style="height:1px;background:var(--sys-border);margin:3px 0"></div>
         <!-- 退出登录选项 (红色高亮) -->
         <div class="popover-item" onclick="doLogout();closeUserDropdown();" style="padding:8px 10px;font-size:12px;color:#f85149 !important" onmouseover="this.style.background='rgba(248,81,73,0.12)'">
@@ -91,8 +79,6 @@
           <span>退出当前登录</span>
         </div>
       </div>
-
-
     </div>
 
     <!-- 未登录状态栏 -->

@@ -19,6 +19,9 @@ def _test_database(tmp_path, monkeypatch):
     """每个测试使用独立的临时数据库"""
     test_db = tmp_path / "quant.db"
     monkeypatch.setattr("utils.database.DB_PATH", test_db)
+    monkeypatch.setattr("core.database.DB_PATH", test_db)
+
+    monkeypatch.setenv("ADMIN_PASSWORD", "test-admin-password")
 
     # 初始化表结构
     from utils.database import init_db
@@ -27,6 +30,9 @@ def _test_database(tmp_path, monkeypatch):
     # 同时让 strategies 文件用临时路径
     test_strategies = tmp_path / "user_strategies.json"
     monkeypatch.setattr("utils.strategy_rules.STRATEGIES_FILE", test_strategies)
+
+    test_portfolio = tmp_path / "portfolio.json"
+    monkeypatch.setattr("utils.portfolio_advisor.DATA_FILE", test_portfolio)
 
     yield test_db
 

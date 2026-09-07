@@ -248,4 +248,5 @@ def get_popular_stocks() -> list[dict]:
 
 # 统一函数别名导出
 search_symbol = search_stock_sina
+search_stocks = search_stock_sina
 

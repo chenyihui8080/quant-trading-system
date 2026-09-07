@@ -467,20 +467,34 @@
     async function loadDashboard() {
       try {
         const res = await fetch('/api/review/daily-report');
-        const json = await res.json();
-        if (json.code === 200 && json.data) {
-          renderReport(json.data);
+        if (!res.ok) {
+          console.error("日报接口 HTTP 错误:", res.status);
+          document.getElementById('leadNarrative').innerHTML = '<p style="color: var(--red-bull);">⚠️ 数据加载失败，请检查服务状态</p>';
+        } else {
+          const json = await res.json();
+          if (json.code === 200 && json.data) {
+            renderReport(json.data);
+          }
         }
 
         const res2 = await fetch('/api/review/core-watchlist');
-        const json2 = await res2.json();
-        if (json2.code === 200 && json2.data) {
-          _allWatchlist = json2.data;
-          renderWatchlist(_allWatchlist);
+        if (!res2.ok) {
+          console.error("观察池接口 HTTP 错误:", res2.status);
+        } else {
+          const json2 = await res2.json();
+          if (json2.code === 200 && json2.data) {
+            _allWatchlist = json2.data;
+            renderWatchlist(_allWatchlist);
+          }
         }
       } catch (e) {
         console.error("加载数据失败:", e);
       }
+    }
+
+    function escHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
     function renderReport(data) {
@@ -497,12 +511,12 @@
       const ladder = mkt.ladder_distribution || {};
       document.getElementById('kpiLadder').textContent = `4板+ (${ladder['4板+'] || 0}) / 2板 (${ladder['2板'] || 0})`;
 
-      // 渲染定调文案 (将 [ref:X] 转换为可点击标签)
-      let sentHtml = data.sentiment_summary || '';
+      // 渲染定调文案 (先转义，再将 [ref:X] 转换为可点击标签)
+      let sentHtml = escHtml(data.sentiment_summary || '');
       sentHtml = sentHtml.replace(/\[(ref:\d+)\]/g, `<span class="ref-badge" onclick="openRefDrawer('$1')">[$1]</span>`);
       document.getElementById('leadNarrative').innerHTML = `<p>${sentHtml}</p>`;
 
-      let planHtml = data.game_plan_tomorrow || '';
+      let planHtml = escHtml(data.game_plan_tomorrow || '');
       planHtml = planHtml.replace(/\[(ref:\d+)\]/g, `<span class="ref-badge" onclick="openRefDrawer('$1')">[$1]</span>`);
       document.getElementById('leadGamePlan').innerHTML = `<strong>🎯 次日博弈策略：</strong> ${planHtml}`;
 
@@ -510,17 +524,17 @@
       const themes = data.main_themes || [];
       const tGrid = document.getElementById('themesGrid');
       tGrid.innerHTML = themes.map(t => {
-        let drv = t.driver_analysis || '';
+        let drv = escHtml(t.driver_analysis || '');
         drv = drv.replace(/\[(ref:\d+)\]/g, `<span class="ref-badge" onclick="openRefDrawer('$1')">[$1]</span>`);
         return `
           <div class="theme-card">
             <div class="theme-title">
-              <span>${t.theme_name}</span>
-              <span class="theme-status">${t.status}</span>
+              <span>${escHtml(t.theme_name || '')}</span>
+              <span class="theme-status">${escHtml(t.status || '')}</span>
             </div>
             <div class="theme-driver">${drv}</div>
             <div class="theme-stocks">
-              ${(t.core_stocks || []).map(s => `<span class="theme-stock-tag">${s}</span>`).join('')}
+              ${(t.core_stocks || []).map(s => `<span class="theme-stock-tag">${escHtml(s)}</span>`).join('')}
             </div>
           </div>
         `;
@@ -539,7 +553,7 @@
         const chgClass = (item.change_pct || 0) >= 0 ? 'color: var(--red-bull)' : 'color: var(--green-bear)';
         const chgSign = (item.change_pct || 0) >= 0 ? '+' : '';
         const confClass = `pill-${item.confidence_level || 'medium'}`;
-        const confText = item.confidence_level === 'high' ? '🟢 高置信' : (item.confidence_level === 'medium' ? '🔵 中置信' : '⚪ 待确认');
+        const confText = item.confidence_level === 'high' ? '高置信' : (item.confidence_level === 'medium' ? '中置信' : '待确认');
 
         let refHtml = item.evidence_ref && item.evidence_ref.startsWith('ref:') && item.evidence_ref !== 'ref:none'
           ? `<span class="ref-badge" onclick="openRefDrawer('${item.evidence_ref}')">[${item.evidence_ref}]</span>`
@@ -548,18 +562,18 @@
         return `
           <tr>
             <td>
-              <div style="font-weight: 700;">${item.stock_name}</div>
-              <div style="font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${item.stock_code}</div>
+              <div style="font-weight: 700;">${escHtml(item.stock_name || '--')}</div>
+              <div style="font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${escHtml(item.stock_code || '')}</div>
             </td>
-            <td><span style="font-size: 12px; color: var(--text-muted);">${item.sector_name || '--'}</span></td>
+            <td><span style="font-size: 12px; color: var(--text-muted);">${escHtml(item.sector_name || '--')}</span></td>
             <td style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">¥${(item.close_price || 0).toFixed(2)}</td>
             <td style="font-family: 'JetBrains Mono', monospace; font-weight: 700; ${chgClass}">${chgSign}${(item.change_pct || 0).toFixed(2)}%</td>
             <td style="font-family: 'JetBrains Mono', monospace;">${(item.turnover_rate || 0).toFixed(1)}%</td>
             <td style="font-family: 'JetBrains Mono', monospace;">${(item.amount_yi || 0).toFixed(1)} 亿</td>
-            <td style="font-size: 12px; color: #cbd5e1;">${item.attribution_detail || '--'} ${refHtml}</td>
-            <td><span class="pill-confidence ${confClass}">${confText} (${Math.round((item.attribution_confidence || 0)*100)}%)</span></td>
+            <td style="font-size: 12px; color: #cbd5e1;">${escHtml(item.attribution_detail || '--')} ${refHtml}</td>
+            <td><span class="pill-confidence ${confClass}">${escHtml(confText)} (${Math.round((item.attribution_confidence || 0)*100)}%)</span></td>
             <td>
-              ${(item.risk_flags || []).map(r => `<span style="font-size: 11px; color: var(--gold-star); background: rgba(251, 191, 36, 0.1); padding: 2px 5px; border-radius: 3px; margin-right: 3px;">⚠️ ${r}</span>`).join('') || '<span style="color: #64748b; font-size: 11px;">无显著风险</span>'}
+              ${(item.risk_flags || []).map(r => `<span style="font-size: 11px; color: var(--gold-star); background: rgba(251, 191, 36, 0.1); padding: 2px 5px; border-radius: 3px; margin-right: 3px;">⚠️ ${escHtml(r)}</span>`).join('') || '<span style="color: #64748b; font-size: 11px;">无显著风险</span>'}
             </td>
           </tr>
         `;
@@ -572,30 +586,62 @@
         renderWatchlist(_allWatchlist);
         return;
       }
-      const filtered = _allWatchlist.filter(x => 
-        x.stock_code.toLowerCase().includes(q) ||
-        x.stock_name.toLowerCase().includes(q) ||
+      const filtered = _allWatchlist.filter(x =>
+        (x.stock_code || '').toLowerCase().includes(q) ||
+        (x.stock_name || '').toLowerCase().includes(q) ||
         (x.sector_name || '').toLowerCase().includes(q)
       );
       renderWatchlist(filtered);
     }
 
-    function openRefDrawer(refTag) {
+    async function openRefDrawer(refTag) {
       const titleEl = document.getElementById('drawerTitle');
       const contentEl = document.getElementById('drawerContent');
-      const text = _citationsMap[refTag] || '暂无该引用的详细文本记录';
 
-      titleEl.textContent = `引用依据详情 [${refTag}]`;
+      titleEl.textContent = `引用依据详情 [${refTag}] — 加载中...`;
+      contentEl.innerHTML = '<div style="color: var(--text-muted); padding: 20px 0;">正在从情报库获取原始证据...</div>';
+      document.getElementById('drawerOverlay').style.display = 'block';
+      document.getElementById('drawer').classList.add('open');
+
+      const localText = _citationsMap[refTag] || '';
+      try {
+        const res = await fetch(`/api/review/evidence-detail?ref_tag=${encodeURIComponent(refTag)}`);
+        if (res.ok) {
+          const json = await res.json();
+          const item = json.data || {};
+          const url = item.url || '';
+          const source = item.source || item.platform || '情报库';
+          const publishedAt = item.published_at || '';
+          contentEl.innerHTML = `
+            <div style="background: #1e293b; padding: 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 12px;">
+              <div style="font-size: 11px; color: var(--accent-blue); font-weight: 600; margin-bottom: 4px;">证据索引: ${escHtml(refTag)}</div>
+              ${localText ? `<div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 8px;">${escHtml(localText)}</div>` : ''}
+              ${item.title ? `<div style="font-size: 14px; color: #e2e8f0; margin-bottom: 6px; font-weight: 600;">${escHtml(item.title)}</div>` : ''}
+              ${item.summary ? `<div style="font-size: 13px; color: #cbd5e1; line-height: 1.6; margin-bottom: 8px;">${escHtml(item.summary)}</div>` : ''}
+              <div style="font-size: 11px; color: #64748b;">
+                来源: ${escHtml(source)} &nbsp;|&nbsp; ${publishedAt ? '发布时间: ' + escHtml(publishedAt) : ''}
+              </div>
+            </div>
+            ${url ? `<div style="margin-bottom: 10px;"><a href="${escHtml(url)}" target="_blank" style="color: var(--accent-blue); font-size: 12px; text-decoration: none;">🔗 跳转原文核实 (${escHtml(url)})</a></div>` : '<div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">⚠️ 原文链接暂不可用</div>'}
+            <div style="font-size: 12px; color: #94a3b8; border-top: 1px solid #1e293b; padding-top: 10px;">
+              该依据由「情报搜集员」经 SimHash 去重后收录，并由「逻辑配对师」与「复盘组长」作为归因推演的强制引用底据。
+            </div>
+          `;
+          titleEl.textContent = `引用依据详情 [${refTag}]`;
+          return;
+        }
+      } catch (e) {
+        // API 失败，降级到本地缓存文本
+      }
+      // 降级渲染
       contentEl.innerHTML = `
         <div style="background: #1e293b; padding: 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 12px;">
-          <div style="font-size: 11px; color: var(--accent-blue); font-weight: 600; margin-bottom: 4px;">官方证据索引: ${refTag}</div>
-          <div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 8px;">${text}</div>
+          <div style="font-size: 11px; color: var(--accent-blue); font-weight: 600; margin-bottom: 4px;">官方证据索引: ${escHtml(refTag)}</div>
+          <div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 8px;">${escHtml(localText) || '暂无该引用的详细文本记录'}</div>
           <div style="font-size: 12px; color: #94a3b8;">该依据由「情报搜集员」经 SimHash 去重后收录，并由「逻辑配对师」与「复盘组长」作为归因推演的强制引用底据。</div>
         </div>
       `;
-
-      document.getElementById('drawerOverlay').style.display = 'block';
-      document.getElementById('drawer').classList.add('open');
+      titleEl.textContent = `引用依据详情 [${refTag}]`;
     }
 
     function closeDrawer() {
@@ -608,8 +654,12 @@
       try {
         const res = await fetch('/api/review/trigger-pipeline-a', { method: 'POST' });
         const json = await res.json();
-        alert(`复盘完成！耗时: ${json.execution_time_sec} 秒，核心观察池已生成 ${json.watchpool_count} 只标的！`);
-        loadDashboard();
+        if (res.ok && json.code === 200) {
+          alert(`复盘完成！耗时: ${json.execution_time_sec} 秒，核心观察池已生成 ${json.watchpool_count} 只标的！`);
+          loadDashboard();
+        } else {
+          alert(`复盘执行失败: ${json.message || JSON.stringify(json)}`);
+        }
       } catch (e) {
         alert("触发复盘失败: " + e.message);
       }

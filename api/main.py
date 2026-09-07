@@ -20,13 +20,14 @@ from fastapi.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from api.websocket import manager as ws_manager, market_push_loop
-from api.routers.auth_router import router as auth_router
+from api.routers.auth_router import router as auth_router, audit_router
 from api.routers.knowledge_router import router as knowledge_router
 from api.routers.chat_router import router as chat_router
-from api.routers.market_router import router as market_router
+from api.routers.market_router import router as market_router, legacy_router as market_legacy_router
+from api.routers.legacy_router import router as legacy_router
 from api.routers.portfolio_router import router as portfolio_router
-from api.routers.backtest_router import router as backtest_router
 from api.routers.alpha_router import router as alpha_router
+from api.routers.prediction_router import router as prediction_router
 
 logger = logging.getLogger("MainHub")
 TEMPLATE_DIR = Path(__file__).parent / "templates"
@@ -57,10 +58,32 @@ async def lifespan(app: FastAPI):
         except Exception as se:
             logger.error(f"启动复盘调度器失败: {se}")
 
+    # 异步延迟启动东方财富实盘同步守护线程 (解决 A-SYNC-001)
+    def _start_em_daemon():
+        try:
+            from services.eastmoney_service import global_eastmoney_service
+            global_eastmoney_service.start_sync_daemon()
+            logger.info("🚀 东方财富实盘自动同步守护线程已成功并入主系统生命周期！")
+        except Exception as ee:
+            logger.warning(f"启动东财守护线程异常: {ee}")
+    
+    asyncio.get_event_loop().call_soon(_start_em_daemon)
+
     yield
 
-    # 优雅退出
-    push_task.cancel()
+    # 极速优雅退出 (0.2s 超时防挂起)
+    try:
+        push_task.cancel()
+    except Exception:
+        pass
+
+
+    try:
+        from services.eastmoney_service import global_eastmoney_service
+        global_eastmoney_service.stop_sync_daemon()
+    except Exception:
+        pass
+
     if HAS_REVIEW_WORKBENCH and review_scheduler:
         try:
             review_scheduler.stop()
@@ -68,9 +91,11 @@ async def lifespan(app: FastAPI):
             pass
 
     try:
-        await push_task
-    except asyncio.CancelledError:
+        await asyncio.wait_for(asyncio.shield(push_task), timeout=0.2)
+    except (Exception, asyncio.CancelledError, BaseException):
         pass
+
+
 
 
 # 1. 创建 FastAPI 主实例
@@ -81,76 +106,168 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 2. 挂载全部模块化领域子路由
-app.include_router(auth_router)
-app.include_router(knowledge_router)
-app.include_router(chat_router)
-app.include_router(market_router)
-app.include_router(portfolio_router)
-app.include_router(backtest_router)
-app.include_router(alpha_router)
+# 1.1 全局 CORS 跨域中间件（文档声明的能力必须真正落地，否则跨域前端/工具会因预检被拦截失败）
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# 挂载复盘工作台全量智能体中枢路由 (彻底消除 AttributeError)
+@app.middleware("http")
+async def add_cors_pna_and_cache_header(request: Request, call_next):
+    # 支持 Chrome Private Network Access (PNA) 预检请求放行
+    if request.method == "OPTIONS":
+        response = Response(status_code=200)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    if request.url.path.startswith("/static/") or request.url.path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+# 1.2 全局异常拦截体系 (Global Exception Defense System)
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+import traceback
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """处理标准 HTTP 异常 (如 404, 401, 403, 400)"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.status_code,
+            "message": exc.detail or "HTTP 请求异常",
+            "detail": exc.detail,
+            "path": request.url.path
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """处理请求参数校验异常 (422)"""
+    errors = exc.errors()
+    first_err = errors[0]["msg"] if errors else "请求参数格式错误"
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": 422,
+            "message": f"参数校验失败: {first_err}",
+            "detail": str(errors),
+            "path": request.url.path
+        }
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """全局兜底拦截所有未处理未知异常 (500)，记录堆栈并返回标准友好响应，确保主服务永不宕机"""
+    error_trace = traceback.format_exc()
+    logger.error(f"🔥 [全局未捕获异常] 请求路径: {request.url.path} | 错误类型: {type(exc).__name__} | 错误详情: {str(exc)}\n{error_trace}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": 500,
+            "message": f"系统处理异常: {str(exc)}",
+            "detail": str(exc),
+            "path": request.url.path
+        }
+    )
+
+
+# 2. 安全模块化路由装配 (Fault-Tolerant Router Mounting)
+# 采用故障隔离机制：任何单个子模块异常均记录警告并安全降级，绝不连带主系统宕机
+def _safe_include_router(app_instance: FastAPI, router_module_path: str, router_var_name: str = "router"):
+    try:
+        import importlib
+        mod = importlib.import_module(router_module_path)
+        router_obj = getattr(mod, router_var_name, None)
+        if router_obj:
+            app_instance.include_router(router_obj)
+            logger.info(f"✅ 子路由成功挂载: {router_module_path}")
+        else:
+            logger.warning(f"⚠️ 模块未找到路由对象 {router_var_name}: {router_module_path}")
+    except Exception as e:
+        logger.error(f"❌ 挂载子路由失败 (已安全隔离): {router_module_path} -> {e}")
+
+_safe_include_router(app, "api.routers.auth_router", "router")
+_safe_include_router(app, "api.routers.auth_router", "audit_router")
+_safe_include_router(app, "api.routers.knowledge_router", "router")
+_safe_include_router(app, "api.routers.chat_router", "router")
+_safe_include_router(app, "api.routers.market_router", "router")
+_safe_include_router(app, "api.routers.market_router", "legacy_router")
+_safe_include_router(app, "api.routers.legacy_router", "router")
+_safe_include_router(app, "api.routers.portfolio_router", "router")
+_safe_include_router(app, "api.routers.alpha_router", "router")
+_safe_include_router(app, "api.routers.prediction_router", "router")
+
 if HAS_REVIEW_WORKBENCH and review_router:
-    app.include_router(review_router)
-    logger.info("✅ 交易复盘工作台路由已成功挂载至主服务！")
+    try:
+        app.include_router(review_router)
+        logger.info("✅ 交易复盘工作台路由已成功挂载至主服务！")
+    except Exception as re_err:
+        logger.error(f"❌ 挂载复盘工作台路由失败: {re_err}")
 
 
+# 3. 系统健康检查探针 (Health Check Probe)
+@app.get("/api/health")
+async def health_check():
+    """系统级健康检查与状态探针"""
+    db_status = "ok"
+    try:
+        from api.routers.prediction_router import get_db
+        with get_db() as conn:
+            conn.execute("SELECT 1").fetchone()
+    except Exception as de:
+        db_status = f"error: {str(de)}"
 
+# 3.1 油猴脚本分发路由 (Tampermonkey Userscript Direct Endpoint)
+from fastapi.responses import FileResponse, Response
 
-# 3. 挂载静态文件目录
+@app.get("/api/eastmoney/userscript.user.js")
+@app.get("/eastmoney.user.js")
+@app.get("/api/eastmoney/tampermonkey-script")
+async def serve_eastmoney_userscript(request: Request):
+    """直接下发东方财富自动同步油猴脚本"""
+    userscript_path = STATIC_DIR / "userscript.user.js"
+    if userscript_path.exists():
+        content = userscript_path.read_text(encoding="utf-8")
+        # 动态替换 API host 为当前请求的 scheme 和 host
+        host_origin = f"{request.url.scheme}://{request.url.netloc}"
+        content = content.replace("http://localhost:8000", host_origin)
+        return Response(content=content, media_type="application/javascript", headers={
+            "Content-Disposition": "inline; filename=eastmoney.user.js",
+            "Cache-Control": "no-cache"
+        })
+    return Response(content="// Userscript not found", media_type="application/javascript", status_code=404)
+
+# 4. 挂载静态文件目录
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# 4. 公开免认证路径集合
+# 5. 公开免认证路径集合
 PUBLIC_PATHS = {
-    "/", "/auth/register", "/auth/login", "/docs", "/openapi.json",
-    "/redoc", "/docs/oauth2-redirect", "/api/knowledge-base/stats",
-    "/api/market/sector-flows", "/api/social/buzz-ranking", "/api/eastmoney/daemon-status"
+    "/", "/docs", "/openapi.json",
+    "/redoc", "/docs/oauth2-redirect", "/api/health",
+    "/api/eastmoney/userscript.user.js", "/eastmoney.user.js", "/static/userscript.user.js",
+    "/api/eastmoney/tampermonkey-script"
 }
 
 
 
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    """全局认证中间件：公开路径外的所有请求必须携带有效 Token"""
-    path = request.url.path
-
-    # 公开路径、WebSocket、复盘工作台、Alpha买卖决策、系统同步与股票搜索放行
-    if (
-        path in PUBLIC_PATHS
-        or path.startswith("/ws")
-        or path.startswith("/api/knowledge-base")
-        or path.startswith("/api/review")
-        or path.startswith("/api/alpha")
-        or path.startswith("/api/system")
-        or path.startswith("/api/search_stocks")
-        or path.startswith("/stocks/search")
-    ):
-        return await call_next(request)
-
-
-
-
-    # 静态资源放行
-    if path.endswith((".js", ".css", ".ico", ".png", ".jpg", ".svg", ".woff2")):
-        return await call_next(request)
-
-    # 检查 Authorization 头
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return HTMLResponse(
-            content='{"detail":"未登录，请先调用 /auth/login 获取 Token"}',
-            status_code=401,
-            media_type="application/json",
-        )
-
-    return await call_next(request)
-
-
 @app.get("/", response_class=HTMLResponse)
-def index_page():
-    """三大系统主工作台聚合页面 (支持模板动态拼装)"""
+async def index_page():
+    """三大系统主工作台聚合页面 (极速毫秒级动态拼装，确保模板修改实时生效)"""
     index_file = TEMPLATE_DIR / "index.html"
     if not index_file.exists():
         return HTMLResponse("<h2>index.html 未找到</h2>", status_code=404)
@@ -162,4 +279,5 @@ def index_page():
             tag = f"<!-- #include:{mod.name} -->"
             if tag in content:
                 content = content.replace(tag, mod.read_text(encoding="utf-8"))
+
     return HTMLResponse(content)

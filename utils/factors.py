@@ -287,18 +287,31 @@ def top_factors_score(
     for name, weight in factor_weights.items():
         if name == "rsi":
             val = latest.get("rsi", 50)
-            scores[name] = (100 - val) / 100 * weight  # 超卖得分高
+            if pd.isna(val) or np.isnan(val): val = 50.0
+            scores[name] = (100.0 - float(val)) / 100.0 * weight  # 超卖得分高
         elif name == "macd":
             val = latest.get("macd_hist", 0)
-            scores[name] = 1 if val > 0 else -1 * weight
+            if pd.isna(val) or np.isnan(val): val = 0.0
+            scores[name] = 1.0 if float(val) > 0 else -1.0 * weight
         elif name == "momentum":
             val = latest.get("mom_20", 0)
-            scores[name] = val * weight
+            if pd.isna(val) or np.isnan(val): val = 0.0
+            scores[name] = float(val) * weight
         elif name == "volatility":
             val = latest.get("vol_20", 0)
-            scores[name] = -val * weight  # 低波动加分
+            if pd.isna(val) or np.isnan(val): val = 0.0
+            scores[name] = -float(val) * weight  # 低波动加分
         elif name == "turnover":
             val = latest.get("turnover_ratio", 1)
-            scores[name] = min(val, 3) / 3 * weight
+            if pd.isna(val) or np.isnan(val): val = 1.0
+            scores[name] = min(float(val), 3.0) / 3.0 * weight
 
-    return pd.Series(scores, dtype=float)
+    # 彻底清洗所有 NaN / Inf，确保 100% 符合 JSON 规范
+    clean_scores = {}
+    for k, v in scores.items():
+        if pd.isna(v) or np.isnan(v) or np.isinf(v):
+            clean_scores[k] = 0.0
+        else:
+            clean_scores[k] = round(float(v), 4)
+
+    return pd.Series(clean_scores, dtype=float)

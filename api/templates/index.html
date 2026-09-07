@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Alpha 盘中实战交易系统 | 量化投研与复盘协同体系</title>
   
-  <!-- 外部依赖图表库、字体与阿里巴巴开源 RemixIcon 矢量图标库 -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <!-- 本地极速图表库与阿里巴巴开源 RemixIcon 矢量图标库 -->
+  <script src="/static/echarts.min.js"></script>
+  <link href="https://cdn.bootcdn.net/ajax/libs/remixicon/3.5.0/remixicon.min.css" rel="stylesheet">
   
-  <!-- 🎨 全域样式表 (带防缓存版本戳) -->
-  <link rel="stylesheet" href="/static/css/theme.css?v=20260828_v36">
+  <!-- 引入 Element Plus 官方工业级组件库样式 (Vue3 标准) -->
+  <link href="https://cdn.bootcdn.net/ajax/libs/element-plus/2.7.7/index.min.css" rel="stylesheet">
+  
+  <!-- 全局 Element Plus 风格全域主题与自适应规范 -->
+  <link rel="stylesheet" href="/static/css/theme.css?v=20260901_v14">
+  <link rel="stylesheet" href="/static/css/base.css?v=20260901_v14">
 </head>
 
 <body class="theme-alpha">
@@ -21,7 +22,7 @@
   <!-- 1. 登录 / 注册浮层组件 -->
   <!-- #include:auth_overlay.html -->
 
-  <!-- 2. 顶栏导航与三大系统核心切换器 -->
+  <!-- 2. 顶栏导航与双系统核心切换器 -->
   <!-- #include:header.html -->
 
   <!-- 3. 🎯 系统一：Alpha 盘中实战交易系统 (独立页面) -->
@@ -30,19 +31,25 @@
   <!-- 4. 👑 系统二：交易复盘工作台 (7人小智能体中枢独立页面) -->
   <!-- #include:system_review.html -->
 
-  <!-- 5. 📈 系统三：量化投研与策略回测引擎 (独立页面) -->
-  <!-- #include:system_quant.html -->
-
-  <!-- 6. 模态弹窗与侧滑证据抽屉 -->
+  <!-- 5. 模态弹窗与侧滑证据抽屉 -->
   <!-- #include:modals_drawers.html -->
 
   <!-- ⚡ 模块化 JavaScript 核心驱动 (分工明确·有序加载) -->
-  <script src="/static/js/utils.js?v=20260828_v36"></script>
-  <script src="/static/js/system_switcher.js?v=20260828_v36"></script>
-  <script src="/static/js/alpha.js?v=20260828_v36"></script>
-  <script src="/static/js/review.js?v=20260828_v36"></script>
-  <script src="/static/js/quant.js?v=20260828_v36"></script>
-  <script src="/static/js/main.js?v=20260828_v36"></script>
+  <script src="/static/js/el_datepicker.js?v=20260907_v25"></script>
+  <script src="/static/js/utils.js?v=20260907_v25"></script>
+  <script src="/static/js/system_switcher.js?v=20260907_v25"></script>
+  <!-- 🎯 系统一：Alpha 决策工作台高内聚子模块集群 -->
+  <script src="/static/js/alpha_calc.js?v=20260907_v25"></script>
+  <script src="/static/js/alpha_sector.js?v=20260907_v25"></script>
+  <script src="/static/js/alpha_twitter.js?v=20260907_v25"></script>
+  <script src="/static/js/alpha_eastmoney.js?v=20260907_v25"></script>
+  <script src="/static/js/alpha_prediction.js?v=20260907_v25"></script>
+  <script src="/static/js/alpha.js?v=20260907_v25"></script>
+  <!-- 👑 系统二：交易复盘与智能体中枢 -->
+  <script src="/static/js/review.js?v=20260907_v25"></script>
+  <script src="/static/js/main.js?v=20260907_v25"></script>
+
+
 </body>
 </html>
 

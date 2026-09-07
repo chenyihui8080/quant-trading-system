@@ -29,6 +29,8 @@ def get_knowledge_base_stats():
 @router.get("/search")
 def search_knowledge_base(q: str = Query(..., description="搜索关键词")):
     """在 40,474 条战法切片中执行全文检索"""
+    if not q or not q.strip():
+        return {"code": 400, "message": "搜索关键词不能为空"}
     try:
         results = search_knowledge(q, top_k=6)
         return {

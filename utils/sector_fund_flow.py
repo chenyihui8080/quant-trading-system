@@ -9,7 +9,10 @@
 """
 
 import time
+import json
+import threading
 import logging
+from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional
 import pandas as pd
@@ -44,7 +47,80 @@ class SectorFundFlowFetcher:
         self._cache_concept: list[dict] = []
         self._last_update_industry: float = 0.0
         self._last_update_concept: float = 0.0
-        self._cache_ttl = 15.0  # 15秒缓存刷新机制
+        self._cache_ttl = 45.0  # 45秒缓存刷新机制，兼顾实时性并防止高频阻塞
+        self._fetch_lock = threading.Lock()  # 抓取互斥锁
+        self._name_code_index: dict[str, str] = {}
+        self._name_code_index_ts: float = 0.0
+
+    def _ensure_name_code_index(self):
+        """建立真实 A 股 名称→代码 索引（本地持久化缓存，杜绝重复 login/logout 导致进程锁死）"""
+        now = time.time()
+        # 无论成功与否，1小时内绝不重复发起 baostock login 请求，杜绝信号量泄漏与假死
+        if (now - self._name_code_index_ts) < 3600.0:
+            return
+        self._name_code_index_ts = now
+
+        # 1. 优先尝试从本地磁盘 JSON 加载
+        cache_file = Path(__file__).parent.parent / "data" / "stock_name_code_map.json"
+        if cache_file.exists():
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    self._name_code_index = json.load(f)
+                    if len(self._name_code_index) >= 500:
+                        return
+            except Exception:
+                pass
+
+        # 2. 本地不存在时从 baostock 建立一次
+        try:
+            from datetime import datetime, timedelta
+            import baostock as bs
+            lg = bs.login()
+            if lg.error_code != '0':
+                return
+
+            index: dict[str, str] = {}
+            candidate_day = datetime.now().strftime("%Y-%m-%d")
+            for _ in range(5):  # 缩短重试天数，避免长时间卡住
+                rs = bs.query_all_stock(day=candidate_day)
+                tmp = {}
+                while rs.next():
+                    row = rs.get_row_data()
+                    if len(row) >= 3 and row[1] == "1":  # 正常交易状态
+                        full = row[0]  # sh.600519
+                        name = str(row[2]).strip()
+                        code = full.split(".")[1] if "." in full else full
+                        if name and code:
+                            tmp[name] = code
+                if len(tmp) >= 500:
+                    index = tmp
+                    break
+                dt = datetime.strptime(candidate_day, "%Y-%m-%d") - timedelta(days=1)
+                candidate_day = dt.strftime("%Y-%m-%d")
+            bs.logout()
+            if index:
+                self._name_code_index = index
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(index, f, ensure_ascii=False)
+                logger.info(f"✅ baostock 名称→代码索引建立完成，共 {len(index)} 只")
+        except Exception as e:
+            logger.warning(f"baostock 名称→代码索引建立跳过: {e}")
+
+    def _fill_leader_codes(self, items: list[dict]):
+        """用真实名称→代码索引补齐 leader_stock_code（仅当为空时）"""
+        missing = [it for it in items if not it.get("leader_stock_code") and it.get("leader_stock_name")]
+        if not missing:
+            return
+        self._ensure_name_code_index()
+        if not self._name_code_index:
+            return
+        for it in items:
+            name = it.get("leader_stock_name", "")
+            if not it.get("leader_stock_code") and name:
+                code = self._name_code_index.get(name, "")
+                if code:
+                    it["leader_stock_code"] = code
 
     def get_sector_flows(self, sector_type: str = "industry") -> list[dict]:
         """获取行业或概念板块的真实资金流向"""
@@ -109,6 +185,9 @@ class SectorFundFlowFetcher:
                         if s_name and s_name not in seen_names:
                             seen_names.add(s_name)
                             unique_list.append(item)
+
+                    # 用真实 A 股名称→代码索引补齐龙头代码（东财限流时仍能补齐）
+                    self._fill_leader_codes(unique_list)
 
                     # 按净流入从大到小排序 (最强吸金板块在前)
                     unique_list.sort(key=lambda x: x["net_inflow_amount"], reverse=True)

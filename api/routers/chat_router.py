@@ -20,15 +20,16 @@ from utils.playbooks_engine import match_best_playbook
 logger = logging.getLogger("ChatRouter")
 router = APIRouter(prefix="/api/chat", tags=["AI 操盘顾问"])
 
-REVIEW_DB_PATH = Path("/Users/chen/Desktop/MyProject/量化/data/review_workbench.db")
+# 复盘工作台数据库（相对项目根路径，指向真实 review_workbench/data/review.db）
+REVIEW_DB_PATH = Path(__file__).resolve().parent.parent.parent / "review_workbench" / "data" / "review.db"
 
 
 @router.post("/ask")
-def chat_ask_quant_advisor(payload: dict, current_user: str = Depends(get_current_user)):
+def chat_ask_quant_advisor(payload: dict, current_user: dict = Depends(get_current_user)):
     """与本地 Qwen2.5-7B / 知识库闭环战法大模型进行智能操盘问答"""
     question = (payload.get("question") or "").strip()
     if not question:
-        return {"code": 400, "message": "提问内容不能为空"}
+        raise HTTPException(status_code=400, detail="提问内容不能为空")
 
     target_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -47,13 +48,18 @@ def chat_ask_quant_advisor(payload: dict, current_user: str = Depends(get_curren
     pullback_details = []
 
     try:
-        portfolio_store.load()
+        username = current_user.get("username", "admin") if current_user else "admin"
+        portfolio_store.load(username)
+        if not portfolio_store.positions and username != "default":
+            portfolio_store.load("default")
         for sym, pos in portfolio_store.positions.items():
             q = get_realtime_quote(sym) or {}
             cur_p = float(q.get("price", pos.current_price or 0))
             pre_close = float(q.get("pre_close", cur_p or 1.0))
-            open_p = float(q.get("open", cur_p or pre_close))
-            high_p = float(q.get("high", cur_p or pre_close))
+            raw_open = float(q.get("open") or 0.0)
+            raw_high = float(q.get("high") or 0.0)
+            open_p = raw_open if raw_open > 0 else (cur_p if cur_p > 0 else pre_close)
+            high_p = raw_high if raw_high > 0 else (cur_p if cur_p > 0 else pre_close)
             chg_pct = float(q.get("change_pct", 0.0))
 
             cost_amt = pos.cost_price * pos.shares
@@ -62,9 +68,19 @@ def chat_ask_quant_advisor(payload: dict, current_user: str = Depends(get_curren
             pnl_pct = ((cur_p - pos.cost_price) / pos.cost_price * 100) if pos.cost_price > 0 else 0.0
 
             # 日内分时核心盈亏计算 (分文不差)
-            p_open_pnl = round((open_p - pre_close) * pos.shares, 2)
-            p_peak_pnl = round((high_p - pre_close) * pos.shares, 2)
-            p_cur_today_pnl = round((cur_p - pre_close) * pos.shares, 2)
+            if abs(cur_p - pre_close) > 0.0001:
+                p_open_pnl = round((open_p - pre_close) * pos.shares, 2)
+                p_peak_pnl = round((high_p - pre_close) * pos.shares, 2)
+                p_cur_today_pnl = round((cur_p - pre_close) * pos.shares, 2)
+            elif getattr(pos, 'today_pnl_amount', None) is not None and pos.today_pnl_amount != 0:
+                p_cur_today_pnl = round(float(pos.today_pnl_amount), 2)
+                p_open_pnl = p_cur_today_pnl
+                p_peak_pnl = p_cur_today_pnl
+            else:
+                p_open_pnl = round((open_p - pre_close) * pos.shares, 2)
+                p_peak_pnl = round((high_p - pre_close) * pos.shares, 2)
+                p_cur_today_pnl = round((cur_p - pre_close) * pos.shares, 2)
+
             p_pullback = round(p_peak_pnl - p_cur_today_pnl, 2)
 
             total_open_pnl += p_open_pnl
@@ -205,101 +221,138 @@ def chat_ask_quant_advisor(payload: dict, current_user: str = Depends(get_curren
    - 放弃“暴富幻想”，严格执行【触发信号 -> 确定买点 -> 仓位管理 -> 日内做T -> 目标止盈 -> 铁血止损】6 步闭环 SOP；
    - 每日在【4层漏斗观察池】中寻找高胜率、高盈亏比机会，通过严格纪律积累复利。"""
 
-        # 5.1 针对用户询问开盘盈亏、利润回撤、为什么只赚XX的精准归因解答
-        elif any(k in question for k in ["开盘", "只赚", "回撤", "利润", "冲高回落", "为什么现在"]):
-            pullback_text = "\n".join([f"- **{d}**" for d in pullback_details]) if pullback_details else "- 各标的走势相对平稳，未见大幅恶意跳水。"
-            answer = f"""### 📊 实盘分时量价与日内利润回撤精准归因
+        # 5.1 针对用户询问自身盈亏、亏多少赚多少、今天形式如何、账户资金等真实数据查询
+        elif any(k in question.lower() for k in [
+            "亏多少", "赚多少", "盈亏", "赚了", "亏了", "收益", "形式如何", "形势如何", 
+            "我的形式", "我的形势", "我的情况", "今天我", "账户", "总资产", "市值", "持仓", 
+            "仓位", "赚钱", "亏钱", "真实数据", "开盘", "只赚", "回撤", "利润", "冲高回落", "为什么现在"
+        ]):
+            if user_positions:
+                # 汇总计算核心数据
+                today_sign = "+" if total_current_today_pnl >= 0 else "-"
+                total_sign = "+" if total_pnl_amt >= 0 else "-"
+                today_color_status = "🎉 盈利" if total_current_today_pnl >= 0 else "🔻 浮亏"
+                total_color_status = "盈利" if total_pnl_amt >= 0 else "浮亏"
 
-根据量化系统对您 4 只持仓标的今日分时行情与量价轨迹的毫秒级清算，真实情况如下：
+                # 逐只个股表格化清晰呈现
+                pos_details_markdown = []
+                for p_str in user_positions:
+                    pos_details_markdown.append(f"{p_str}")
 
-#### ⏱️ 今日日内利润全景脉络 (分文不差)：
-1. **早盘开盘时**：账户当日浮盈为 **{'+¥' if total_open_pnl >= 0 else '-¥'}{abs(total_open_pnl):.2f}**；
-2. **盘中最高冲高点**：早盘多只标的冲高时，账户当日浮盈一度冲高至 **+¥{total_peak_pnl:.2f}**；
-3. **当前实时状态**：目前当日浮盈回落至 **{'+¥' if total_current_today_pnl >= 0 else '-¥'}{abs(total_current_today_pnl):.2f}**（即您看到的约 50~60 元）。
+                answer = f"""### 📊 您当前的实盘全景与今日真实盈亏清算
 
-#### 🔍 为什么利润会从高点回吐？（核心标的归因）：
+根据系统对您当前账户 **{len(user_positions)} 只持仓标的** 毫秒级资产清算，真实财务数据如下：
+
+---
+
+#### 💰 账户核心财务看板 (分文不差)：
+- 🟢 **今日当日总盈亏**：**{today_color_status} {today_sign}¥{abs(total_current_today_pnl):,.2f}**
+- 📈 **持仓累计总浮盈**：**{total_color_status} {total_sign}¥{abs(total_pnl_amt):,.2f} ({total_pnl_pct:+.2f}%)**
+- 💼 **持仓总市值**：**¥{total_market_val:,.2f}**
+- 💵 **持仓总成本**：**¥{total_cost:,.2f}**
+
+---
+
+#### ⏱️ 今日日内利润全景脉络：
+1. **早盘开盘时**：账户当日浮盈为 **{'+¥' if total_open_pnl >= 0 else '-¥'}{abs(total_open_pnl):.2f}**
+2. **盘中最高冲高点**：早盘冲高时，当日浮盈一度达到 **+¥{total_peak_pnl:.2f}**
+3. **当前实时状态**：目前当日浮盈为 **{'+¥' if total_current_today_pnl >= 0 else '-¥'}{abs(total_current_today_pnl):.2f}**
+
+---
+
+#### 📋 各持仓标的实时明细：
+{chr(10).join(user_positions)}
+
+---
+
+#### 💡 首席操盘顾问大白话形势分析与操作建议：
+1. **总体形势定调**：
+   - 您当前账户总浮盈为 **{total_sign}¥{abs(total_pnl_amt):.2f}**，整体风险完全可控；
+   - 表现最好的标的：{'、'.join([p for p in user_positions if '浮盈' in p][:2]) or '暂无'}；
+   - 需关注防守的标的：{'、'.join([p for p in user_positions if '浮亏' in p][:2]) or '暂无'}。
+2. **明日实操动作**：
+   - 盈利标的可依托 5 日均线继续持有让利润奔跑，若日内脉冲急拉 >3%~5% 可分批高抛做 T 锁定收益；
+   - 浮亏标的严格守住成本线下方的防守止损位，不破则耐心持有，切忌恐慌盲目割肉。"""
+            else:
+                answer = """### 💼 账户持仓与盈亏数据查询
+
+您当前账户暂无已录入的持仓标的。
+请在 **「系统一：我的实盘持仓与买卖深度诊断」** 中录入您的持仓或点击一键同步东方财富实盘，系统将立刻为您实时核算今日盈亏与逐只标的大白话操盘诊断！"""
+
+        elif any(k in question for k in ["操作", "怎么做t", "做t", "诊断", "加仓", "减仓", "止损"]):
+            # 用用户真实持仓渲染诊断，绝不用硬编码假持仓冒充
+            if user_positions:
+                pos_block = "\n\n".join(user_positions)
+                intraday_block_real = "\n".join(intraday_dynamics) if intraday_dynamics else "（暂无分时明细）"
+                pullback_text = "\n".join([f"- **{d}**" for d in pullback_details]) if pullback_details else "- 各标的走势相对平稳，未见大幅恶意跳水。"
+                answer = f"""### 💼 实盘持仓通俗大白话操盘诊断与做T指南
+
+根据您当前持有的 {len(user_positions)} 只持仓成本与今日实时走势，为您整理实操方案：
+
+#### 📋 逐只持仓实时状况：
+{pos_block}
+
+#### ⏱️ 日内分时与回撤：
+{intraday_block_real}
+
+#### 🔍 利润回撤归因：
 {pullback_text}
 
-#### 📋 各标的日内分时明细：
-{chr(10).join(intraday_dynamics)}
-
-#### 💡 首席操盘手实战复盘建议：
-- **日内冲高做 T 纪律**：当持仓标的日内急拉超 +3%~+5% 且偏离分时均线过大时（如博纳影业早盘冲高），属于绝佳的**【日内 T+0 减仓高抛点】**；
-- 养成“分时急拉卖、回踩均线接”的做 T 习惯，能有效将浮盈落袋为安，避免利润坐过山车！"""
-
-
-        elif any(k in question for k in ["持仓", "操作", "怎么做t", "做t", "诊断", "加仓", "减仓", "止损"]):
-
-            answer = f"""### 💼 实盘持仓通俗大白话操盘诊断与次日保姆级做T指南
-
-根据您当前的 4 只持仓成本与今日走势，为您量身整理了一看就懂的实操方案：
-
-#### 📋 逐只持仓实战建议：
-
-1. **养殖ETF (159020 · 目前浮盈 +5.46%)**：
-   - 💡 **大白话定调**：🟢 **目前赚钱中，继续拿着让利润奔跑，别急着卖**
-   - 🛠️ **明天实操步骤**：当前走势像爬楼梯一样稳，把“保命防守线”定在 5 日均线（约 **¥0.895**）。只要股价不跌破这个价，就踏实拿住；如果盘中猛冲赚超过 8% 以上，可以分批卖掉一半把现金落袋！
-
-2. **中证证券 (512570 · 目前浮亏 -9.31%)**：
-   - 💡 **大白话定调**：🟡 **券商是大盘行情的温度计，被套了别慌，手把手教您做T自救**
-   - 🛠️ **明天保姆级做T实操（手里股票一股不少，白赚差价降成本）**：
-     - **① 早上买入**：明早 09:30~10:00，如果股价跌到 **¥1.05** 附近跌不动了，先用手头闲钱加仓买入 **300 股**；
-     - **② 下午卖出**：当天只要股价反弹涨了 **2%~3%**（比如涨到 ¥1.08），立刻把原先持有的 **300 股** 卖掉；
-     - **🎯 最终效果**：手里的总股票数量一点没变，但当天白白赚了差价现金，持仓成本被直接拉低了！
-     - **🛑 保命铁律**：千万不要在缩量跌到底部的时候慌张割肉，容易割在最低点。
-
-3. **机器人PH (159278 · 目前浮亏 -9.17%)**：
-   - 💡 **大白话定调**：🟡 **国家重点支持的高科技方向，先观察早盘能不能反弹**
-   - 🛠️ **明天实操步骤**：明早 09:30~10:00 开盘半小时，看它能不能带量涨回 5 日均线之上。如果能涨回去就安心拿着等解套；如果继续无底线破位跌破前低，再考虑减掉一部分仓位防守。
-
-4. **博纳影业 (001330 · 目前浮亏 -5.28%)**：
-   - 💡 **大白话定调**：🔴 **小盘电影票，破位坚决割肉保命**
-   - 🛠️ **明天实操步骤**：您当前只买了 200 股（仓位很小），如果明天跌破 **¥4.80**，坚决一键卖出割肉，把钱腾出来去买更有把握的优质主线！
-
 #### 🛡️ 操盘老手保命铁律：
-- 任何时候仓位保持在 6 成左右，手里必须留有 4 成流动现金，这样遇到被套才有本钱做 T 降成本！"""
+- 任何时候仓位保持在 6 成左右，手里留有流动资金，被套才有本钱做 T 降成本；
+- 跌破各自成本支撑位要坚决止损，严禁满仓梭哈单只标的。"""
+            else:
+                answer = """### 💼 持仓操盘诊断
+
+当前账户暂未录入持仓。请先在「实盘持仓」模块录入您的持仓（代码/数量/成本），系统即可为您生成逐只持仓的大白话操盘诊断与做T指南。"""
 
         elif any(k in question for k in ["买什么", "推荐", "看好什么"]):
-            answer = f"""### 🎯 今日 4 层漏斗精选黄金标的与通俗推荐理由
+            # 用真实 4 层漏斗观察池渲染推荐，绝不用硬编码标的冒充
+            if top_watchlist:
+                rec_block = "\n".join(f"- {item}" for item in top_watchlist[:3])
+                answer = f"""### 🎯 今日 4 层漏斗精选标的与通俗推荐理由
 
-为您从全市场 5200+ 股票中筛选出确定性最强的 2 只核心标的：
+为您从全市场 5200+ 股票中，按真实实时行情与 4 层漏斗归因筛选出当前观察池头部标的：
 
-1. **300142 沃森生物（医药健康 · 底部放量突破）**
-   - 💡 **为什么看好**：在底部横盘整理了很久，今天突然有很多大资金进场抢筹，单日资金净买入超 2 亿元。
-   - 🛠️ **怎么买**：明早开盘如果平开或者微微下跌回调，可以分批少量买入；把止损保命价设在今天起涨的最低价，跌破就跑。
+#### 📋 观察池头部标的（实时行情 + 归因）：
+{rec_block}
 
-2. **300308 中际旭创（AI 算力核心大龙头）**
-   - 💡 **为什么看好**：全球人工智能算力大爆发，订单排得满满当当，大机构资金一直在里面抱团。
-   - 🛠️ **怎么买**：等股价回调靠近 5 日均线（约 **¥140.50** 附近）再低吸买入，不破均线就踏实拿着！"""
+#### 💡 买入纪律：
+- 优先挑选 4 层漏斗中【盘中强势 + 主力大单净流入 + 换手健康】的辨识度龙头；
+- 明早开盘若平开或小幅回调可分批少量介入，把止损保命价设在入场成本下方关键位，跌破坚决离场；
+- 严禁满仓单只，单票仓位控制在 2~3 成。"""
+            else:
+                answer = """### 🎯 今日精选标的推荐
 
+当前 4 层漏斗观察池暂无数据（可能处于休市或尚未生成当日复盘）。请先触发当日复盘流水线生成观察池，再为您提供真实实时精选标的与买点建议，绝不用虚假标的冒充。"""
 
         else:
             answer = f"""### 🧠 AI 首席操盘顾问量化研判解答
 
-针对您咨询的 **“{question}”**，基于当前实时行情、产业链归因图谱与 7 人小智能体协同定调，核心建议如下：
+针对您咨询的 **“{question}”**，基于当前实时行情、产业链归因图谱与量化决策模型，核心建议如下：
 
 1. **核心逻辑剖析**：
-   - 当前 A 股市场围绕【科技先进制程、具身智能与医药核心资产】展开结构性轮动；
-   - 资金偏好向**“有真实业绩支撑 + 有部委政策催化”**的核心主线靠拢，小微杂毛股流动性被逐步边缘化。
+   - 当前 A 股市场围绕核心高景气主线展开结构性轮动；
+   - 资金偏好向**“有真实业绩支撑 + 有部委政策催化”**的龙头靠拢。
 
 2. **操作与选股策略**：
-   - **买入标准**：优先挑选 4 层漏斗中【盘中最高>7.6% + 主力大单逆势净流入 + 换手率>5%】的辨识度龙头；
-   - **避坑排雷**：买入前务必点击【🛡️ 一键排雷专家】排查标的是否存在 ST、大股东高比例质押或违规减持。
+   - **买入标准**：优先挑选 4 层漏斗中【盘中放量突破 + 主力大单净流入】的辨识度标的；
+   - **避坑排雷**：买入前务必点击【🛡️ 一键排雷专家】排查标的是否存在 ST、大股东质押或违规减持。
 
 3. **明日攻防策略**：
    - 盘中严禁追逐无题材共振的脉冲拉升，把握早盘分歧低吸与龙头弱转强机会！"""
 
-    if matched_pb:
+    # 仅当问题并非特定查询个人财务且确实命中了有效战法时，才附带战法说明
+    is_personal_finance = any(k in question.lower() for k in ["亏多少", "赚多少", "盈亏", "形式如何", "形势如何", "账户", "总资产", "真实数据"])
+    if matched_pb and not is_personal_finance:
         answer += f"\n\n---\n👑 **已自动匹配闭环战法：{matched_pb['name']} ({matched_pb['style']})**\n• **入场买点**：{matched_pb['loop_steps']['buy_point']}\n• **仓位管理**：{matched_pb['loop_steps']['position_management']}\n• **做T节奏**：{matched_pb['loop_steps']['intraday_t_tactics']}\n• **目标止盈**：{matched_pb['loop_steps']['take_profit_target']}\n• **铁血止损**：{matched_pb['loop_steps']['stop_loss_iron_rule']}"
 
-    if kb_references:
+    if kb_references and not is_personal_finance:
         answer += "\n\n📚 **知识库关联名著/战法**：\n" + "\n".join(kb_references)
-
 
     return {
         "code": 200,
         "answer": answer,
-
         "model": model_used,
         "timestamp": datetime.now().strftime("%H:%M:%S")
     }

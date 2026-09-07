@@ -71,23 +71,26 @@ def fetch_real_market_indices() -> dict:
     }
 
 
-def perform_stock_risk_check(input_query: str) -> Dict:
-    """
-    执行个股真实深度排雷检测 (直连东方财富/腾讯真实行情与财务指标，100% 拒绝伪造套话)
-    """
-    clean_query = (input_query or "").strip()
-    if not clean_query:
-        clean_query = "300308"
+def perform_stock_risk_check(query: str) -> Optional[dict]:
+    """个股深度排雷专家检测：严格基于真实上市公司估值与财务数据 (Fail-Closed 严防假通过)"""
+    if not query or not query.strip():
+        return None
 
-    # 1. 匹配股票代码
+    clean_query = query.strip()
+
+    # 1. 匹配股票代码与名称
     matched_code = clean_query
     matched_name = clean_query
+    is_found = False
 
-    if not clean_query.isdigit():
+    if clean_query.isdigit() and len(clean_query) == 6:
+        matched_code = clean_query
+    else:
         results = search_stock_sina(clean_query)
         if results and len(results) > 0:
             matched_code = results[0].get("symbol") or results[0].get("code") or clean_query
             matched_name = results[0].get("name", clean_query)
+            is_found = True
     
     # 提取标准 6 位数字代码
     code_digits = "".join(filter(str.isdigit, matched_code))
@@ -110,8 +113,9 @@ def perform_stock_risk_check(input_query: str) -> Dict:
         resp = requests.get(qq_url, headers=HTTP_HEADERS, timeout=2)
         if resp.status_code == 200 and "~" in resp.text:
             parts = resp.text.split("~")
-            if len(parts) > 46:
-                stock_name = parts[1] or matched_name
+            if len(parts) > 46 and parts[1]:
+                stock_name = parts[1]
+                is_found = True
                 # parts[38]: 换手率, parts[39]: 市盈率PE, parts[46]: 市净率PB, parts[45]: 总市值(亿)
                 if parts[38] and parts[38] != "-":
                     turnover_val = float(parts[38])
@@ -125,7 +129,7 @@ def perform_stock_risk_check(input_query: str) -> Dict:
         logger.warning(f"腾讯行情拉取排雷指标轻微异常: {e}")
 
     # 备用引擎：东方财富 API
-    if pe_val is None:
+    if not is_found:
         try:
             market_flag = "1" if code_digits.startswith(("60", "688")) else "0"
             secid = f"{market_flag}.{code_digits}"

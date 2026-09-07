@@ -263,7 +263,11 @@ class NewsCollector:
                     time_disp = st if len(st) >= 16 else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
                     code_val = str(item.get("code") or "").strip()
-                    em_doc_url = f"https://finance.eastmoney.com/a/{code_val}.html" if code_val else "https://kuaixun.eastmoney.com/"
+                    # 上游快讯接口未提供真实文章落地页，仅能按代码拼接近似页；如实标注为兜底链接，杜绝伪装原文
+                    if code_val:
+                        em_doc_url = f"https://quote.eastmoney.com/{'sh' if code_val.startswith(('60','68')) else 'sz'}{code_val}.html"
+                    else:
+                        em_doc_url = "https://kuaixun.eastmoney.com/"
 
                     if title:
                         raw_items.append({
@@ -272,7 +276,9 @@ class NewsCollector:
                             "source": "东方财富 7x24 财经快讯",
                             "importance": 3,
                             "time": time_disp,
-                            "url": em_doc_url
+                            "url": em_doc_url,
+                            "is_fallback_url": True,
+                            "url_note": "上游快讯未提供原文链接，已使用标的行情页兜底，非原文出处"
                         })
         except Exception as e:
             logger.warning(f"抓取东方财富 7x24 实时快讯轻微异常: {e}")

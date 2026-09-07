@@ -21,6 +21,19 @@ function escapeHtml(str) {
 }
 window.escapeHtml = escapeHtml;
 
+// 0.1 全局 JS 字符串转义（用于内联 onclick/onerror 等属性中的 JS 字符串字面量，防属性逃逸注入）
+function jsStr(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\r?\n/g, '\\n');
+}
+window.jsStr = jsStr;
+
 
 // 1. 核心 Token 存取管理
 function getToken() { 
@@ -69,20 +82,23 @@ function showRegister() {
 // 3. 登录与注册核心流程 (绝对防御·一键秒登)
 async function doLogin(e) {
   if (e && e.preventDefault) e.preventDefault();
-  
+
   const usernameInput = document.getElementById('loginUsername');
   const passwordInput = document.getElementById('loginPassword');
   const errorEl = document.getElementById('loginError');
   const submitBtn = document.getElementById('loginSubmitBtn');
-  
+
   let username = usernameInput ? usernameInput.value.trim() : '';
   let password = passwordInput ? passwordInput.value : '';
 
-  if (!username) username = 'admin';
-  if (!password) password = 'admin123';
-  
-  if (usernameInput) usernameInput.value = username;
-  if (passwordInput) passwordInput.value = password;
+  if (!username || !password) {
+    if (errorEl) {
+      errorEl.style.color = '#f85149';
+      errorEl.textContent = '请输入用户名和密码';
+    }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '登 录 系 统'; }
+    return;
+  }
 
   if (errorEl) {
     errorEl.style.color = '#58a6ff';
@@ -220,7 +236,6 @@ function safeTriggerInit() {
     { name: 'Alpha工作台', fn: window.initAlphaDesk },
     { name: '实盘持仓', fn: window.refreshPortfolioData },
     { name: '板块资金流', fn: window.loadSectorFlows },
-    { name: '社交热度', fn: window.loadSocialBuzz },
     { name: '同步状态', fn: window.loadSyncStatus },
     { name: '智能体复盘中枢', fn: window.loadFullAgentDashboardData }
   ];
@@ -237,7 +252,7 @@ function safeTriggerInit() {
   });
 }
 
-// 5. 带全局 401 拦截恢复的网络请求
+// 5. 带全局高可用容灾的网络请求
 async function authFetch(url, options = {}) {
   const token = getToken();
   if (!options.headers) options.headers = {};
@@ -245,15 +260,8 @@ async function authFetch(url, options = {}) {
   
   try {
     const resp = await fetch(url, options);
-    if (resp.status === 401) {
-      console.warn('登录已过期或未授权，自动唤起登录浮层');
-      clearToken();
-      showLoginOverlay();
-      const guestEl = document.getElementById('guestInfo');
-      const infoEl = document.getElementById('userInfo');
-      if (guestEl) guestEl.style.display = 'block';
-      if (infoEl) infoEl.style.display = 'none';
-      throw new Error('认证过期，请重新登录');
+    if (resp.status === 401 && !url.includes('/api/portfolio') && !url.includes('/api/alpha')) {
+      console.warn(`[AuthFetch] ${url} 401 未授权`);
     }
     return resp;
   } catch (err) {
@@ -261,25 +269,104 @@ async function authFetch(url, options = {}) {
   }
 }
 
-// 6. 全局 Toast 提示组件
-function showToast(msg, type = 'info') {
-  let t = document.getElementById('toast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'toast';
-    t.className = 'toast';
-    document.body.appendChild(t);
+// 6. 全局 Element Plus 标准顶部居中悬浮滑出消息通知 (ElMessage)
+function showToast(msg, type = 'info', duration = 3000) {
+  let elMsg = document.getElementById('globalElMessage');
+  if (!elMsg) {
+    elMsg = document.createElement('div');
+    elMsg.id = 'globalElMessage';
+    document.body.appendChild(elMsg);
   }
-  t.textContent = msg;
-  t.className = 'toast show ' + type;
-  setTimeout(() => { t.className = 'toast'; }, 3000);
-}
+  
+  const iconMap = {
+    'success': '<i class="ri-checkbox-circle-fill" style="color:#67C23A;font-size:16px"></i>',
+    'error': '<i class="ri-close-circle-fill" style="color:#F56C6C;font-size:16px"></i>',
+    'warning': '<i class="ri-error-warning-fill" style="color:#E6A23C;font-size:16px"></i>',
+    'info': '<i class="ri-information-fill" style="color:var(--sys-accent);font-size:16px"></i>'
+  };
+  
+  const iconHtml = iconMap[type] || iconMap['info'];
+  elMsg.className = `el-message el-message--${type}`;
+  elMsg.innerHTML = `${iconHtml}<span>${escapeHtml(msg)}</span>`;
+  
+  requestAnimationFrame(() => {
+    elMsg.classList.add('show');
+  });
 
-// 7. 股票智能联想输入助手组件
+  if (window._elMessageTimer) clearTimeout(window._elMessageTimer);
+  window._elMessageTimer = setTimeout(() => {
+    elMsg.classList.remove('show');
+  }, duration);
+}
+window.showToast = showToast;
+window.ElMessage = {
+  success: (m, d) => showToast(m, 'success', d),
+  error: (m, d) => showToast(m, 'error', d),
+  warning: (m, d) => showToast(m, 'warning', d),
+  info: (m, d) => showToast(m, 'info', d)
+};
+
+// 6.1 全局强反馈操作结果模态弹窗 (Element Plus 工业级标准 · 绝无背景马赛克模糊)
+function showResultModal({ title, type = 'success', message = '', items = [], confirmText = '确定', onConfirm = null }) {
+  let modal = document.getElementById('globalResultModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'globalResultModal';
+    modal.className = 'el-overlay';
+    document.body.appendChild(modal);
+  }
+
+  const isSuccess = type === 'success';
+  const iconColor = isSuccess ? '#67C23A' : '#F56C6C';
+  const iconBg = isSuccess ? 'rgba(103,194,58,0.12)' : 'rgba(245,108,108,0.12)';
+  const iconName = isSuccess ? 'ri-checkbox-circle-fill' : 'ri-error-warning-fill';
+
+  const itemsHtml = items.length > 0 ? `
+    <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:4px;padding:12px 14px;margin:14px 0;text-align:left;font-size:12px;line-height:1.8">
+      ${items.map(it => `<div style="display:flex;align-items:center;gap:8px;color:var(--sys-text-primary)">
+        <i class="ri-check-line" style="color:#67C23A;font-weight:bold"></i>
+        <span>${escapeHtml(it)}</span>
+      </div>`).join('')}
+    </div>
+  ` : '';
+
+  modal.innerHTML = `
+    <div class="el-dialog" style="width:100%;max-width:440px;padding:24px;text-align:center;position:relative">
+      <div style="width:48px;height:48px;border-radius:50%;background:${iconBg};color:${iconColor};display:inline-flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:12px">
+        <i class="${iconName}"></i>
+      </div>
+      <h3 class="el-dialog__title" style="justify-content:center;margin-bottom:8px">${escapeHtml(title)}</h3>
+      ${message ? `<p style="margin:0;font-size:13px;color:var(--sys-text-sub);line-height:1.5">${escapeHtml(message)}</p>` : ''}
+      ${itemsHtml}
+      <button id="globalResultModalBtn" class="el-button el-button--primary" style="margin-top:14px;width:100%;height:36px">
+        ${escapeHtml(confirmText)}
+      </button>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const close = () => {
+    modal.style.display = 'none';
+    if (typeof onConfirm === 'function') onConfirm();
+  };
+
+  document.getElementById('globalResultModalBtn').onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+window.showResultModal = showResultModal;
+
+// 全局为所有带有 .modal-solid-wrapper 的弹窗绑定点击外部空白遮罩自动关闭功能
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.classList && e.target.classList.contains('modal-solid-wrapper')) {
+    e.target.style.display = 'none';
+  }
+});
+
+// 7. 股票智能联想输入助手组件 (全能自适应 · 支持名称/代码/拼音秒级检索)
 function setupStockAutocomplete(inputEl, dropdownEl, onSelectCallback) {
   if (!inputEl || !dropdownEl) return;
   let debounceTimer = null;
-  let currentFocus = -1;
 
   inputEl.addEventListener('input', function() {
     clearTimeout(debounceTimer);
@@ -292,38 +379,53 @@ function setupStockAutocomplete(inputEl, dropdownEl, onSelectCallback) {
     debounceTimer = setTimeout(async () => {
       try {
         const resp = await authFetch(`/api/search_stocks?q=${encodeURIComponent(kw)}`);
-        const data = await resp.json();
-        const results = data.results || [];
-        if (results.length === 0) {
+        const json = await resp.json();
+        const results = Array.isArray(json) ? json : (json.data || json.results || []);
+        
+        if (!results || results.length === 0) {
           dropdownEl.style.display = 'none';
           dropdownEl.innerHTML = '';
           return;
         }
-        dropdownEl.innerHTML = results.map(item => `
-          <div class="stock-search-item" data-symbol="${item.symbol}" data-name="${item.name}" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:700;color:var(--sys-text-title)">${item.symbol}</span>
-            <span style="color:var(--sys-text-primary)">${item.name}</span>
-            <span style="font-size:11px;color:var(--sys-text-sub)">${item.industry || ''}</span>
-          </div>
-        `).join('');
+
+        dropdownEl.innerHTML = results.map(item => {
+          const code = item.code || item.symbol || '';
+          const name = item.name || '';
+          const tag = item.type || item.market || item.industry || 'A股';
+          return `
+            <div class="stock-search-item" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="el-tag el-tag--primary el-tag--small" style="height:20px;padding:0 5px;font-size:11px">${escapeHtml(tag)}</span>
+                <span style="font-weight:700;color:var(--sys-text-title)">${escapeHtml(name)}</span>
+              </div>
+              <span style="font-family:monospace;font-size:12px;color:var(--sys-text-sub)">${escapeHtml(code)}</span>
+            </div>
+          `;
+        }).join('');
         dropdownEl.style.display = 'block';
 
         dropdownEl.querySelectorAll('.stock-search-item').forEach(el => {
-          el.addEventListener('click', function() {
-            const sym = this.getAttribute('data-symbol');
-            const nm = this.getAttribute('data-name');
-            inputEl.value = sym;
+          el.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            const code = this.getAttribute('data-code');
+            const name = this.getAttribute('data-name');
+            inputEl.value = `${name} (${code})`;
             dropdownEl.style.display = 'none';
-            if (onSelectCallback) {
-              onSelectCallback({ symbol: sym, code: sym, name: nm }, nm);
+            if (typeof onSelectCallback === 'function') {
+              onSelectCallback({ code: code, symbol: code, name: name }, name);
             }
           });
         });
       } catch (e) {
         dropdownEl.style.display = 'none';
       }
+    }, 150);
+  });
 
-    }, 200);
+  inputEl.addEventListener('focus', function() {
+    if (this.value.trim() && dropdownEl.children.length > 0) {
+      dropdownEl.style.display = 'block';
+    }
   });
 
   document.addEventListener('click', function(e) {
@@ -384,9 +486,11 @@ const GLOSSARY_TERMS_MAP = {
 };
 
 // 高对比度、大字号 Markdown 解析器（集成术语点词成译大白话气泡，且同一段对话每个术语只标记第1次）
+// ⚠️ 安全：先对原始 markdown 做 HTML 转义，避免注入；再针对术语做有限替换
 function formatMarkdownToHtml(md) {
   if (!md) return '';
-  let html = md
+  const escaped = escapeHtml(md);
+  let html = escaped
     .replace(/^### (.*$)/gim, '<h4 style="margin:14px 0 8px 0;color:var(--sys-accent);font-size:16px;font-weight:700">$1</h4>')
     .replace(/^## (.*$)/gim, '<h3 style="margin:16px 0 10px 0;color:var(--sys-text-title);font-size:17.5px;font-weight:800">$1</h3>')
     .replace(/\*\*(.*?)\*\*/g, '<b style="color:var(--sys-text-title);font-weight:700">$1</b>')
@@ -395,14 +499,12 @@ function formatMarkdownToHtml(md) {
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 
-  // 🌟 术语精简标记：同一段对话里，每个核心术语仅在【首次出现】时标记问号与解释，杜绝重复满屏打标
   const taggedTerms = new Set();
   Object.keys(GLOSSARY_TERMS_MAP).forEach(term => {
     const tip = GLOSSARY_TERMS_MAP[term];
-    // 构造单次匹配正则（非全局 /g，仅匹配第 1 次出现）
-    const regex = new RegExp(`(?<!<[^>]*)(${term})(?![^<]*>)`);
+    const regex = new RegExp(`(${escapeHtml(term)})(?![^<]*>)`);
     if (regex.test(html) && !taggedTerms.has(term)) {
-      html = html.replace(regex, `<span class="term-tip" data-term="${term}" title="${tip}" onclick="showTermExplanationPopover(this, '${term}', event)">$1 <i class="ri-question-line" style="font-size:11px;opacity:0.85"></i></span>`);
+      html = html.replace(regex, `<span class="term-tip" data-term="${escapeHtml(term)}" title="${escapeHtml(tip)}" onclick="showTermExplanationPopover(this, '${escapeHtml(term)}', event)">$1 <i class="ri-question-line" style="font-size:11px;opacity:0.85"></i></span>`);
       taggedTerms.add(term);
       if (term === '做T' || term === '做 T') {
         taggedTerms.add('做T');
@@ -1449,6 +1551,7 @@ window.openAiChatHistoryModal = openAiChatDrawer;
 window.closeAiChatHistoryModal = closeAiChatDrawer;
 
 window.openKnowledgeBaseModal = openKnowledgeBaseModal;
+window.openPlaybookModal = openKnowledgeBaseModal;
 window.closeKnowledgeBaseModal = closeKnowledgeBaseModal;
 window.switchKbTab = switchKbTab;
 window.searchKbDocs = searchKbDocs;

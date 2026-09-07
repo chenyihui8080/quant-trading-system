@@ -12,16 +12,20 @@ import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Response, Body, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Response, Body, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import sys as _sys
+from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
+if str(PROJECT_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(PROJECT_ROOT))
+if str(BASE_DIR) not in _sys.path:
+    _sys.path.insert(0, str(BASE_DIR))
+
+from utils.auth import get_current_user
 
 
 from pipeline.graph import review_pipeline
@@ -41,6 +45,15 @@ logger = logging.getLogger("ReviewAPI")
 router = APIRouter(tags=["交易复盘工作台"])
 app = FastAPI(title="交易复盘工作台统一 API", version="2.0.0")
 
+# 全局 CORS（复盘工作台为主系统跨域调用提供数据，必须显式落地）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 DB_PATH = BASE_DIR / "data" / "review.db"
 
 
@@ -57,7 +70,7 @@ class BrokerDecodeRequest(BaseModel):
 
 
 @router.get("/api/review/full-agent-dashboard")
-async def get_full_agent_dashboard(date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD")):
+async def get_full_agent_dashboard(date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD"), user: dict = Depends(get_current_user)):
     """全量聚合 7 人小智能体团队协同数据与大盘盘面特征"""
     target_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
@@ -72,7 +85,7 @@ async def get_full_agent_dashboard(date: Optional[str] = Query(None, description
 
 @router.get("/api/review/portfolio-custom-plan")
 @router.post("/api/review/portfolio-custom-plan")
-async def get_portfolio_custom_plan():
+async def get_portfolio_custom_plan(user: dict = Depends(get_current_user)):
     """获取用户持仓专属量化复盘与做T规划"""
     try:
         data = get_portfolio_custom_review()
@@ -84,7 +97,7 @@ async def get_portfolio_custom_plan():
 
 
 @router.get("/api/review/sector-deep-dive")
-async def get_sector_deep_dive(sector: Optional[str] = Query(None)):
+async def get_sector_deep_dive(sector: Optional[str] = Query(None), user: dict = Depends(get_current_user)):
     """获取核心题材板块深度穿透与逻辑归因"""
     try:
         data = get_sector_deep_dive_analysis(sector)
@@ -96,19 +109,21 @@ async def get_sector_deep_dive(sector: Optional[str] = Query(None)):
 
 
 @router.post("/api/review/check-risk-mine")
-async def check_risk_mine(req: RiskCheckRequest):
-    """个股深度排雷专家检测 (支持代码/名称)"""
-    try:
-        query_val = req.code or req.symbol or req.name or "300308"
-        result = perform_stock_risk_check(query_val)
-        return {"code": 200, "data": result}
-    except Exception as e:
-        logger.error(f"排雷异常: {e}")
-        return {"code": 500, "message": str(e)}
+async def check_risk_mine(req: RiskCheckRequest, user: dict = Depends(get_current_user)):
+    """个股深度排雷专家检测 (支持代码/名称，Fail-Closed 严防假通过)"""
+    query_val = req.code or req.symbol or req.name
+    if not query_val or not str(query_val).strip():
+        raise HTTPException(status_code=400, detail="请提供有效的股票代码或标的名称进行排雷检测")
+    
+    result = perform_stock_risk_check(str(query_val).strip())
+    if not result:
+        raise HTTPException(status_code=404, detail=f"未找到标的 {query_val} 的有效上市公司数据")
+    
+    return {"code": 200, "data": result}
 
 
 @router.post("/api/review/decode-broker")
-async def decode_broker(req: BrokerDecodeRequest):
+async def decode_broker(req: BrokerDecodeRequest, user: dict = Depends(get_current_user)):
     """真实交割单买卖解析与战法映射"""
     try:
         text = req.text or "\n".join(req.lines or [])
@@ -129,7 +144,8 @@ async def get_evidence_list(
     keyword: Optional[str] = Query(None),
     portfolio_only: bool = Query(False),
     only_portfolio: Optional[bool] = Query(None),
-    sort_by: Optional[str] = Query("time")
+    sort_by: Optional[str] = Query("time"),
+    user: dict = Depends(get_current_user)
 ):
     """分页获取情报资讯与新闻证据"""
     is_port_only = bool(portfolio_only or only_portfolio)
@@ -145,28 +161,39 @@ async def get_evidence_list(
 
 
 @router.get("/api/review/evidence-detail")
-async def get_evidence_detail(ref_tag: str = Query(..., description="证据标签")):
+async def get_evidence_detail(ref_tag: str = Query(..., description="证据标签"), user: dict = Depends(get_current_user)):
     """兼容旧接口：获取单篇新闻证据详情"""
     return get_single_evidence_detail(ref_tag)
 
 
 @router.get("/api/review/news-detail")
-async def get_news_detail(news_id: str = Query(..., description="新闻ID或标签")):
+async def get_news_detail(news_id: str = Query(..., description="新闻ID或标签"), user: dict = Depends(get_current_user)):
     """纯净新闻快讯全文与来源详情"""
     return get_single_news_detail(news_id)
 
 
 @router.get("/api/review/stock-research")
-async def get_stock_research(stock_code: str = Query(..., description="股票代码")):
+async def get_stock_research(
+    stock_code: Optional[str] = Query(None, description="股票代码"),
+    symbol: Optional[str] = Query(None, description="股票代码 (别名)"),
+    user: dict = Depends(get_current_user)
+):
     """个股独家深度催化与量价研报"""
-    return get_single_stock_research_detail(stock_code)
+    target_code = stock_code or symbol or ""
+    if not target_code:
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+    return get_single_stock_research_detail(target_code)
 
 
 
 @router.get("/api/review/daily-report")
-async def get_daily_report(date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD")):
+async def get_daily_report(
+    date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD", alias="trade_date"),
+    trade_date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD (兼容别名)"),
+    user: dict = Depends(get_current_user)
+):
     """获取指定日期的每日复盘总览报告"""
-    target_date = date or datetime.now().strftime("%Y-%m-%d")
+    target_date = date or trade_date or datetime.now().strftime("%Y-%m-%d")
     with sqlite3.connect(str(DB_PATH)) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -198,9 +225,13 @@ async def get_daily_report(date: Optional[str] = Query(None, description="交易
 
 
 @router.get("/api/review/core-watchlist")
-async def get_core_watchlist(date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD")):
-    """获取 4 层漏斗严选的核心观察池列表 (无缓存时自动智能运算生成)"""
-    target_date = date or datetime.now().strftime("%Y-%m-%d")
+async def get_core_watchlist(
+    date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD", alias="trade_date"),
+    trade_date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD (兼容别名)"),
+    user: dict = Depends(get_current_user)
+):
+    """获取 4 层漏斗严选的核心观察池列表"""
+    target_date = date or trade_date or datetime.now().strftime("%Y-%m-%d")
     watchlist = []
     
     # 1. 尝试从数据库读取
@@ -279,7 +310,8 @@ async def get_history_reports(
     end_date: Optional[str] = Query(None),
     keyword: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=50)
+    page_size: int = Query(10, ge=1, le=50),
+    user: dict = Depends(get_current_user)
 ):
     """获取历史复盘研报档案列表 (只返回真实归档记录，彻底杜绝编造)"""
     all_reports = []
@@ -332,6 +364,16 @@ async def get_history_reports(
     # 3. 执行分页
     total = len(filtered)
     total_pages = max(1, (total + page_size - 1) // page_size)
+    if page > total_pages and total > 0:
+        return {
+            "code": 200,
+            "total": total,
+            "total_pages": total_pages,
+            "page": page,
+            "page_size": page_size,
+            "data": [],
+            "warning": f"请求页码 {page} 超出实际总页数 {total_pages}，已返回空结果，请减少页码重新查询"
+        }
     start_idx = (page - 1) * page_size
     paged_data = filtered[start_idx:start_idx + page_size]
 
@@ -347,17 +389,73 @@ async def get_history_reports(
 
 
 @router.post("/api/review/trigger-pipeline-a")
-async def trigger_pipeline_a(date: Optional[str] = Query(None)):
-    """手动强制重新触发一次 Pipeline A 盘后复盘"""
+async def trigger_pipeline_a(date: Optional[str] = Query(None), user: dict = Depends(get_current_user)):
+    """手动强制重新触发一次 Pipeline A 盘后复盘（盘后 15:05 由调度器自动触发）"""
     target_date = date or datetime.now().strftime("%Y-%m-%d")
+    # 软时段提示：盘中（交易日 09:15~15:00）触发属于复盘，行情仍在变动，数据为盘中实时快照而非盘后定稿
+    warning = ""
+    now = datetime.now()
+    if now.weekday() < 5 and (9 * 60 + 15) <= (now.hour * 60 + now.minute) < (15 * 60 + 5):
+        warning = "当前处于交易时段，本次为盘中实时快照，非盘后定稿，复盘结论可能随行情变动"
     state = review_pipeline.run_pipeline_a(target_date)
     return {
         "code": 200,
         "message": "Pipeline A 盘后复盘执行成功",
+        "warning": warning,
         "execution_time_sec": state["execution_time_sec"],
         "degraded_nodes": state["degraded_nodes"],
-        "watchpool_count": len(state["final_watchpool"])
+        "watchpool_count": len(state["final_watchpool"]),
+        "pipeline_version": state.get("pipeline_version", state.get("version", "unknown")),
+        "run_id": state.get("run_id", ""),
+        "generated_at": state.get("generated_at", "")
     }
+
+
+@router.get("/api/review/export-txt")
+async def export_watchlist_txt(date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD"), user: dict = Depends(get_current_user)):
+    """导出核心观察池为通达信/同花顺格式 txt 文件"""
+    target_date = date or datetime.now().strftime("%Y-%m-%d")
+    watchlist = []
+    try:
+        if DB_PATH.exists():
+            with sqlite3.connect(str(DB_PATH)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT stock_code, stock_name, close_price, change_pct, sector_name
+                    FROM core_watchlists
+                    WHERE trade_date = ?
+                    ORDER BY attribution_confidence DESC, amount_yi DESC
+                """, (target_date,))
+                rows = cursor.fetchall()
+                for r in rows:
+                    code = r[0]
+                    # 转换代码格式：A股 6开头→SH，0/3开头→SZ
+                    if code.startswith("6"):
+                        prefix = "SH"
+                    elif code.startswith(("0", "3")):
+                        prefix = "SZ"
+                    else:
+                        prefix = "BJ"
+                    watchlist.append(f"{prefix}{code}\t{r[1]}\t{r[2]}\t{r[3]}%\t{r[4]}")
+    except Exception as e:
+        logger.error(f"导出观察池失败: {e}")
+
+    content = f"复盘日期: {target_date}\n代码\t名称\t收盘价\t涨跌幅\t所属板块\n" + "\n".join(watchlist)
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="watchlist_{target_date}.txt"'}
+    )
+
+
+@app.get("/", response_class=Response)
+async def root_page():
+    """复盘工作台页面入口"""
+    html_path = Path(__file__).parent / "templates" / "index.html"
+    if not html_path.exists():
+        return Response("index.html not found", status_code=404)
+    content = html_path.read_text(encoding="utf-8")
+    return Response(content.encode("utf-8"), media_type="text/html; charset=utf-8")
 
 
 # 挂载内部路由

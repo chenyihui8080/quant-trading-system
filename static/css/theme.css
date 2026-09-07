@@ -6,6 +6,29 @@
    3. theme-quant  : 瑞士石板香槟金量化回测引擎风格
    ========================================================================== */
 
+/* ==================== 0. 全局极简优雅滚动条 (彻底消除黑色粗滚动条与黑边) ==================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Firefox 兼容 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
 /* ==================== 1. 全局设计变量定义 ==================== */
 :root {
   --sys-font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -14,42 +37,46 @@
   --sys-transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 🎯 系统一主题：华尔街白金浅色实战操盘 (Wall Street Platinum Light) */
+/* 🎯 系统一主题：Element Plus 官方工业级白金操盘 (Element Plus Official Standard) */
 body.theme-alpha {
-  --sys-bg-app: #f4f6f8;
+  --sys-bg-app: #f0f2f5;
   --sys-bg-header: #ffffff;
-  --sys-bg-nav: #eef2f6;
+  --sys-bg-nav: #f5f7fa;
   --sys-bg-card: #ffffff;
   --sys-bg-panel: #ffffff;
-  --sys-bg-card-inner: #f8fafc;
-  --sys-bg-hover: #e2e8f0;
+  --sys-bg-card-inner: #fafafa;
+  --sys-bg-hover: #f5f7fa;
   
   --sys-input-bg: #ffffff;
-  --sys-input-border: #cbd5e1;
-  --sys-border: #d8e2ec;
-  --sys-border-hover: #0969da;
-  --sys-border-subtle: #edf2f7;
-  --sys-modal-mask: rgba(15, 23, 42, 0.5);
+  --sys-input-border: #dcdfe6;
+  --sys-border: #ebeef5;
+  --sys-border-hover: #409eff;
+  --sys-border-subtle: #f2f6fc;
+  --sys-modal-mask: rgba(0, 0, 0, 0.5);
   
-  --sys-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  --sys-shadow-card: 0 2px 10px rgba(0, 0, 0, 0.06);
-  --sys-shadow-popover: 0 12px 36px rgba(15, 23, 42, 0.15);
+  --sys-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --sys-shadow-card: 0 0 12px rgba(0, 0, 0, 0.05);
+  --sys-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.12);
   
   --sys-popover-bg: #ffffff;
-  --sys-popover-border: #d0d7de;
-  --sys-popover-hover: #f3f4f6;
-  --sys-code-bg: #f6f8fa;
-  --sys-drawer-bg: #f8fafc;
+  --sys-popover-border: #e4e7ed;
+  --sys-popover-hover: #f5f7fa;
+  --sys-code-bg: #fafafa;
+  --sys-drawer-bg: #ffffff;
   
-  --sys-text-title: #0f172a;
-  --sys-text-primary: #1e293b;
-  --sys-text-sub: #64748b;
+  --sys-text-title: #303133;
+  --sys-text-primary: #606266;
+  --sys-text-sub: #909399;
   
-  --sys-accent: #0969da;
-  --sys-accent-hover: #0756b3;
-  --sys-accent-sub: #2188ff;
-  --sys-gradient-title: linear-gradient(135deg, #0969da 0%, #1a7f37 100%);
-  --sys-accent-glow: rgba(9, 105, 218, 0.18);
+  --sys-table-header: #f5f7fa;
+  --sys-table-hover: #f5f7fa;
+  
+  --sys-accent: #409eff;
+  --sys-accent-hover: #66b1ff;
+  --sys-accent-sub: #a0cfff;
+  --sys-accent-soft: #ecf5ff;
+  --sys-gradient-title: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
+  --sys-accent-glow: rgba(64, 158, 255, 0.25);
 }
 
 /* 👑 系统二主题：深空紫水晶与琥珀金 (WorkBuddy Deep Cosmic Purple & Gold) */
@@ -537,105 +564,430 @@ body {
   gap: 8px;
 }
 
-/* ==================== 7. 按钮体系 (Buttons) ==================== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: var(--sys-accent);
-  color: #ffffff;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: var(--sys-transition-base);
-  text-decoration: none;
+/* ==================== 7. Element Plus 官方工业级按钮体系 (.el-button) ==================== */
+.btn, .el-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  height: 32px !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  background: var(--sys-bg-card) !important;
+  border: 1px solid var(--sys-input-border) !important;
+  color: var(--sys-text-primary) !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  margin: 0 !important;
+  transition: all 0.15s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+  font-weight: 500 !important;
+  user-select: none !important;
+  padding: 8px 15px !important;
+  font-size: 12px !important;
+  border-radius: 4px !important;
+  text-decoration: none !important;
+  gap: 6px !important;
 }
 
-.btn:hover {
-  background: var(--sys-accent-hover);
-  transform: translateY(-1px);
+.btn:hover, .el-button:hover {
+  color: #409eff !important;
+  border-color: #c6e2ff !important;
+  background-color: #ecf5ff !important;
 }
 
-.btn:active {
-  transform: translateY(0);
+.btn:active, .el-button:active {
+  transform: translateY(1px) !important;
 }
 
-.btn-blue {
-  background: #0969da;
-  color: #ffffff;
+/* Element Plus 经典饿了么蓝主色按钮 (Primary) */
+.btn-blue, .el-button--primary {
+  color: #ffffff !important;
+  background-color: #409eff !important;
+  border-color: #409eff !important;
 }
-.btn-blue:hover {
-  background: #0756b3;
-}
-
-.btn-outline {
-  background: transparent;
-  color: var(--sys-text-primary);
-  border: 1px solid var(--sys-border);
-}
-.btn-outline:hover {
-  background: var(--sys-bg-hover);
-  border-color: var(--sys-text-sub);
+.btn-blue:hover, .el-button--primary:hover {
+  background-color: #66b1ff !important;
+  border-color: #66b1ff !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.35) !important;
 }
 
-/* ==================== 8. 表格体系 (Tables) ==================== */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+/* Element Plus 成功按钮 (Success) */
+.el-button--success {
+  color: #ffffff !important;
+  background-color: #67C23A !important;
+  border-color: #67C23A !important;
+}
+.el-button--success:hover {
+  background-color: #85ce61 !important;
+  border-color: #85ce61 !important;
+  color: #ffffff !important;
 }
 
-th {
-  background: var(--sys-bg-nav);
-  color: var(--sys-text-sub);
-  font-weight: 700;
+/* Element Plus 危险按钮 (Danger) */
+.el-button--danger {
+  color: #ffffff !important;
+  background-color: #F56C6C !important;
+  border-color: #F56C6C !important;
+}
+.el-button--danger:hover {
+  background-color: #f78989 !important;
+  border-color: #f78989 !important;
+  color: #ffffff !important;
+}
+
+/* Element Plus 朴素按钮 (Plain) */
+.el-button.is-plain {
+  background: transparent !important;
+}
+.el-button--primary.is-plain {
+  color: #409eff !important;
+  background: #ecf5ff !important;
+  border-color: #b3d8ff !important;
+}
+.el-button--primary.is-plain:hover {
+  background: #409eff !important;
+  color: #ffffff !important;
+  border-color: #409eff !important;
+}
+
+.el-button--danger.is-plain {
+  color: #f56c6c !important;
+  background: #fef0f0 !important;
+  border-color: #fbc4c4 !important;
+}
+.el-button--danger.is-plain:hover {
+  background: #f56c6c !important;
+  color: #ffffff !important;
+  border-color: #f56c6c !important;
+}
+
+/* Element Plus 尺寸：小按钮 (Small / Mini) */
+.el-button--small, .btn-sm {
+  height: 28px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  border-radius: 4px !important;
+}
+.el-button--mini, .btn-xs {
+  height: 24px !important;
+  padding: 0 8px !important;
+  font-size: 11px !important;
+  border-radius: 3px !important;
+}
+.el-button.is-round {
+  border-radius: 20px !important;
+}
+
+/* ==================== 8. Element Plus 官方工业级数据表格 (.el-table 带全套划线) ==================== */
+table, .el-table {
+  width: 100% !important;
+  background-color: var(--sys-bg-card) !important;
+  color: var(--sys-text-primary) !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 1px solid var(--sys-border) !important;
+  margin: 0 !important;
+  font-size: 13px !important;
+  border-radius: 4px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+table thead tr, .el-table__header-wrapper thead tr, .el-table thead tr {
+  background-color: var(--sys-table-header) !important;
+}
+
+table th, .el-table th, .el-table__cell {
+  padding: 11px 14px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
   text-align: left;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--sys-border);
+  border-top: none !important;
+  border-left: none !important;
+  border-right: 1px solid var(--sys-border) !important;
+  border-bottom: 1px solid var(--sys-border) !important;
+  white-space: nowrap !important;
+  color: var(--sys-text-sub) !important;
+  background-color: var(--sys-table-header) !important;
+  letter-spacing: 0.2px;
 }
 
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--sys-border-subtle);
-  color: var(--sys-text-primary);
+table th:last-child, .el-table th:last-child {
+  border-right: none !important;
 }
 
-tr:hover td {
-  background: var(--sys-bg-card-inner);
+table td, .el-table td {
+  padding: 11px 14px !important;
+  font-size: 13px !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: 1px solid var(--sys-border) !important;
+  border-bottom: 1px solid var(--sys-border) !important;
+  color: var(--sys-text-primary) !important;
+  transition: background 0.15s ease !important;
 }
 
-/* ==================== 9. 表单与控件体系 (Forms) ==================== */
+table td:last-child, .el-table td:last-child {
+  border-right: none !important;
+}
+
+table tbody tr:last-child td, .el-table tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+table tbody tr:nth-child(even), .el-table tbody tr:nth-child(even) {
+  background-color: var(--sys-bg-card-inner) !important;
+}
+
+table tbody tr:hover, .el-table tbody tr:hover, .el-table__row:hover {
+  background-color: var(--sys-bg-hover) !important;
+}
+
+/* ==================== 9. Element Plus 标签体系 (.el-tag) ==================== */
+.el-tag, .badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 24px !important;
+  padding: 0 9px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  border-radius: 4px !important;
+  box-sizing: border-box !important;
+  white-space: nowrap !important;
+  font-weight: 600 !important;
+  background-color: var(--sys-bg-nav) !important;
+  border: 1px solid var(--sys-border) !important;
+  color: var(--sys-text-sub) !important;
+}
+
+.el-tag--success {
+  background-color: #f0f9eb !important;
+  border-color: #e1f3d8 !important;
+  color: #67c23a !important;
+}
+
+.el-tag--danger {
+  background-color: #fef0f0 !important;
+  border-color: #fde2e2 !important;
+  color: #f56c6c !important;
+}
+
+.el-tag--warning {
+  background-color: #fdf6ec !important;
+  border-color: #faecd8 !important;
+  color: #e6a23c !important;
+}
+
+.el-tag--primary {
+  background-color: #ecf5ff !important;
+  border-color: #d9ecff !important;
+  color: #409eff !important;
+}
+
+.el-tag--info {
+  background-color: #f4f4f5 !important;
+  border-color: #e9e9eb !important;
+  color: #909399 !important;
+}
+
+.el-tag--small {
+  height: 22px !important;
+  padding: 0 7px !important;
+  font-size: 11px !important;
+}
+
+/* ==================== 10. Element Plus 表单与输入框体系 (.el-input) ==================== */
 .form-row {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
-.form-row label {
+.form-row label, .el-form-item__label {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--sys-text-sub);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
-.form-row input, .form-row select, select, input[type="text"], input[type="password"], input[type="number"] {
+input[type="text"], 
+input[type="password"], 
+input[type="search"], 
+input[type="number"], 
+select, 
+textarea,
+.el-input__inner,
+.el-textarea__inner {
   width: 100%;
-  padding: 8px 12px;
-  background: var(--sys-bg-card-inner);
-  border: 1px solid var(--sys-border);
-  border-radius: 6px;
-  color: var(--sys-text-primary);
+  height: 34px;
+  line-height: 34px;
+  padding: 0 14px;
+  background: var(--sys-input-bg) !important;
+  border: 1px solid var(--sys-input-border) !important;
+  border-radius: 4px !important;
+  color: var(--sys-text-primary) !important;
   font-size: 13px;
   outline: none;
-  transition: var(--sys-transition-base);
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+  box-sizing: border-box;
 }
 
-.form-row input:focus, select:focus {
-  border-color: var(--sys-accent);
-  box-shadow: 0 0 0 2px var(--sys-accent-glow);
+input:focus, select:focus, textarea:focus, .el-input__inner:focus, .el-textarea__inner:focus {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+
+textarea, .el-textarea__inner {
+  height: auto !important;
+  min-height: 72px;
+  padding: 10px 14px !important;
+  line-height: 1.6 !important;
+}
+
+/* ==================== 11. Element Plus 卡片体系 (.el-card) ==================== */
+.panel, .el-card {
+  background: var(--sys-bg-card) !important;
+  border: 1px solid var(--sys-border) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  color: var(--sys-text-primary) !important;
+  margin-bottom: 16px !important;
+  padding: 16px 20px !important;
+  transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.panel:hover, .el-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* ==================== 12. Element Plus 对话框体系 (.el-dialog / .el-overlay) ==================== */
+.el-overlay, .modal-solid-wrapper {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2000;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: none !important;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.el-dialog, .modal-solid-card, .modal-adaptive-card {
+  position: relative;
+  background: var(--sys-bg-card) !important;
+  border: 1px solid var(--sys-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 12px 32px 4px rgba(0, 0, 0, .36), 0 8px 20px rgba(0, 0, 0, .24) !important;
+  box-sizing: border-box;
+  padding: 20px 24px !important;
+  color: var(--sys-text-primary) !important;
+  animation: elDialogIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes elDialogIn {
+  0% { opacity: 0; transform: scale(0.92) translateY(-16px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.el-dialog__header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--sys-border);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.el-dialog__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sys-text-title);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.el-dialog__headerbtn {
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--sys-text-sub);
+  transition: color 0.15s;
+}
+
+.el-dialog__headerbtn:hover {
+  color: var(--sys-accent);
+}
+
+.el-dialog__footer {
+  padding-top: 14px;
+  border-top: 1px solid var(--sys-border);
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ==================== 13. Element Plus 全局消息通知 (.el-message) ==================== */
+.el-message {
+  position: fixed !important;
+  top: 20px !important;
+  left: 50% !important;
+  transform: translateX(-50%) translateY(-20px) !important;
+  opacity: 0;
+  min-width: 320px !important;
+  padding: 10px 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  border-radius: 4px !important;
+  border: 1px solid var(--sys-border) !important;
+  background: var(--sys-bg-card) !important;
+  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.25) !important;
+  z-index: 99999 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--sys-text-primary) !important;
+  transition: opacity 0.25s, transform 0.25s !important;
+  pointer-events: none;
+}
+
+.el-message.show {
+  opacity: 1 !important;
+  transform: translateX(-50%) translateY(0) !important;
+}
+
+.el-message--success {
+  border-color: #67C23A !important;
+  background: var(--sys-bg-card) !important;
+  color: #67C23A !important;
+}
+
+.el-message--error {
+  border-color: #F56C6C !important;
+  background: var(--sys-bg-card) !important;
+  color: #F56C6C !important;
+}
+
+.el-message--warning {
+  border-color: #E6A23C !important;
+  background: var(--sys-bg-card) !important;
+  color: #E6A23C !important;
+}
+
+.el-message--info {
+  border-color: var(--sys-accent) !important;
+  background: var(--sys-bg-card) !important;
+  color: var(--sys-accent) !important;
 }
 
 /* ==================== 10. 登录覆盖层与弹窗 (Auth Overlay & Modals) ==================== */
@@ -727,33 +1079,75 @@ tr:hover td {
 
 /* 关键帧动画 */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* ==================== 模态弹窗与实色面板标准组件 (全域三系统自适应) ==================== */
+@keyframes modalScaleIn {
+  0% { opacity: 0; transform: scale(0.94) translateY(-10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ==================== 工业级标准模态弹窗体系 (Layui / Element Plus 规范) ==================== */
+/* 1. 遮罩层：纯净半透明暗色背景，绝不使用全屏模糊滤镜，底层内容清晰可见 */
 .modal-solid-wrapper {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: var(--sys-modal-mask);
-  backdrop-filter: blur(8px);
-  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  z-index: 99999;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.2s ease;
+  padding: 16px;
+  box-sizing: border-box;
+  animation: fadeIn 0.15s ease-out forwards;
 }
 
+/* 2. 弹窗实体卡片：标准圆角、工业级投影与进场缩放动效 */
+.modal-solid-card,
 .modal-adaptive-card {
   background: var(--sys-bg-card) !important;
   border: 1px solid var(--sys-border) !important;
   color: var(--sys-text-primary) !important;
-  border-radius: 14px !important;
-  box-shadow: var(--sys-shadow-popover) !important;
-  transition: var(--sys-transition-base);
+  border-radius: 10px !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45), 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 3. Layui Layer 全局风格统一与自适应适配 (标准工业级弹窗) */
+.layui-layer-adaptive {
+  background: var(--sys-bg-card) !important;
+  border: 1px solid var(--sys-border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45) !important;
+  color: var(--sys-text-primary) !important;
+  overflow: hidden;
+}
+.layui-layer-adaptive .layui-layer-title {
+  background: var(--sys-bg-card-inner) !important;
+  color: var(--sys-text-title) !important;
+  border-bottom: 1px solid var(--sys-border) !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  height: 48px !important;
+  line-height: 48px !important;
+  padding: 0 20px !important;
+}
+.layui-layer-adaptive .layui-layer-content {
+  color: var(--sys-text-primary) !important;
+  padding: 20px !important;
+  background: var(--sys-bg-card) !important;
+}
+.layui-layer-shade {
+  background-color: #000 !important;
 }
 
 .popover-adaptive {
@@ -1046,6 +1440,63 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   gap: 6px;
 }
 
+#reviewSubTabHoverCard .hover-card-header .agent-duty-pill {
+  font-size: 10px;
+  font-weight: 700;
+  color: #388bfd;
+  background: rgba(56, 139, 253, 0.15);
+  border: 1px solid rgba(56, 139, 253, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* ==================== 10. Layui 标准数据表格工业级全域自适应美化规范 ==================== */
+.layui-table {
+  width: 100% !important;
+  background-color: transparent !important;
+  color: var(--sys-text-primary) !important;
+  border-collapse: collapse !important;
+  border: 1px solid var(--sys-border) !important;
+  margin: 0 !important;
+  font-size: 13px !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+}
+
+.layui-table thead tr {
+  background-color: var(--sys-table-header) !important;
+  color: var(--sys-text-sub) !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid var(--sys-border) !important;
+}
+
+.layui-table th {
+  padding: 10px 14px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  border: none !important;
+  border-bottom: 1px solid var(--sys-border) !important;
+  white-space: nowrap !important;
+  color: var(--sys-text-sub) !important;
+}
+
+.layui-table td {
+  padding: 10px 14px !important;
+  font-size: 13px !important;
+  border: none !important;
+  border-bottom: 1px solid var(--sys-border) !important;
+  transition: background 0.15s ease !important;
+}
+
+.layui-table tbody tr:hover,
+.layui-table-hover {
+  background-color: var(--sys-table-hover) !important;
+}
+
+.layui-table-even tr:nth-child(even) {
+  background-color: var(--sys-bg-card-inner) !important;
+}
+
 #reviewSubTabHoverCard .hover-card-badge {
   font-size: 11px;
   font-weight: 700;
@@ -1072,5 +1523,328 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   line-height: 1.55;
 }
 
+/* ==========================================================================
+   👑 Element Plus 官方核心组件全域覆盖系统 (DatePicker / Pagination / Select)
+   ========================================================================== */
 
+/* 1. Element Plus 经典下拉框覆盖体系 */
+select,
+.el-select-input {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  padding: 0 28px 0 12px !important;
+  background-color: #ffffff !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024' width='12' height='12'%3E%3Cpath fill='%23909399' d='M831.872 340.777L512 652.672 192.128 340.777a30.592 30.592 0 0 0-42.71 0 29.568 29.568 0 0 0 0 42.325l341.333 332.8a30.592 30.592 0 0 0 42.71 0l341.333-332.8a29.568 29.568 0 0 0 0-42.325 30.592 30.592 0 0 0-42.71 0z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  background-size: 12px !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+  color: #606266 !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+  box-sizing: border-box !important;
+}
+select:hover,
+.el-select-input:hover {
+  border-color: #c0c4cc !important;
+}
+select:focus,
+.el-select-input:focus {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 1px #409eff inset !important;
+}
+select option {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  color: #606266 !important;
+  background: #ffffff !important;
+}
 
+/* 2. Element Plus 经典分页组件体系 */
+.el-pagination {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 13px !important;
+  color: #606266 !important;
+  font-weight: 500 !important;
+  user-select: none !important;
+}
+.el-pagination .el-pagination__total {
+  font-size: 13px !important;
+  color: #606266 !important;
+  margin-right: 6px !important;
+}
+.el-pagination .btn-prev,
+.el-pagination .btn-next {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: 0 6px !important;
+  background: #f4f4f5 !important;
+  border: none !important;
+  border-radius: 4px !important;
+  color: #606266 !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  transition: all 0.2s !important;
+}
+.el-pagination .btn-prev:hover:not(:disabled),
+.el-pagination .btn-next:hover:not(:disabled) {
+  color: #409eff !important;
+}
+.el-pagination .btn-prev:disabled,
+.el-pagination .btn-next:disabled {
+  color: #a8abb2 !important;
+  background: #f4f4f5 !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+.el-pagination .el-pager {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.el-pagination .el-pager li.number {
+  min-width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  text-align: center !important;
+  padding: 0 4px !important;
+  background: #f4f4f5 !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  color: #606266 !important;
+  font-weight: 600 !important;
+  transition: all 0.2s !important;
+}
+.el-pagination .el-pager li.number:hover {
+  color: #409eff !important;
+}
+.el-pagination .el-pager li.number.is-active {
+  background: #409eff !important;
+  color: #ffffff !important;
+  cursor: default !important;
+  font-weight: 700 !important;
+}
+.el-pagination .el-pager li.more {
+  min-width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  text-align: center !important;
+  color: #909399 !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+  background: #f4f4f5 !important;
+  border-radius: 4px !important;
+  transition: all 0.2s !important;
+}
+.el-pagination .el-pager li.more:hover {
+  color: #409eff !important;
+  background: #ecf5ff !important;
+  font-weight: 700 !important;
+}
+.el-pagination .el-pagination__jump {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-left: 10px !important;
+  color: #606266 !important;
+  font-size: 13px !important;
+}
+.el-pagination .el-pagination__editor {
+  width: 48px !important;
+  height: 30px !important;
+  padding: 0 4px !important;
+  text-align: center !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 4px !important;
+  outline: none !important;
+  font-size: 13px !important;
+  color: #606266 !important;
+  background: #ffffff !important;
+  transition: border-color 0.2s !important;
+}
+.el-pagination .el-pagination__editor:focus {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64,158,255,0.2) !important;
+}
+
+/* 深色模式下的 Element Plus 分页自适应 */
+body[data-theme="dark"] .el-pagination .btn-prev,
+body[data-theme="dark"] .el-pagination .btn-next,
+body[data-theme="dark"] .el-pagination .el-pager li.number,
+body[data-theme="dark"] .el-pagination .el-pager li.more {
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #cfd3dc !important;
+}
+body[data-theme="dark"] .el-pagination .btn-prev:hover:not(:disabled),
+body[data-theme="dark"] .el-pagination .btn-next:hover:not(:disabled),
+body[data-theme="dark"] .el-pagination .el-pager li.number:hover,
+body[data-theme="dark"] .el-pagination .el-pager li.more:hover {
+  color: #409eff !important;
+  background: rgba(64, 158, 255, 0.15) !important;
+}
+body[data-theme="dark"] .el-pagination .el-pager li.number.is-active {
+  background: #409eff !important;
+  color: #ffffff !important;
+}
+body[data-theme="dark"] .el-pagination .el-pagination__editor {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #e5eaf3 !important;
+}
+
+/* 3. Element Plus 日历选择器下拉浮层体系 (彻底消除浏览器原生黑框日历) */
+.el-date-editor {
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  background-color: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+  color: #606266 !important;
+  cursor: pointer !important;
+  transition: border-color 0.2s !important;
+  box-sizing: border-box !important;
+}
+.el-date-editor:hover {
+  border-color: #c0c4cc !important;
+}
+.el-date-editor:focus-within {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 1px #409eff inset !important;
+}
+.el-date-editor .el-icon-calendar {
+  color: #909399 !important;
+  margin-right: 6px !important;
+  font-size: 14px !important;
+}
+.el-date-editor input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+  font-size: 13px !important;
+  color: #606266 !important;
+  cursor: pointer !important;
+  width: 95px !important;
+  padding: 0 !important;
+}
+
+.el-date-picker-dropdown {
+  position: absolute !important;
+  background: #ffffff !important;
+  border: 1px solid #e4e7ed !important;
+  border-radius: 4px !important;
+  box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.08), 0 8px 20px rgba(0, 0, 0, 0.04) !important;
+  padding: 12px 14px !important;
+  user-select: none !important;
+  font-family: var(--sys-font-sans) !important;
+  width: 280px !important;
+  box-sizing: border-box !important;
+}
+
+.el-date-picker-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 12px !important;
+}
+.el-date-picker-header .el-date-picker-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #303133 !important;
+}
+.el-date-picker-header .el-picker-btn {
+  border: none !important;
+  background: transparent !important;
+  color: #909399 !important;
+  font-size: 16px !important;
+  cursor: pointer !important;
+  padding: 0 4px !important;
+  transition: color 0.15s !important;
+}
+.el-date-picker-header .el-picker-btn:hover {
+  color: #409eff !important;
+}
+
+.el-date-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  text-align: center !important;
+  font-size: 12.5px !important;
+}
+.el-date-table th {
+  padding: 6px 0 !important;
+  color: #909399 !important;
+  font-weight: 400 !important;
+  border-bottom: 1px solid #ebeef5 !important;
+}
+.el-date-table td {
+  padding: 4px 0 !important;
+  cursor: pointer !important;
+  transition: all 0.15s !important;
+  color: #606266 !important;
+  height: 32px !important;
+}
+.el-date-table td span {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 50% !important;
+  transition: all 0.15s !important;
+}
+.el-date-table td.prev-month,
+.el-date-table td.next-month {
+  color: #c0c4cc !important;
+}
+.el-date-table td.available:hover span {
+  background: #f0f7ff !important;
+  color: #409eff !important;
+}
+.el-date-table td.is-today span {
+  color: #409eff !important;
+  font-weight: 700 !important;
+}
+.el-date-table td.is-selected span {
+  background: #409eff !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.el-date-picker-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-top: 10px !important;
+  padding-top: 8px !important;
+  border-top: 1px solid #ebeef5 !important;
+}
+.el-date-picker-footer .el-picker-text-btn {
+  border: none !important;
+  background: transparent !important;
+  font-size: 12px !important;
+  color: #409eff !important;
+  cursor: pointer !important;
+  padding: 0 4px !important;
+}
+.el-date-picker-footer .el-picker-text-btn:hover {
+  text-decoration: underline !important;
+}

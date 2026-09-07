@@ -6,15 +6,30 @@ from vnpy_ctastrategy.backtesting import BacktestingEngine
 from vnpy.trader.constant import Interval
 
 from config.settings import STRATEGIES, BACKTEST_CONFIG
-from utils.data_generator import generate_random_bars, load_csv_bars
+from utils.data_generator import load_csv_bars
+
+# 无真实数据时返回的说明标记，绝不回退随机数据伪造对比/优化结果
+_NO_DATA_NOTE = {
+    "key": "_note",
+    "name": "缺少真实行情数据",
+    "stats": {},
+    "error": "未提供可用标的的真实行情数据，已拒绝使用随机数据伪造结果，请先下载标的 CSV 或指定正确标的",
+}
+
+
+def _load_real_bars(symbol: str):
+    """仅加载真实 CSV 行情；缺失时抛出带说明的异常，绝不回退随机数据"""
+    if not symbol:
+        raise FileNotFoundError("未指定标的代码，无法加载真实行情数据")
+    return load_csv_bars(symbol)
 
 
 def compare_strategies(symbol: str = None, days: int = 500) -> list[dict]:
-    """所有策略在同一数据上对比"""
-    if symbol:
-        bars = load_csv_bars(symbol)
-    else:
-        bars = generate_random_bars(days=days)
+    """所有策略在同一真实数据上对比；无真实数据时如实返回说明，不使用随机数据"""
+    try:
+        bars = _load_real_bars(symbol)
+    except FileNotFoundError as e:
+        return [{**_NO_DATA_NOTE, "error": str(e)}]
 
     results = []
     for key, info in STRATEGIES.items():
@@ -23,7 +38,7 @@ def compare_strategies(symbol: str = None, days: int = 500) -> list[dict]:
 
         engine = BacktestingEngine()
         engine.set_parameters(
-            vt_symbol=f"{symbol or '000001'}.SSE",
+            vt_symbol=f"{symbol}.SSE",
             interval=Interval.DAILY,
             start=datetime(2024, 1, 1),
             end=datetime(2025, 12, 31),
@@ -49,7 +64,7 @@ def compare_strategies(symbol: str = None, days: int = 500) -> list[dict]:
 
 
 def optimize_strategy(strategy_key: str, param_grid: dict, symbol: str = None, days: int = 500) -> list[dict]:
-    """参数网格搜索优化"""
+    """参数网格搜索优化；无真实数据时如实返回说明，不使用随机数据"""
     if strategy_key not in STRATEGIES:
         return []
 
@@ -57,10 +72,10 @@ def optimize_strategy(strategy_key: str, param_grid: dict, symbol: str = None, d
     module = importlib.import_module(info["module"])
     strategy_cls = getattr(module, info["class"])
 
-    if symbol:
-        bars = load_csv_bars(symbol)
-    else:
-        bars = generate_random_bars(days=days)
+    try:
+        bars = _load_real_bars(symbol)
+    except FileNotFoundError as e:
+        return [{**_NO_DATA_NOTE, "key": "_note", "params": {}, "error": str(e)}]
 
     # 生成参数组合
     keys = list(param_grid.keys())

@@ -28,6 +28,18 @@ except ImportError:
 
 logger = logging.getLogger("PipelineGraph")
 
+# Pipeline 版本标识：用于区分不同版本流水线产出的快照，便于幂等审计
+PIPELINE_VERSION = "2.1.0"
+
+
+def _stamp_state(state: dict) -> dict:
+    """为流水线输出附加版本与运行标识（增量字段，不改变既有契约）"""
+    from uuid import uuid4
+    state["pipeline_version"] = PIPELINE_VERSION
+    state["run_id"] = uuid4().hex[:12]
+    state["generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return state
+
 
 class PipelineState(TypedDict):
     trade_date: str
@@ -73,7 +85,7 @@ class ReviewPipeline:
         # 若为休市日，严格返回休市空快照，坚决不抓当天行情冒充！
         if is_holiday:
             logger.info(f"🛑 日期 {current_date} 属于【{holiday_reason}】，终止 Pipeline A 运算并如实返回休市状态")
-            return {
+            return _stamp_state({
                 "trade_date": current_date,
                 "market_stats": {
                     "trade_date": current_date, "total_stocks": 0, "up_count": 0, "down_count": 0,
@@ -87,7 +99,7 @@ class ReviewPipeline:
                 "review_report": None,
                 "degraded_nodes": [f"休市日拦截: {holiday_reason}"],
                 "execution_time_sec": round(time.time() - start_time, 2)
-            }
+            })
 
         # 若为历史日期且非今天，严禁使用今天实时行情冒充历史！
         if current_date < today_str:
@@ -109,7 +121,7 @@ class ReviewPipeline:
                 return archived
             else:
                 logger.info(f"ℹ️ 历史交易日 {current_date} 本地无归档记录，诚实返回空状态")
-                return {
+                return _stamp_state({
                     "trade_date": current_date,
                     "market_stats": {
                         "trade_date": current_date, "total_stocks": 0, "up_count": 0, "down_count": 0,
@@ -123,7 +135,7 @@ class ReviewPipeline:
                     "review_report": None,
                     "degraded_nodes": ["历史空白日无归档数据"],
                     "execution_time_sec": round(time.time() - start_time, 2)
-                }
+                })
 
         state: PipelineState = {
             "trade_date": current_date,
@@ -219,6 +231,7 @@ class ReviewPipeline:
 
         cost = round(time.time() - start_time, 2)
         state["execution_time_sec"] = cost
+        state = _stamp_state(state)
 
         logger.info(f"🏆 ================= [Pipeline A 执行完毕！耗时 {cost} 秒 | 降级节点: {state['degraded_nodes']}] =================")
         return state
