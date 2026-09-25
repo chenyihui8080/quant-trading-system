@@ -35,21 +35,26 @@ def save_or_update_order(username: str, order_dict: dict) -> None:
             username,
         )
         
-        cursor = db.execute("""
-            UPDATE order_records SET
-                strategy_name = ?, symbol = ?, direction = ?, offset = ?, price = ?, volume = ?,
-                filled_volume = ?, avg_price = ?, status = ?, broker_order_id = ?, reason = ?, updated_at = ?
-            WHERE order_id = ? AND username = ?
-        """, values)
-        
-        # 2. 若不存在则安全插入并显式打上 username
-        if cursor.rowcount == 0:
-            create_time = order_dict.get("created_at") or now_str
+        create_time = order_dict.get("created_at") or now_str
+        try:
             db.execute("""
                 INSERT INTO order_records (
                     order_id, username, strategy_name, symbol, direction, offset, price, volume,
                     filled_volume, avg_price, status, broker_order_id, reason, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(order_id) DO UPDATE SET
+                    strategy_name = excluded.strategy_name,
+                    symbol = excluded.symbol,
+                    direction = excluded.direction,
+                    offset = excluded.offset,
+                    price = excluded.price,
+                    volume = excluded.volume,
+                    filled_volume = excluded.filled_volume,
+                    avg_price = excluded.avg_price,
+                    status = excluded.status,
+                    broker_order_id = excluded.broker_order_id,
+                    reason = excluded.reason,
+                    updated_at = excluded.updated_at
             """, (
                 order_id,
                 username,
@@ -67,6 +72,14 @@ def save_or_update_order(username: str, order_dict: dict) -> None:
                 create_time,
                 now_str,
             ))
+        except Exception:
+            # 兼容老版 SQLite 无 ON CONFLICT 特性时的回退保护
+            db.execute("""
+                UPDATE order_records SET
+                    strategy_name = ?, symbol = ?, direction = ?, offset = ?, price = ?, volume = ?,
+                    filled_volume = ?, avg_price = ?, status = ?, broker_order_id = ?, reason = ?, updated_at = ?
+                WHERE order_id = ?
+            """, values[:-1] + (order_id,))
 
 
 def get_user_order_history(

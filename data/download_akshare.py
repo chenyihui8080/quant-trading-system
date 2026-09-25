@@ -10,12 +10,16 @@ DATA_DIR = Path(__file__).parent
 
 def _detect_market(symbol: str) -> str:
     """识别股票市场：a / hk / us"""
-    if symbol.endswith(".HK"):
+    sym = symbol.strip().upper()
+    if sym.endswith(".HK") or sym.startswith("HK"):
         return "hk"
-    if symbol.endswith((".SS", ".SZ")):
+    # 5 位纯数字 (如 01810, 00700) 或 4 位纯数字 (如 1810, 700) = 港股
+    if (len(sym) in (4, 5)) and sym.isdigit():
+        return "hk"
+    if sym.endswith((".SS", ".SZ")):
         return "a"
     # 6 位纯数字 = A 股
-    if len(symbol) == 6 and symbol.isdigit():
+    if len(sym) == 6 and sym.isdigit():
         return "a"
     return "us"
 
@@ -24,19 +28,34 @@ def download_stock(symbol: str, start: str = "2020-01-01", end: str = "2026-12-3
     """下载单只股票日线数据（自动识别市场，支持 A股/港股/美股）"""
     market = _detect_market(symbol)
     if market == "a":
-        df = _download_a_stock(symbol, start, end)
+        # A 股/ETF 优先走高可用极速腾讯日K线通道（0.3秒响应，支持ETF与全A股），失败再尝试备用源
+        df = _download_tx_stock(symbol)
         if df is None or len(df) == 0:
-            df = _download_tx_stock(symbol)
+            df = _download_a_stock(symbol, start, end)
+        return df
+    elif market == "hk":
+        # 港股优先走腾讯官方极速前复权日K通道
+        df = _download_tx_stock(symbol)
+        if df is None or len(df) == 0:
+            df = _download_yf_stock(symbol, start, end)
         return df
     else:
-        return _download_yf_stock(symbol, start, end)
+        # 美股优先走腾讯美股日K通道，失败回退 yfinance
+        df = _download_tx_stock(symbol)
+        if df is None or len(df) == 0:
+            df = _download_yf_stock(symbol, start, end)
+        return df
 
 
 def _download_a_stock(symbol: str, start: str, end: str):
-    """A 股下载（优先 baostock，失败回退腾讯行情）"""
+    """A 股备用下载通道（baostock，仅针对纯A股股票，ETF跳过）"""
+    # ETF 类基金代码 (159/51/56/58开头) baostock 不支持，直接跳过
+    if symbol.startswith(("159", "51", "56", "58")):
+        return None
+
     import baostock as bs
 
-    if symbol.startswith(("6", "9")):
+    if symbol.startswith(("6", "9", "5")):
         bs_code = f"sh.{symbol}"
     else:
         bs_code = f"sz.{symbol}"
@@ -82,6 +101,8 @@ def _download_tx_stock(symbol: str, count: int = 1200):
 
     session = requests.Session()
     session.trust_env = False
+    # 默认开启严格 TLS 证书校验 (支持特殊网络环境下通过环境变量临时覆盖)
+    session.verify = os.getenv("REQUESTS_VERIFY", "1") != "0"
 
     days = []
     if market == "hk":
@@ -111,7 +132,7 @@ def _download_tx_stock(symbol: str, count: int = 1200):
             except Exception:
                 pass
     else:
-        prefix = "sh" if symbol.startswith(("6", "9")) else "sz"
+        prefix = "sh" if symbol.startswith(("6", "9", "5")) else "sz"
         url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={prefix}{symbol},day,,,{count},qfq"
         try:
             resp = session.get(url, timeout=6)

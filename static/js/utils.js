@@ -143,6 +143,9 @@ async function doLogin(e) {
     
     // 触发系统全模块初始化加载
     safeTriggerInit();
+    if (typeof window.preloadSystemAvailableDates === 'function') {
+      window.preloadSystemAvailableDates();
+    }
     
   } catch(err) { 
     if (errorEl) {
@@ -252,7 +255,8 @@ function safeTriggerInit() {
   });
 }
 
-// 5. 带全局高可用容灾的网络请求
+// 5. 带全局高可用容灾与 401 统一拦截的网络请求
+let _lastAuthExpiredToastTime = 0;
 async function authFetch(url, options = {}) {
   const token = getToken();
   if (!options.headers) options.headers = {};
@@ -260,8 +264,29 @@ async function authFetch(url, options = {}) {
   
   try {
     const resp = await fetch(url, options);
-    if (resp.status === 401 && !url.includes('/api/portfolio') && !url.includes('/api/alpha')) {
-      console.warn(`[AuthFetch] ${url} 401 未授权`);
+    if (resp.status === 401) {
+      console.warn(`[AuthFetch] ${url} 401 凭证未授权或已过期`);
+      
+      // 若当前本地存有 Token 却收到 401，表明 Token 已过期或服务端密钥已轮转
+      if (token) {
+        clearToken();
+        const infoEl = document.getElementById('userInfo');
+        const guestEl = document.getElementById('guestInfo');
+        if (infoEl) infoEl.style.display = 'none';
+        if (guestEl) guestEl.style.display = 'flex';
+
+        // 防抖 3 秒内仅弹出一次过期提示与登录框
+        const now = Date.now();
+        if (now - _lastAuthExpiredToastTime > 3000) {
+          _lastAuthExpiredToastTime = now;
+          if (typeof showToast === 'function') {
+            showToast('登录凭据已失效，请重新登录', 'warning');
+          }
+          if (typeof showLoginOverlay === 'function') {
+            showLoginOverlay();
+          }
+        }
+      }
     }
     return resp;
   } catch (err) {
@@ -368,8 +393,22 @@ function setupStockAutocomplete(inputEl, dropdownEl, onSelectCallback) {
   if (!inputEl || !dropdownEl) return;
   let debounceTimer = null;
 
+  let activeIndex = -1;
+
+  function updateActiveHighlight(items) {
+    items.forEach((it, idx) => {
+      if (idx === activeIndex) {
+        it.style.backgroundColor = '#ecf5ff';
+        it.scrollIntoView({ block: 'nearest' });
+      } else {
+        it.style.backgroundColor = '#ffffff';
+      }
+    });
+  }
+
   inputEl.addEventListener('input', function() {
     clearTimeout(debounceTimer);
+    activeIndex = -1;
     const kw = this.value.trim();
     if (!kw) {
       dropdownEl.style.display = 'none';
@@ -388,28 +427,34 @@ function setupStockAutocomplete(inputEl, dropdownEl, onSelectCallback) {
           return;
         }
 
-        dropdownEl.innerHTML = results.map(item => {
+        dropdownEl.innerHTML = results.map((item, idx) => {
           const code = item.code || item.symbol || '';
           const name = item.name || '';
           const tag = item.type || item.market || item.industry || 'A股';
           return `
-            <div class="stock-search-item" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--sys-border);display:flex;justify-content:space-between;align-items:center">
+            <div class="stock-search-item" data-idx="${idx}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f2f3f5;background:#ffffff;display:flex;justify-content:space-between;align-items:center;transition:background 0.15s">
               <div style="display:flex;align-items:center;gap:8px">
                 <span class="el-tag el-tag--primary el-tag--small" style="height:20px;padding:0 5px;font-size:11px">${escapeHtml(tag)}</span>
-                <span style="font-weight:700;color:var(--sys-text-title)">${escapeHtml(name)}</span>
+                <span style="font-weight:700;color:var(--sys-text-title);font-size:13px">${escapeHtml(name)}</span>
               </div>
-              <span style="font-family:monospace;font-size:12px;color:var(--sys-text-sub)">${escapeHtml(code)}</span>
+              <span style="font-family:monospace;font-size:12px;color:var(--sys-text-sub);font-weight:600">${escapeHtml(code)}</span>
             </div>
           `;
         }).join('');
         dropdownEl.style.display = 'block';
 
-        dropdownEl.querySelectorAll('.stock-search-item').forEach(el => {
+        const items = dropdownEl.querySelectorAll('.stock-search-item');
+        items.forEach(el => {
+          el.addEventListener('mouseenter', function() {
+            activeIndex = parseInt(this.getAttribute('data-idx') || '-1', 10);
+            updateActiveHighlight(items);
+          });
           el.addEventListener('mousedown', function(e) {
             e.preventDefault();
             const code = this.getAttribute('data-code');
             const name = this.getAttribute('data-name');
             inputEl.value = `${name} (${code})`;
+            inputEl.setAttribute('data-selected-code', code);
             dropdownEl.style.display = 'none';
             if (typeof onSelectCallback === 'function') {
               onSelectCallback({ code: code, symbol: code, name: name }, name);
@@ -419,7 +464,34 @@ function setupStockAutocomplete(inputEl, dropdownEl, onSelectCallback) {
       } catch (e) {
         dropdownEl.style.display = 'none';
       }
-    }, 150);
+    }, 120);
+  });
+
+  inputEl.addEventListener('keydown', function(e) {
+    const items = dropdownEl.querySelectorAll('.stock-search-item');
+    if (dropdownEl.style.display !== 'none' && items.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = (activeIndex + 1) % items.length;
+        updateActiveHighlight(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = (activeIndex - 1 + items.length) % items.length;
+        updateActiveHighlight(items);
+      } else if (e.key === 'Enter') {
+        if (activeIndex >= 0 && activeIndex < items.length) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          items[activeIndex].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        }
+      } else if (e.key === 'Escape') {
+        dropdownEl.style.display = 'none';
+      }
+    }
+  });
+
+  inputEl.addEventListener('compositionend', function() {
+    this.dispatchEvent(new Event('input'));
   });
 
   inputEl.addEventListener('focus', function() {
@@ -450,6 +522,13 @@ function openAiChatDrawer() {
     }, 100);
   }
 }
+
+// 支持 URL 参数 ?open_chat=1 或 #open_ai_chat 自动打开工作台
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.location.hash === '#open_ai_chat' || window.location.search.includes('open_chat=1')) {
+    setTimeout(openAiChatDrawer, 300);
+  }
+});
 
 function closeAiChatDrawer() {
   const backdrop = document.getElementById('aiChatDrawerBackdrop');
@@ -485,17 +564,75 @@ const GLOSSARY_TERMS_MAP = {
   "中军标的": "【中军大容量】市值500亿以上、能容纳几十亿大机构资金的定海神针核心品种。",
 };
 
-// 高对比度、大字号 Markdown 解析器（集成术语点词成译大白话气泡，且同一段对话每个术语只标记第1次）
-// ⚠️ 安全：先对原始 markdown 做 HTML 转义，避免注入；再针对术语做有限替换
+// 🌟 阿里巴巴矢量图标自动转义映射表（彻底抹平系统原生彩色emoji）
+const EMOJI_TO_ALIBABA_ICON_MAP = {
+  '⚡': '<i class="ri-flashlight-fill" style="color:#eab308"></i>',
+  '🚀': '<i class="ri-rocket-2-fill" style="color:#2563eb"></i>',
+  '🎯': '<i class="ri-focus-3-line" style="color:#ef4444"></i>',
+  '🛡️': '<i class="ri-shield-check-fill" style="color:#10b981"></i>',
+  '🛡': '<i class="ri-shield-check-fill" style="color:#10b981"></i>',
+  '📊': '<i class="ri-bar-chart-2-fill" style="color:#6366f1"></i>',
+  '📈': '<i class="ri-line-chart-line" style="color:#ef4444"></i>',
+  '📉': '<i class="ri-line-chart-down-line" style="color:#10b981"></i>',
+  '💼': '<i class="ri-briefcase-4-line" style="color:#64748b"></i>',
+  '💵': '<i class="ri-money-cny-box-line" style="color:#10b981"></i>',
+  '💰': '<i class="ri-funds-line" style="color:#eab308"></i>',
+  '⏱️': '<i class="ri-time-line" style="color:#64748b"></i>',
+  '⏱': '<i class="ri-time-line" style="color:#64748b"></i>',
+  '⏰': '<i class="ri-alarm-line" style="color:#64748b"></i>',
+  '📅': '<i class="ri-calendar-line" style="color:#64748b"></i>',
+  '💡': '<i class="ri-lightbulb-fill" style="color:#f59e0b"></i>',
+  '🌊': '<i class="ri-water-flash-line" style="color:#0284c7"></i>',
+  '🔥': '<i class="ri-fire-fill" style="color:#dc2626"></i>',
+  '⚖️': '<i class="ri-scales-3-line" style="color:#7c3aed"></i>',
+  '⚖': '<i class="ri-scales-3-line" style="color:#7c3aed"></i>',
+  '🎲': '<i class="ri-gamepad-line" style="color:#2563eb"></i>',
+  '📌': '<i class="ri-pushpin-2-line" style="color:#ea580c"></i>',
+  '🔍': '<i class="ri-search-2-line" style="color:#64748b"></i>',
+  '📰': '<i class="ri-newspaper-line" style="color:#64748b"></i>',
+  '📝': '<i class="ri-edit-box-line" style="color:#64748b"></i>',
+  '🎉': '<i class="ri-gift-line" style="color:#ef4444"></i>',
+  '✅': '<i class="ri-checkbox-circle-fill" style="color:#10b981"></i>',
+  '⚠️': '<i class="ri-alert-line" style="color:#f59e0b"></i>',
+  '🚨': '<i class="ri-alarm-warning-line" style="color:#ef4444"></i>',
+  '🏦': '<i class="ri-bank-card-line" style="color:#2563eb"></i>',
+  '📡': '<i class="ri-radar-line" style="color:#2563eb"></i>',
+  '📚': '<i class="ri-book-open-line" style="color:#10b981"></i>',
+  '📖': '<i class="ri-book-read-line" style="color:#10b981"></i>',
+  '🤖': '<i class="ri-sparkling-fill" style="color:#4f46e5"></i>',
+  '🧠': '<i class="ri-cpu-line" style="color:#6366f1"></i>',
+  '✨': '<i class="ri-sparkling-line" style="color:#f59e0b"></i>',
+  '🚩': '<i class="ri-flag-line" style="color:#ef4444"></i>',
+  '👑': '<i class="ri-vip-crown-fill" style="color:#eab308"></i>',
+  '🟢': '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;margin:0 2px"></span>',
+  '🔻': '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin:0 2px"></span>'
+};
+
+// 🌟 高对比度、Gemini 官方级别 Markdown 解析器
 function formatMarkdownToHtml(md) {
   if (!md) return '';
-  const escaped = escapeHtml(md);
-  let html = escaped
-    .replace(/^### (.*$)/gim, '<h4 style="margin:14px 0 8px 0;color:var(--sys-accent);font-size:16px;font-weight:700">$1</h4>')
-    .replace(/^## (.*$)/gim, '<h3 style="margin:16px 0 10px 0;color:var(--sys-text-title);font-size:17.5px;font-weight:800">$1</h3>')
-    .replace(/\*\*(.*?)\*\*/g, '<b style="color:var(--sys-text-title);font-weight:700">$1</b>')
-    .replace(/^\s*-\s+(.*$)/gim, '<li style="margin:8px 0;color:var(--sys-text-primary);font-size:14.5px;line-height:1.7">$1</li>')
-    .replace(/^\s*\d+\.\s+(.*$)/gim, '<li style="margin:8px 0;color:var(--sys-text-primary);font-size:14.5px;line-height:1.7">$1</li>')
+  let text = md;
+
+  // 1. 全量将原生 emoji 替换为标准阿里巴巴矢量图标
+  Object.keys(EMOJI_TO_ALIBABA_ICON_MAP).forEach(em => {
+    text = text.split(em).join(EMOJI_TO_ALIBABA_ICON_MAP[em]);
+  });
+
+  const escaped = escapeHtml(text);
+  // 恢复由映射表产生的 <i> 标签
+  let html = escaped.replace(/&lt;(i\s+class=&quot;[^&]+&quot;(?:\s+style=&quot;[^&]+&quot;)?)&gt;&lt;\/i&gt;/g, '<$1></i>')
+                    .replace(/&lt;(span\s+style=&quot;[^&]+&quot;)&gt;&lt;\/span&gt;/g, '<$1></span>');
+
+  // Gemini / ChatGPT 官方级别排版
+  html = html
+    .replace(/^#### (.*$)/gim, '<h5 style="margin:16px 0 8px 0;color:#334155;font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:4px;height:12px;border-radius:2px;background:#6366f1;display:inline-block"></span>$1</h5>')
+    .replace(/^### (.*$)/gim, '<h4 style="margin:20px 0 10px 0;color:#0f172a;font-size:15.5px;font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:4px;height:14px;border-radius:2px;background:#2563eb;display:inline-block"></span>$1</h4>')
+    .replace(/^## (.*$)/gim, '<h3 style="margin:24px 0 12px 0;color:#0f172a;font-size:17px;font-weight:800;border-bottom:1px solid #f1f5f9;padding-bottom:6px">$1</h3>')
+    .replace(/\*\*(.*?)\*\*/g, '<b style="color:#0f172a;font-weight:700">$1</b>')
+    .replace(/^---$/gim, '<hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0">')
+    .replace(/^&gt; (.*$)/gim, '<blockquote style="margin:12px 0;padding:8px 16px;border-left:3px solid #3b82f6;background:#f8fafc;color:#475569;border-radius:0 8px 8px 0;font-size:13.5px">$1</blockquote>')
+    .replace(/^\s*-\s+(.*$)/gim, '<li style="margin:6px 0;color:#334155;font-size:14px;line-height:1.75">$1</li>')
+    .replace(/^\s*\d+\.\s+(.*$)/gim, '<li style="margin:6px 0;color:#334155;font-size:14px;line-height:1.75">$1</li>')
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 
@@ -573,14 +710,56 @@ function showTermExplanationPopover(el, term, event) {
 const GEMINI_SESSIONS_KEY = 'quant_gemini_sessions_v2';
 const GEMINI_ACTIVE_ID_KEY = 'quant_gemini_active_id_v2';
 
+// 兼容扫描所有可能存在的旧版 LocalStorage 历史会话键 (彻底解决聊天记录看似消失的问题)
+function tryMigrateLegacySessions() {
+  const legacyKeys = [
+    'quant_gemini_sessions',
+    'quant_gemini_sessions_v1',
+    'quant_chat_history',
+    'ai_chat_history',
+    'gemini_sessions',
+    'quant_chat_messages'
+  ];
+  let recoveredSessions = [];
+  for (const k of legacyKeys) {
+    try {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (parsed[0].messages || parsed[0].title) {
+          recoveredSessions.push(...parsed);
+        } else if (parsed[0].role || parsed[0].text) {
+          recoveredSessions.push({
+            id: 'legacy_' + k,
+            title: '迁移历史研判记录 (' + parsed.length + '条)',
+            createdAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+            updatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+            messages: parsed
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('tryMigrateLegacySessions item parse warn:', e);
+    }
+  }
+  return recoveredSessions;
+}
+
 function getGeminiSessions() {
   try {
     const data = localStorage.getItem(GEMINI_SESSIONS_KEY);
     let sessions = data ? JSON.parse(data) : [];
     if (!Array.isArray(sessions) || sessions.length === 0) {
-      // 首次初始化默认创建一条欢迎会话，并尝试从旧记录迁移
-      sessions = [createDefaultGeminiSession()];
-      localStorage.setItem(GEMINI_SESSIONS_KEY, JSON.stringify(sessions));
+      // 首次初始化或版本升级时，尝试从旧记录与历史键中迁移
+      const migrated = tryMigrateLegacySessions();
+      if (migrated && migrated.length > 0) {
+        sessions = migrated;
+        localStorage.setItem(GEMINI_SESSIONS_KEY, JSON.stringify(sessions));
+      } else {
+        sessions = [createDefaultGeminiSession()];
+        localStorage.setItem(GEMINI_SESSIONS_KEY, JSON.stringify(sessions));
+      }
     }
     return sessions;
   } catch (e) {
@@ -588,9 +767,48 @@ function getGeminiSessions() {
   }
 }
 
-function saveGeminiSessions(sessions) {
+// 异步从数据库拉取备份会话（如果本地记录较少，自动向服务端对齐）
+async function pullServerSessionsBackup() {
+  try {
+    const res = await authFetch('/api/chat/sessions');
+    if (!res || !res.ok) return;
+    const json = await res.json();
+    if (json.code === 200 && Array.isArray(json.sessions) && json.sessions.length > 0) {
+      const localSessions = getGeminiSessions();
+      let merged = [...localSessions];
+      let hasNew = false;
+      for (const s of json.sessions) {
+        if (!merged.some(m => m.id === s.id)) {
+          merged.push(s);
+          hasNew = true;
+        }
+      }
+      if (hasNew) {
+        localStorage.setItem(GEMINI_SESSIONS_KEY, JSON.stringify(merged));
+        renderGeminiSessionList();
+        renderGeminiActiveMessages();
+      }
+    }
+  } catch (e) {
+    console.warn('pullServerSessionsBackup warn:', e);
+  }
+}
+
+function saveGeminiSessions(sessions, syncServer = true) {
   try {
     localStorage.setItem(GEMINI_SESSIONS_KEY, JSON.stringify(sessions));
+    // 同步到后端 SQLite 数据库双保险
+    if (syncServer) {
+      const activeId = getActiveGeminiSessionId();
+      const curSes = sessions.find(s => s.id === activeId);
+      if (curSes) {
+        authFetch('/api/chat/sync_session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(curSes)
+        }).catch(() => {});
+      }
+    }
   } catch (e) {
     console.warn('保存 Gemini 会话失败:', e);
   }
@@ -657,7 +875,14 @@ function deleteGeminiSession(sessionId, e) {
   if (sessions.length === 0) {
     sessions = [createDefaultGeminiSession('新研判会话 1')];
   }
-  saveGeminiSessions(sessions);
+  saveGeminiSessions(sessions, false);
+  // 后端同步删除
+  authFetch('/api/chat/delete_session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: sessionId })
+  }).catch(() => {});
+
   localStorage.setItem(GEMINI_ACTIVE_ID_KEY, sessions[0].id);
   renderGeminiSessionList();
   renderGeminiActiveMessages();
@@ -682,7 +907,7 @@ function renameGeminiSession(sessionId, e) {
 function clearAllGeminiSessions() {
   if (!confirm('确定要清空全部的历史研判会话吗？')) return;
   const fresh = [createDefaultGeminiSession('新研判会话 1')];
-  saveGeminiSessions(fresh);
+  saveGeminiSessions(fresh, false);
   localStorage.setItem(GEMINI_ACTIVE_ID_KEY, fresh[0].id);
   renderGeminiSessionList();
   renderGeminiActiveMessages();
@@ -705,28 +930,33 @@ function renderGeminiSessionList() {
   const sessions = getGeminiSessions();
   const activeId = getActiveGeminiSessionId();
 
+  // 更新侧边栏会话数量徽章
+  const countBadge = document.getElementById('geminiSessionCountBadge');
+  if (countBadge) countBadge.textContent = sessions.length;
+
   listEl.innerHTML = sessions.map(ses => {
     const isActive = ses.id === activeId;
-    const itemStyle = isActive 
-      ? 'background:rgba(9,105,218,0.12);border:1.5px solid var(--sys-accent);color:var(--sys-accent);font-weight:700' 
-      : 'background:var(--sys-bg-panel);border:1px solid var(--sys-border-subtle);color:var(--sys-text-primary)';
+    const itemBg = isActive ? '#eff6ff' : 'transparent';
+    const itemBorder = isActive ? '#bfdbfe' : 'transparent';
+    const itemColor = isActive ? '#2563eb' : '#334155';
+    const fontWt = isActive ? '600' : '400';
+
     return `
-      <div onclick="switchGeminiSession('${ses.id}')" style="${itemStyle};border-radius:8px;padding:9px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all 0.15s;margin-bottom:4px" 
-           onmouseover="if(!${isActive}) this.style.borderColor='var(--sys-accent)'"
-           onmouseout="if(!${isActive}) this.style.borderColor='var(--sys-border-subtle)'"
+      <div onclick="switchGeminiSession('${ses.id}')" style="background:${itemBg};border:1px solid ${itemBorder};color:${itemColor};font-weight:${fontWt};border-radius:10px;padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all 0.15s;margin-bottom:2px" 
+           onmouseover="if(!${isActive}){ this.style.background='#f1f5f9'; this.style.borderColor='#e2e8f0'; }"
+           onmouseout="if(!${isActive}){ this.style.background='transparent'; this.style.borderColor='transparent'; }"
            title="${escapeHtml(ses.title)}">
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;flex:1;display:flex;align-items:center;gap:6px">
-          <i class="ri-message-3-line" style="color:${isActive ? 'var(--sys-accent)' : 'var(--sys-text-sub)'};font-size:13px"></i>
-          <span style="color:${isActive ? 'var(--sys-accent)' : 'var(--sys-text-title)'}">${escapeHtml(ses.title)}</span>
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;flex:1;display:flex;align-items:center;gap:8px">
+          <i class="ri-message-3-line" style="color:${isActive ? '#2563eb' : '#94a3b8'};font-size:14px;flex-shrink:0"></i>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(ses.title)}</span>
         </div>
-        <div style="display:flex;gap:6px;opacity:${isActive ? '1' : '0.6'};margin-left:6px">
-          <span onclick="renameGeminiSession('${ses.id}', event)" title="重命名" style="cursor:pointer;font-size:13px;padding:1px 3px;color:var(--sys-text-sub)"><i class="ri-edit-line"></i></span>
-          <span onclick="deleteGeminiSession('${ses.id}', event)" title="删除会话" style="cursor:pointer;font-size:13px;padding:1px 3px;color:#f85149"><i class="ri-delete-bin-line"></i></span>
+        <div style="display:flex;gap:4px;opacity:${isActive ? '1' : '0'};transition:opacity 0.15s;margin-left:4px" class="session-action-btns">
+          <span onclick="renameGeminiSession('${ses.id}', event)" title="重命名" style="cursor:pointer;font-size:12px;padding:2px 4px;border-radius:4px;color:#64748b" onmouseover="this.style.color='#0f172a';this.style.background='#e2e8f0'" onmouseout="this.style.color='#64748b';this.style.background='transparent'"><i class="ri-edit-line"></i></span>
+          <span onclick="deleteGeminiSession('${ses.id}', event)" title="删除会话" style="cursor:pointer;font-size:12px;padding:2px 4px;border-radius:4px;color:#ef4444" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='transparent'"><i class="ri-delete-bin-line"></i></span>
         </div>
       </div>
     `;
   }).join('');
-
 
   const activeSes = sessions.find(s => s.id === activeId);
   const titleEl = document.getElementById('geminiCurrentTitle');
@@ -735,7 +965,7 @@ function renderGeminiSessionList() {
   }
 }
 
-// 🌟 核心：Gemini 风格消息区渲染（空状态显示 Hero 欢迎大屏，有消息则显示气泡流）
+// 🌟 核心：ChatGPT / Gemini 官方级别消息区渲染（开阔画布流 + 极简平铺）
 function renderGeminiActiveMessages() {
   const list = document.getElementById('aiChatMessagesList');
   if (!list) return;
@@ -746,52 +976,54 @@ function renderGeminiActiveMessages() {
   // 1. 如果该会话尚无任何问答，呈现官方 Gemini 经典的 Hero 欢迎卡片
   if (!activeSes || !activeSes.messages || activeSes.messages.length === 0) {
     list.innerHTML = `
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:360px;text-align:center;padding:20px 10px">
-        <div style="font-size:42px;margin-bottom:12px;color:var(--sys-accent)"><i class="ri-sparkling-fill"></i></div>
-        <h2 style="font-size:24px;font-weight:800;color:var(--sys-text-title);margin:0 0 10px 0">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:360px;text-align:center;padding:40px 16px 20px 16px">
+        <div style="width:54px;height:54px;border-radius:18px;background:linear-gradient(135deg,#38bdf8,#818cf8);display:flex;align-items:center;justify-content:center;color:#ffffff;font-size:28px;box-shadow:0 8px 24px rgba(56,189,248,0.25);margin-bottom:16px">
+          <i class="ri-sparkling-fill"></i>
+        </div>
+        <h2 style="font-size:24px;font-weight:700;color:#0f172a;margin:0 0 8px 0;letter-spacing:-0.3px">
           你好，今天想推演什么？
         </h2>
-        <p style="font-size:13px;color:var(--sys-text-sub);max-width:520px;line-height:1.6;margin:0 0 24px 0">
-          已实时联动您的 <b>实盘持仓（养殖ETF、中证证券、博纳影业、机器人）</b>、4层漏斗黄金观察池与 646 部经典名著战法大典
+        <p style="font-size:13.5px;color:#64748b;max-width:540px;line-height:1.6;margin:0 0 28px 0">
+          已实时联动您的 <b>实盘持仓资产</b>、4层量化漏斗红榜与 <b>646 部经典战法大典</b>
         </p>
 
-        <!-- 4 张 Gemini 经典高质感 Prompt 建议卡片 -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;width:100%;max-width:680px;text-align:left">
+        <!-- 4 张 Gemini 官方风格极简建议卡片 (白底·细边框·悬停微升) -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:12px;width:100%;max-width:760px;text-align:left">
           
-          <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all 0.2s" 
-               onmouseover="this.style.borderColor='var(--sys-accent)';this.style.transform='translateY(-2px)'" 
-               onmouseout="this.style.borderColor='var(--sys-border)';this.style.transform='none'"
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.03)" 
+               onmouseover="this.style.borderColor='#2563eb';this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(37,99,235,0.08)'" 
+               onmouseout="this.style.borderColor='#e2e8f0';this.style.transform='none';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.03)'"
+               onclick="quickAskAi('请评估当前系统推荐标的的量化胜率与期望盈亏比，给出止盈止损底线！')">
+            <div style="font-size:20px;margin-bottom:8px;color:#2563eb"><i class="ri-scales-3-line"></i></div>
+            <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px">量化胜率与期望测算</div>
+            <div style="font-size:12px;color:#64748b;line-height:1.5">基于 170+ 笔实盘对账与战法统计，测算今日标的真实胜率</div>
+          </div>
+
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.03)" 
+               onmouseover="this.style.borderColor='#ef4444';this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(239,68,68,0.08)'" 
+               onmouseout="this.style.borderColor='#e2e8f0';this.style.transform='none';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.03)'"
+               onclick="quickAskAi('明天最看好哪几只放量突破黄金做多标的？请给出具体买入点位与止损线！')">
+            <div style="font-size:20px;margin-bottom:8px;color:#ef4444"><i class="ri-fire-fill"></i></div>
+            <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px">明天推荐买什么标的？</div>
+            <div style="font-size:12px;color:#64748b;line-height:1.5">严格 4 层漏斗二次过滤，纯红盘放量突破品种，坚决杜绝跌票</div>
+          </div>
+
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.03)" 
+               onmouseover="this.style.borderColor='#10b981';this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(16,185,129,0.08)'" 
+               onmouseout="this.style.borderColor='#e2e8f0';this.style.transform='none';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.03)'"
                onclick="injectPortfolioDataToPrompt()">
-            <div style="font-size:22px;margin-bottom:6px;color:var(--sys-accent)"><i class="ri-briefcase-4-line"></i></div>
-            <div style="font-size:13px;font-weight:700;color:var(--sys-text-title);margin-bottom:4px">诊断实盘 4 只持仓</div>
-            <div style="font-size:11px;color:var(--sys-text-sub)">一键注入当前持仓量价，测算明日做 T 与止盈防守线</div>
+            <div style="font-size:20px;margin-bottom:8px;color:#10b981"><i class="ri-briefcase-4-line"></i></div>
+            <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px">实盘持仓大白话诊断</div>
+            <div style="font-size:12px;color:#64748b;line-height:1.5">一键注入当前持仓量价成本，生成做 T 点位与 -3.5% 止损保护</div>
           </div>
 
-          <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all 0.2s" 
-               onmouseover="this.style.borderColor='#10b981';this.style.transform='translateY(-2px)'" 
-               onmouseout="this.style.borderColor='var(--sys-border)';this.style.transform='none'"
-               onclick="quickAskAi('明天最看好哪几只放量突破黄金标的？请用大白话讲清楚理由！')">
-            <div style="font-size:22px;margin-bottom:6px;color:#10b981"><i class="ri-focus-3-line"></i></div>
-            <div style="font-size:13px;font-weight:700;color:var(--sys-text-title);margin-bottom:4px">明天推荐买什么标的？</div>
-            <div style="font-size:11px;color:var(--sys-text-sub)">基于 4 层过滤与突破战法，精选确定性最强的龙头</div>
-          </div>
-
-          <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all 0.2s" 
-               onmouseover="this.style.borderColor='#8957e5';this.style.transform='translateY(-2px)'" 
-               onmouseout="this.style.borderColor='var(--sys-border)';this.style.transform='none'"
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.03)" 
+               onmouseover="this.style.borderColor='#7c3aed';this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(124,58,237,0.08)'" 
+               onmouseout="this.style.borderColor='#e2e8f0';this.style.transform='none';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.03)'"
                onclick="injectSectorFlowsToPrompt()">
-            <div style="font-size:22px;margin-bottom:6px;color:#8957e5"><i class="ri-funds-line"></i></div>
-            <div style="font-size:13px;font-weight:700;color:var(--sys-text-title);margin-bottom:4px">大盘板块主力资金流向</div>
-            <div style="font-size:11px;color:var(--sys-text-sub)">一键注入主力抢筹 Top3 行业，研判主力抱团意图</div>
-          </div>
-
-          <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all 0.2s" 
-               onmouseover="this.style.borderColor='#f59e0b';this.style.transform='translateY(-2px)'" 
-               onmouseout="this.style.borderColor='var(--sys-border)';this.style.transform='none'"
-               onclick="quickAskAi('300308 中际旭创你看好吗？请用大白话测算支撑位与止损价')">
-            <div style="font-size:22px;margin-bottom:6px;color:#f59e0b"><i class="ri-line-chart-line"></i></div>
-            <div style="font-size:13px;font-weight:700;color:var(--sys-text-title);margin-bottom:4px">个股买卖点深度测算</div>
-            <div style="font-size:11px;color:var(--sys-text-sub)">输入任意股票代码或名称，获取支撑位与硬核止损价</div>
+            <div style="font-size:20px;margin-bottom:8px;color:#7c3aed"><i class="ri-funds-line"></i></div>
+            <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px">大盘板块主力资金流向</div>
+            <div style="font-size:12px;color:#64748b;line-height:1.5">注入主力抢筹净流入行业，透视资金抱团意图与产业链共振</div>
           </div>
 
         </div>
@@ -800,33 +1032,42 @@ function renderGeminiActiveMessages() {
     return;
   }
 
-  // 2. 如果有问答，呈现高对比度、清晰明亮的气泡消息流
-  list.innerHTML = activeSes.messages.map(msg => {
+  // 2. 如果有问答，呈现真正的 ChatGPT / Gemini 风格平铺流
+  list.innerHTML = activeSes.messages.map((msg, idx) => {
     if (msg.role === 'user') {
       return `
-        <div style="display:flex;gap:12px;align-items:flex-start;justify-content:flex-end">
-          <div style="background:rgba(9,105,218,0.1);border:1px solid rgba(9,105,218,0.3);border-radius:12px;padding:12px 18px;font-size:14.5px;color:var(--sys-text-title);line-height:1.6;max-width:82%;font-weight:600">
+        <div style="display:flex;gap:12px;align-items:flex-start;justify-content:flex-end;margin:6px 0">
+          <div style="background:#f1f5f9;color:#0f172a;border-radius:18px 18px 4px 18px;padding:12px 18px;font-size:14.5px;line-height:1.65;max-width:78%;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,0.02)">
             ${escapeHtml(msg.text)}
           </div>
-          <div style="width:34px;height:34px;border-radius:8px;background:rgba(9,105,218,0.15);border:1px solid var(--sys-accent);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--sys-accent);flex-shrink:0">
-            <i class="ri-user-3-fill"></i>
+          <div style="width:32px;height:32px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:15px;color:#475569;flex-shrink:0;margin-top:2px">
+            <i class="ri-user-3-line"></i>
           </div>
         </div>
       `;
     } else {
       return `
-        <div style="display:flex;gap:12px;align-items:flex-start">
-          <div style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#8957e5,#58a6ff);display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;flex-shrink:0;box-shadow:0 2px 8px rgba(137,87,229,0.3)">
-            <i class="ri-robot-2-fill"></i>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin:12px 0;width:100%" class="gemini-assistant-row" id="msgRow_${idx}">
+          <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#38bdf8,#818cf8);display:flex;align-items:center;justify-content:center;font-size:16px;color:#ffffff;flex-shrink:0;box-shadow:0 3px 8px rgba(56,189,248,0.25);margin-top:2px">
+            <i class="ri-sparkling-fill"></i>
           </div>
-          <div style="background:var(--sys-bg-card-inner);border:1px solid var(--sys-border);border-radius:12px;padding:16px 22px;font-size:14.5px;color:var(--sys-text-primary);line-height:1.75;max-width:88%;box-shadow:var(--sys-shadow-card)">
-            <div>${formatMarkdownToHtml(msg.text)}</div>
-            <div style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--sys-border-subtle);font-size:11px;color:var(--sys-text-sub);display:flex;justify-content:space-between;align-items:center">
-              <span>🧠 ${msg.model || 'Qwen2.5 金融大模型'} · ${msg.time || ''}</span>
-              <div style="display:flex;gap:8px">
-                <button class="btn btn-outline" style="padding:2px 8px;font-size:10px;color:var(--sys-accent);border-color:var(--sys-border);display:flex;align-items:center;gap:4px" onclick="copyGeminiMessageText(this)">
+          <div style="flex:1;min-width:0;padding:2px 0 10px 0">
+            <div style="font-size:14.5px;color:#1e293b;line-height:1.8;word-break:break-word">
+              ${formatMarkdownToHtml(msg.text)}
+            </div>
+            
+            <!-- ChatGPT 官方风格底部悬浮极简操作条 -->
+            <div style="margin-top:12px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between;align-items:center">
+              <div style="display:flex;align-items:center;gap:6px">
+                <i class="ri-cpu-line"></i>
+                <span>${msg.model || 'Qwen2.5 / 646部战法大典'}</span>
+                <span>·</span>
+                <span>${msg.time || ''}</span>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button class="el-button el-button--small is-plain" style="padding:3px 8px;font-size:11px;color:#64748b;border-color:#e2e8f0;border-radius:6px;background:#ffffff;cursor:pointer;display:flex;align-items:center;gap:4px" onclick="copyGeminiMessageByIndex(${idx})">
                   <i class="ri-file-copy-line"></i>
-                  <span>复制</span>
+                  <span>复制内容</span>
                 </button>
               </div>
             </div>
@@ -836,18 +1077,35 @@ function renderGeminiActiveMessages() {
     }
   }).join('');
 
-
-
   list.scrollTop = list.scrollHeight;
 }
 
+// 🌟 动态高亮 ChatGPT 圆形向上发送按钮
+function toggleSendBtnActive(val) {
+  const btn = document.getElementById('aiChatSendBtn');
+  if (!btn) return;
+  if (val && val.trim().length > 0) {
+    btn.style.background = '#2563eb';
+    btn.style.opacity = '1';
+    btn.style.transform = 'scale(1.05)';
+  } else {
+    btn.style.background = '#0f172a';
+    btn.style.opacity = '0.85';
+    btn.style.transform = 'none';
+  }
+}
 
-function copyGeminiMessageText(btn) {
-  const container = btn.closest('div[style*="background:#161b22"]');
-  if (container) {
-    const text = container.innerText.replace(/📋 复制.*/, '').trim();
+// 🌟 复制指定消息纯文本
+function copyGeminiMessageByIndex(idx) {
+  const sessions = getGeminiSessions();
+  const activeId = getActiveGeminiSessionId();
+  const activeSes = sessions.find(s => s.id === activeId) || sessions[0];
+  if (activeSes && activeSes.messages && activeSes.messages[idx]) {
+    const text = activeSes.messages[idx].text;
     navigator.clipboard.writeText(text).then(() => {
-      showToast('已复制完整研判内容！', 'success');
+      showToast('研判内容已成功复制到剪贴板！', 'success');
+    }).catch(() => {
+      showToast('复制失败，请手动选取复制', 'warning');
     });
   }
 }
@@ -858,7 +1116,7 @@ function exportCurrentSessionMarkdown() {
   const activeSes = sessions.find(s => s.id === activeId);
   if (!activeSes || !activeSes.messages) return;
 
-  let md = `# 📜 AI 首席操盘顾问 · ${activeSes.title}\n\n`;
+  let md = `# 📜 AI 操盘决策助手 · ${activeSes.title}\n\n`;
   md += `> 会话创建时间：${activeSes.createdAt} | 更新时间：${activeSes.updatedAt}\n\n---\n\n`;
 
   activeSes.messages.forEach(m => {
@@ -944,6 +1202,8 @@ function openAiChatDrawer() {
     drawer.style.display = 'flex';
     renderGeminiSessionList();
     renderGeminiActiveMessages();
+    // 自动对齐服务端持久化备份
+    pullServerSessionsBackup();
     setTimeout(() => {
       const input = document.getElementById('aiChatInputText');
       if (input) input.focus();
@@ -968,6 +1228,21 @@ function quickAskAi(questionText) {
 
 // ==================== 🌟 全系统功能·大白话深度指南字典表 (通俗生动·保姆级实战步骤) ====================
 const SYSTEM_FEATURE_GUIDES = {
+  "system_user_manual": {
+    title: "📘 股票协同操盘系统 · 终极实战使用说明书",
+    badge: "操盘手必读宪法",
+    icon: "ri-book-open-line",
+    summary: "双核系统架构（⚡ 实盘决策 ⇋ 📊 盘后复盘）与职业操盘手人性第一动线完整实战手册。",
+    why: "彻底告别杂乱无章与盲目追高！带您搞懂每天先看什么、后看什么、怎么科学定仓、怎么严格防守，做有计划、有纪律的职业交易。",
+    steps: [
+      "<b>1. 进系统先看账户</b>：首选【💼 我的实盘持仓诊断】，看总资产、盈亏变化与上方筹码密集峰压力；",
+      "<b>2. 再看系统推荐</b>：点击【🔥 今日推荐龙头】，看4层漏斗动态淘汰数字，一键【🔬 战法体检】看500天回测胜率；",
+      "<b>3. 尾盘科学决战 (14:45)</b>：点击【⚡ 尾盘决策】，按华尔街 1% 风险公式倒算建议买入股数，弹出空仓勋章坚决管住手；",
+      "<b>4. 盘后公开对账 (15:00+)</b>：切换至【📊 盘后复盘】，看大盘量价、连板天梯、主力板块资金与昨日推荐真实结算！"
+    ],
+    tips: "💡 操盘最高法则：会买的是徒弟，会卖的是师傅，会空仓的才是祖师爷！保住本金第一！"
+  },
+
   // 1. Alpha 系统
   "alpha_system": {
     title: "尾盘 14:45 买卖决策系统",
@@ -1090,17 +1365,18 @@ const SYSTEM_FEATURE_GUIDES = {
     tips: "💡 操盘口诀：仓位决定心态，心态决定成败，不盲目满仓是职业交易员第一铁律！"
   },
   "review_funnel": {
-    title: "4 层漏斗黄金观察池",
-    badge: "层层过筛黄金池",
+    title: "4 层漏斗黄金核心观察池 (100% 动态量化流水)",
+    badge: "大浪淘沙真龙头",
     icon: "ri-filter-line",
-    summary: "像选美比赛一样，从全市场股票中经过 4 道严苛关卡层层淘汰，最终筛选出最具爆发力的黄金龙头股！",
-    why: "第 1 层筛日内冲高爆发力，第 2 层筛主力大单真金白银净流入，第 3 层筛活跃换手率，第 4 层一键排雷破位股！只有 4 层全部绿灯点亮的股票，才是万中无一的超级好票！",
+    summary: "系统每天直连数据库真实流水，将全市场 5300+ 标的历经 4 道硬核关卡层层淘汰，最终提炼出 20~35 只身位龙头！",
+    why: "市场上 90% 的股票都在织布甚至阴跌，散户乱买必亏。4 层漏斗通过数学公式自动过滤掉 4800+ 僵尸股、流动性陷阱和假突破，只留最优质的进攻标的！",
     steps: [
-      "<b>① 看 4 层指示灯</b>：观察表格中每只股票的 4 个绿色圆点是否全部点亮。",
-      "<b>② 查看入池理由</b>：悬停查看为何该股票能通过 4 层考验（如特大单净买入超 1 亿、放量突破等）。",
-      "<b>③ 纳入明日重点观察</b>：把 4 层全通关的股票加入自选，次日早盘重点捕捉买点！"
+      "<b>① 关卡 1 波动初筛</b>：振幅 ≥ 4.5% 或量比 > 1.8，淘汰日内死水股；",
+      "<b>② 关卡 2 排雷流动性</b>：剔除 ST 与停牌，日成交额必须 ≥ 1.5 亿元，杜绝流动性危机；",
+      "<b>③ 关卡 3 筹码形态健康</b>：欧奈尔量价模型，换手率 2.5%~30%，均线多头突破；",
+      "<b>④ 关卡 4 逻辑归因提纯</b>：四类互斥逻辑置信度检验，精炼入选最终核心池！"
     ],
-    tips: "💡 操盘口诀：真金不怕火炼，四层漏斗过筛，假突破无处遁形，真龙头脱颖而出！"
+    tips: "💡 操盘口诀：四层严筛见真章，无量无肉莫进场，身位龙头置信度，尾盘定仓心不慌！"
   },
   "review_agents": {
     title: "盘中 7 人小智能体协同定调与分时量价轨迹",
@@ -1119,7 +1395,7 @@ const SYSTEM_FEATURE_GUIDES = {
     title: "我的实盘持仓与买卖量化深度诊断",
     badge: "持仓体检与保姆级指南",
     icon: "ri-briefcase-4-line",
-    summary: "专门针对您当前真实持有的实盘股票（如养殖ETF、中证证券、机器人PH、博纳影业）进行手把手体检与保姆级实操指导。",
+    summary: "专门针对您东方财富当前真实持有的实盘股票进行手把手体检与保姆级实操指导。",
     why: "解决散户持仓被套后不知所措的困境！系统直接给出通俗大白话建议：哪只票该拿、哪只票该在明天几点加仓买入多少股、下午反弹几点卖出赚差价（做T降成本）、哪只票破位必须坚决割肉！",
     steps: [
       "<b>① 逐只查看大白话定调</b>：看绿灯（盈利持有）、黄灯（被套做T自救）、红灯（破位割肉保命）。",
@@ -1173,8 +1449,8 @@ const SYSTEM_FEATURE_GUIDES = {
 
   // 4. AI 对话与全域
   "ai_advisor": {
-    title: "🤖 AI 首席操盘顾问工作台",
-    badge: "24小时私人操盘导师",
+    title: "🤖 AI 操盘决策助手工作台",
+    badge: "实盘操盘量化助手",
     icon: "ri-robot-2-line",
     summary: "联动您的东方财富实盘持仓、4 层观察池与 646 部经典战法大典的顶级 AI 操盘智脑。",
     why: "遇到任何股票走势看不懂、不知道怎么做 T、想查某个量化指标，随时在右下角点击提问。AI 严格用老百姓听得懂的大白话作答，点词成译，手把手指导！",
@@ -1359,13 +1635,20 @@ async function sendAiChatMessage() {
   renderGeminiActiveMessages();
   input.value = '';
 
-  // 2. 临时呈现 AI 思考中指示器
+  // 2. 临时呈现 Gemini / ChatGPT 官方风格思考指示器
   const thinkingId = 'ai_thinking_' + Date.now();
   const thinkingHtml = `
-    <div id="${thinkingId}" style="display:flex;gap:12px;align-items:flex-start">
-      <div style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#8957e5,#58a6ff);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🤖</div>
-      <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:16px 20px;font-size:14px;color:#8b949e;line-height:1.6;max-width:88%">
-        <span class="spinner"></span> 正在联动您的实盘分时、4层漏斗核心池与大模型深度推演中...
+    <div id="${thinkingId}" style="display:flex;gap:16px;align-items:flex-start;margin:12px 0;width:100%">
+      <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#38bdf8,#818cf8);display:flex;align-items:center;justify-content:center;font-size:16px;color:#ffffff;flex-shrink:0;box-shadow:0 3px 8px rgba(56,189,248,0.25);animation:pulse 1.8s infinite">
+        <i class="ri-sparkling-fill"></i>
+      </div>
+      <div style="flex:1;padding:6px 0;font-size:14px;color:#64748b;display:flex;align-items:center;gap:10px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#38bdf8;animation:pulse 1s infinite alternate"></span>
+          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#818cf8;animation:pulse 1s infinite alternate 0.2s"></span>
+          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4f46e5;animation:pulse 1s infinite alternate 0.4s"></span>
+        </div>
+        <span>正在联动实盘量化胜率引擎与 646 部战法深度推演...</span>
       </div>
     </div>
   `;
@@ -1374,7 +1657,8 @@ async function sendAiChatMessage() {
 
   if (sendBtn) {
     sendBtn.disabled = true;
-    sendBtn.innerHTML = '<span>思考中...</span>';
+    sendBtn.style.opacity = '0.5';
+    sendBtn.innerHTML = '<i class="ri-loader-4-line ri-spin" style="font-size:18px"></i>';
   }
 
   try {
@@ -1397,7 +1681,7 @@ async function sendAiChatMessage() {
         id: 'ai_' + Date.now(),
         role: 'assistant',
         text: json.answer,
-        model: json.model || 'Qwen2.5 金融大模型',
+        model: json.model || 'Qwen2.5 / 646部战法大典',
         time: json.timestamp || timeStr
       });
       saveGeminiSessions(sessions);
@@ -1406,7 +1690,7 @@ async function sendAiChatMessage() {
       currentSes.messages.push({
         id: 'ai_' + Date.now(),
         role: 'assistant',
-        text: `⚠️ 获取大模型推理失败: ${json.message || '模型连接超时'}`,
+        text: `获取大模型推理失败: ${json.message || '模型连接超时'}`,
         model: '系统异常提示',
         time: timeStr
       });
@@ -1419,7 +1703,7 @@ async function sendAiChatMessage() {
     currentSes.messages.push({
       id: 'ai_' + Date.now(),
       role: 'assistant',
-      text: `⚠️ 网络请求异常: ${e.message}`,
+      text: `网络请求异常: ${e.message}`,
       model: '错误报告',
       time: timeStr
     });
@@ -1428,8 +1712,10 @@ async function sendAiChatMessage() {
   } finally {
     if (sendBtn) {
       sendBtn.disabled = false;
-      sendBtn.innerHTML = '<span>发送</span><span>🚀</span>';
+      sendBtn.style.opacity = '0.85';
+      sendBtn.innerHTML = '<i class="ri-arrow-up-line" style="font-size:18px;font-weight:700"></i>';
     }
+    toggleSendBtnActive('');
   }
 }
 
@@ -1542,7 +1828,8 @@ window.deleteGeminiSession = deleteGeminiSession;
 window.renameGeminiSession = renameGeminiSession;
 window.clearAllGeminiSessions = clearAllGeminiSessions;
 window.toggleGeminiSidebar = toggleGeminiSidebar;
-window.copyGeminiMessageText = copyGeminiMessageText;
+window.copyGeminiMessageByIndex = copyGeminiMessageByIndex;
+window.copyGeminiMessageText = copyGeminiMessageByIndex;
 window.exportCurrentSessionMarkdown = exportCurrentSessionMarkdown;
 window.injectPortfolioDataToPrompt = injectPortfolioDataToPrompt;
 window.injectSectorFlowsToPrompt = injectSectorFlowsToPrompt;
@@ -1575,7 +1862,9 @@ function initDraggableAiFloatingTrigger() {
       el.style.bottom = 'auto';
       el.style.right = 'auto';
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('restore ai ball position warn:', e);
+  }
 
   let isDragging = false;
   let startX = 0;

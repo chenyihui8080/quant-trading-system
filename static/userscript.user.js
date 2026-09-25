@@ -20,6 +20,7 @@
     // 本地量化服务接收凭证的 API 地址
     var TARGET_API = 'http://localhost:8000/api/eastmoney/bind-full-credentials';
     var LAST_SYNC_KEY = '_QUANT_LAST_SYNC_TS_';
+    var SYNC_TOKEN = '__QUANT_SYNC_TOKEN__';
 
     function extractCredentials() {
         var cookie = document.cookie || '';
@@ -78,7 +79,8 @@
         var payload = JSON.stringify({
             cookie: cred.cookie,
             validatekey: cred.validatekey || '',
-            user_name: '陈一辉 (浏览器透明同步)'
+            user_name: '陈一辉 (浏览器透明同步)',
+            sync_token: SYNC_TOKEN
         });
 
         function handleSuccess(resText) {
@@ -87,25 +89,48 @@
             console.log('[QuantSync] ✅ 东方财富凭证已静默回传同步至量化系统', cred.validatekey ? '含validatekey' : '纯Cookie');
         }
 
+        function handleFailure(errMsg) {
+            console.warn('[QuantSync] ⚠️ 凭证同步失败:', errMsg);
+            showFloatTip('东财凭证同步未成功: ' + errMsg, false);
+        }
+
+        var headers = {
+            'Content-Type': 'application/json',
+            'X-Quant-Sync-Token': SYNC_TOKEN
+        };
+
         if (typeof GM_xmlhttpRequest !== 'undefined') {
             GM_xmlhttpRequest({
                 method: 'POST',
                 url: TARGET_API,
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 data: payload,
                 onload: function(response) {
                     if (response.status >= 200 && response.status < 300) {
                         handleSuccess(response.responseText);
+                    } else {
+                        handleFailure('HTTP ' + response.status + ' ' + (response.statusText || ''));
                     }
+                },
+                onerror: function(err) {
+                    handleFailure('网络请求失败');
                 }
             });
         } else {
             fetch(TARGET_API, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: payload,
                 mode: 'cors'
-            }).then(function(r) { return r.json(); }).then(handleSuccess).catch(function(e){});
+            }).then(function(r) {
+                if (r.ok) {
+                    return r.json().then(handleSuccess);
+                } else {
+                    handleFailure('HTTP ' + r.status);
+                }
+            }).catch(function(e){
+                handleFailure(e.message || '网络连接异常');
+            });
         }
     }
 

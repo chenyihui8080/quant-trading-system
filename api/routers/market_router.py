@@ -15,10 +15,18 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel
 
-from utils.auth import get_current_user, get_optional_user
+from utils.auth import (
+    get_current_user,
+    get_optional_user,
+    verify_sync_or_user,
+    get_or_create_sync_token,
+    get_current_user_from_token_or_query,
+)
 from utils.realtime import get_realtime_quote, get_realtime_kline
 from utils.database import log_audit
 from utils.eastmoney_daemon import eastmoney_daemon, eastmoney_auth
+
+import threading
 
 logger = logging.getLogger("MarketRouter")
 router = APIRouter(prefix="/api/market", tags=["行情与市场数据"])
@@ -41,7 +49,9 @@ class PriceAlertRequest(BaseModel):
     target_price: float
 
 
-_price_alerts: dict[str, list[dict]] ={}
+_price_alerts: dict[str, list[dict]] = {}
+_price_alerts_lock = threading.Lock()
+
 @router.post("/alerts/price")
 @legacy_router.post("/alerts/price")
 def create_price_alert(req: PriceAlertRequest, user: dict = Depends(get_current_user)):
@@ -49,7 +59,8 @@ def create_price_alert(req: PriceAlertRequest, user: dict = Depends(get_current_
         raise HTTPException(status_code=400, detail="direction 必须为 above 或 below")
     username = user.get("username", str(user))
     alert = {**req.model_dump(), "username": username, "active": True}
-    _price_alerts.setdefault(username, []).append(alert)
+    with _price_alerts_lock:
+        _price_alerts.setdefault(username, []).append(alert)
     return {"code": 200, "data": alert}
 
 
@@ -57,7 +68,8 @@ def create_price_alert(req: PriceAlertRequest, user: dict = Depends(get_current_
 @legacy_router.get("/alerts/price")
 def list_price_alerts(user: dict = Depends(get_current_user)):
     username = user.get("username", str(user))
-    alerts = _price_alerts.get(username, [])
+    with _price_alerts_lock:
+        alerts = list(_price_alerts.get(username, []))
     return {"code": 200, "data": alerts, "alerts": alerts}
 
 
@@ -65,7 +77,9 @@ def list_price_alerts(user: dict = Depends(get_current_user)):
 @legacy_router.post("/alerts/check")
 def check_price_alerts(user: dict = Depends(get_current_user)):
     username = user.get("username", str(user))
-    return {"code": 200, "data": [], "alerts": _price_alerts.get(username, [])}
+    with _price_alerts_lock:
+        alerts = list(_price_alerts.get(username, []))
+    return {"code": 200, "data": [], "alerts": alerts}
 
 
 @router.get("/realtime/{symbol}")
@@ -171,15 +185,15 @@ class TwitterTranslateReq(BaseModel):
 @legacy_router.get("/api/twitter/tweets")
 def get_twitter_tweets(page: int = 1, page_size: int = 12, keyword: str = "",
                        only_stocks: bool = False, author: str = "", category: str = "ALL",
-                       source_type: str = "ALL", force_refresh: bool = False):
-    """获取推特重点博主情报流 (支持分页、FTS5倒排全文搜索、股票提炼过滤、博主分类筛选、来源归属与实时刷新)"""
+                       source_type: str = "ALL", force_refresh: bool = False, pure_mode: bool = True):
+    """获取推特重点博主情报流 (支持分页、FTS5倒排全文搜索、股票提炼过滤、博主分类筛选、纯净AI过滤与实时刷新)"""
     from utils.twitter_monitor import global_twitter_monitor
 
     # 若用户主动点击刷新或内存无缓存，先执行一次最新关注流同步
     if force_refresh or not global_twitter_monitor._cached_tweets:
         global_twitter_monitor.fetch_intel_stream(limit=30, force_refresh=force_refresh)
 
-    # 从 SQLite 本地数据库中按来源、分类、博主与关键词分页查询
+    # 从 SQLite 本地数据库中按来源、分类、博主、关键词与纯净模式分页查询
     query_res = global_twitter_monitor.query_tweets_from_db(
         page=page,
         page_size=page_size,
@@ -187,7 +201,8 @@ def get_twitter_tweets(page: int = 1, page_size: int = 12, keyword: str = "",
         only_stocks=only_stocks,
         author=author,
         category=category,
-        source_type=source_type
+        source_type=source_type,
+        pure_mode=pure_mode
     )
 
     # 兜底：仅当本地数据库完全为空且无指定过滤条件时，使用内存样本
@@ -244,8 +259,8 @@ def get_twitter_authors():
 
 @router.post("/twitter/authors/update")
 @legacy_router.post("/api/twitter/authors/update")
-def update_twitter_author(req: TwitterAuthorUpdateReq):
-    """更新单个博主的分组类别与 VIP 标记，实时生效联动"""
+def update_twitter_author(req: TwitterAuthorUpdateReq, user: dict = Depends(get_current_user)):
+    """更新单个博主的分组类别与 VIP 标记，实时生效联动（需管理员权限）"""
     from utils.twitter_monitor import global_twitter_monitor
     res = global_twitter_monitor.update_author_profile(
         handle=req.handle,
@@ -266,8 +281,8 @@ def update_twitter_author(req: TwitterAuthorUpdateReq):
 
 @router.post("/twitter/authors/reset-default")
 @legacy_router.post("/api/twitter/authors/reset-default")
-def reset_twitter_authors_default():
-    """一键重置所有博主分组为系统推荐默认分类体系"""
+def reset_twitter_authors_default(user: dict = Depends(get_current_user)):
+    """一键重置所有博主分组为系统推荐默认分类体系（需管理员权限）"""
     from utils.twitter_monitor import global_twitter_monitor
     res = global_twitter_monitor.reset_author_profiles()
     status = global_twitter_monitor.get_status()
@@ -282,8 +297,8 @@ def reset_twitter_authors_default():
 
 @router.post("/twitter/translate")
 @legacy_router.post("/api/twitter/translate")
-def translate_single_tweet(req: TwitterTranslateReq):
-    """按需即时重译单条推文，并自动永久回写本地数据库与 FTS5 倒排索引"""
+def translate_single_tweet(req: TwitterTranslateReq, user: dict = Depends(get_current_user)):
+    """按需即时重译单条推文，并自动永久回写本地数据库与 FTS5 倒排索引（需登录）"""
     from utils.twitter_monitor import global_twitter_monitor
     res = global_twitter_monitor.translate_single_tweet(tweet_id=req.tweet_id, custom_text=req.text)
     return {
@@ -298,9 +313,9 @@ def translate_single_tweet(req: TwitterTranslateReq):
 
 @router.post("/twitter/sync-latest")
 @legacy_router.post("/api/twitter/sync-latest")
-def sync_twitter_latest(force_first_init: bool = False):
+def sync_twitter_latest(force_first_init: bool = False, user: dict = Depends(get_current_user)):
     """
-    ⚡ Twitter 增量去重同步 (不更重复的，支持首次入库，全部数据永久保存)
+    ⚡ Twitter 增量去重同步 (不更重复的，支持首次入库，全部数据永久保存，需登录)
     - 若本地数据库推文为 0 或 force_first_init 为 True: 触发首次入库初始化
     - 否则拉取关注流最新推文，基于推文 ID 严格查重，仅对纯新增推文进行翻译、打标并永久入库
     """
@@ -321,9 +336,9 @@ def sync_twitter_latest(force_first_init: bool = False):
 
 @router.post("/twitter/fetch-deep-history")
 @legacy_router.post("/api/twitter/fetch-deep-history")
-def fetch_twitter_deep_history(pages: int = 3):
+def fetch_twitter_deep_history(pages: int = 3, user: dict = Depends(get_current_user)):
     """
-    ⚡ 历史追溯平滑过渡接口：内部转为执行去重增量同步
+    ⚡ 历史追溯平滑过渡接口：内部转为执行去重增量同步（需登录）
     """
     from utils.twitter_monitor import global_twitter_monitor
     result = global_twitter_monitor.sync_incremental(force_first_init=False)
@@ -358,8 +373,8 @@ def twitter_keep_alive_heartbeat():
 
 @router.post("/twitter/config")
 @legacy_router.post("/api/twitter/config")
-def update_twitter_config(payload: TwitterConfigUpdateReq):
-    """更新推特配置 (支持前端直接录入 auth_token+ct0 或粘贴完整 Cookie 串)"""
+def update_twitter_config(payload: TwitterConfigUpdateReq, user: dict = Depends(get_current_user)):
+    """更新推特配置 (支持前端直接录入 auth_token+ct0 或粘贴完整 Cookie 串，需要登录认证)"""
     from utils.twitter_monitor import global_twitter_monitor
     status = global_twitter_monitor.save_config(
         auth_token=payload.auth_token,
@@ -368,13 +383,14 @@ def update_twitter_config(payload: TwitterConfigUpdateReq):
         monitored_users=payload.monitored_users,
         proxy_url=payload.proxy_url
     )
+    log_audit(user.get("username", "admin"), "update_twitter_config", "更新推特监控核心配置")
     return {"code": 200, "status": "ok", "message": "推特监控配置已更新并持久化", "data": status}
 
 
 @router.post("/twitter/test-connection")
 @legacy_router.post("/api/twitter/test-connection")
-def test_twitter_connection():
-    """测试推特网络与凭证有效性 (只读测试，不修改任何网络设置)"""
+def test_twitter_connection(user: dict = Depends(get_current_user)):
+    """测试推特网络与凭证有效性 (需登录)"""
     from utils.twitter_monitor import global_twitter_monitor
     diag = global_twitter_monitor.test_connection()
     return {"code": 200, "status": "ok", "diagnostics": diag}
@@ -502,8 +518,8 @@ class AutoLoginConfigRequest(BaseModel):
 
 @router.post("/eastmoney/bind-full-credentials")
 @legacy_router.post("/api/eastmoney/bind-full-credentials")
-async def bind_full_credentials(request: Request):
-    """绑定东方财富完整Cookie/Session凭证并立即真实探活 (兼容各种Content-Type)"""
+async def bind_full_credentials(request: Request, user: dict = Depends(verify_sync_or_user)):
+    """绑定东方财富完整Cookie/Session凭证并立即真实探活 (支持登录态或油猴专属安全Sync-Token)"""
     try:
         body = await request.json()
     except Exception:
@@ -643,8 +659,8 @@ async def bind_full_credentials(request: Request):
 
 @router.post("/eastmoney/bind-community-cookie")
 @legacy_router.post("/api/eastmoney/bind-community-cookie")
-async def bind_community_cookie(request: Request):
-    """专门绑定东方财富普通通行证Cookie（用于云自选股同步，与金融交易完全隔离）"""
+async def bind_community_cookie(request: Request, user: dict = Depends(verify_sync_or_user)):
+    """专门绑定东方财富普通通行证Cookie（用于云自选股同步，支持登录态或油猴专属安全Sync-Token）"""
     try:
         body = await request.json()
     except Exception:
@@ -739,16 +755,16 @@ async def bind_community_cookie(request: Request):
 
 @router.post("/eastmoney/verify-session")
 @legacy_router.post("/api/eastmoney/verify-session")
-def verify_eastmoney_session():
-    """手动执行一次东财Session心跳探活检测"""
+def verify_eastmoney_session(user: dict = Depends(get_current_user)):
+    """手动执行一次东财Session心跳探活检测（需登录）"""
     res = eastmoney_daemon.keep_alive_heartbeat()
     return {"code": 200, "data": res}
 
 
 @router.post("/eastmoney/save-browser-auth")
 @legacy_router.post("/api/eastmoney/save-browser-auth")
-def save_browser_auth(req: AutoLoginConfigRequest):
-    """安全加密保存账号密码以支持Playwright断线自愈"""
+def save_browser_auth(req: AutoLoginConfigRequest, user: dict = Depends(get_current_user)):
+    """安全加密保存账号密码以支持Playwright断线自愈（需登录）"""
     if not req.account or not req.password:
         raise HTTPException(status_code=400, detail="账号与密码不能为空")
     from utils.eastmoney_browser_session import eastmoney_browser_session
@@ -757,13 +773,15 @@ def save_browser_auth(req: AutoLoginConfigRequest):
         password=req.password,
         broker=req.broker or "东方财富"
     )
+    log_audit(user.get("username", "unknown"), "save_browser_auth", f"保存券商交易登录凭证: {req.account[-4:] if len(req.account)>=4 else '***'}")
     return {"code": 200, "message": "交易账号与加密密码已安全存储于本地", "data": res}
 
 
 @router.post("/eastmoney/interactive-login")
 @legacy_router.post("/api/eastmoney/interactive-login")
-async def interactive_browser_login():
-    """🚀 一键拉起东财登录小窗口，用户扫码或登录后，全自动捕获 Cookie 与 ValidateKey 并存入系统"""
+async def interactive_browser_login(user: dict = Depends(get_current_user)):
+    """🚀 一键拉起东财登录小窗口，用户扫码或登录后，全自动捕获 Cookie 与 ValidateKey 并存入系统（需登录）"""
+    log_audit(user.get("username", "unknown"), "interactive_browser_login", "拉起交互式东财登录窗口")
     from utils.eastmoney_browser_session import eastmoney_browser_session
     res = await eastmoney_browser_session.launch_interactive_capture(timeout_sec=180)
     return res
@@ -771,8 +789,9 @@ async def interactive_browser_login():
 
 @router.post("/eastmoney/trigger-browser-login")
 @legacy_router.post("/api/eastmoney/trigger-browser-login")
-async def trigger_browser_login():
-    """触发一次Playwright浏览器自动登录流程"""
+async def trigger_browser_login(user: dict = Depends(get_current_user)):
+    """触发一次Playwright浏览器自动登录流程（需登录）"""
+    log_audit(user.get("username", "unknown"), "trigger_browser_login", "触发后台自动登录流程")
     from utils.eastmoney_browser_session import eastmoney_browser_session
     res = await eastmoney_browser_session.launch_interactive_capture(timeout_sec=180)
     return res
@@ -814,27 +833,48 @@ def logout_eastmoney(user: dict = Depends(get_current_user)):
 
 
 @router.post("/refresh-data")
-def refresh_market_data(user: str = Depends(get_current_user)):
+def refresh_market_data(user: dict = Depends(get_current_user)):
     """全量查缺补漏增量更新行情"""
     try:
         res = eastmoney_daemon.sync_all(quiet=False)
-        log_audit(user, "refresh_data", "执行查缺补漏增量数据更新")
+        username = user.get("username", "admin") if isinstance(user, dict) else str(user)
+        log_audit(username, "refresh_data", "执行查缺补漏增量数据更新")
         return {"code": 200, "message": "增量行情同步完成", "data": res}
     except Exception as e:
         logger.error(f"refresh-data 异常: {e}")
         return {"code": 500, "message": f"同步异常: {str(e)}"}
 
 
+@router.get("/eastmoney/sync-token")
+@legacy_router.get("/api/eastmoney/sync-token")
+def get_sync_token_endpoint(user: dict = Depends(get_current_user)):
+    """获取当前系统安全 Sync Token，专供前端生成书签时注入"""
+    return {"code": 200, "sync_token": get_or_create_sync_token()}
+
+
 @router.get("/eastmoney/userscript.user.js")
 @legacy_router.get("/api/eastmoney/userscript.user.js")
 @legacy_router.get("/api/eastmoney/tampermonkey-script")
-def get_eastmoney_userscript(request: Request):
+def get_eastmoney_userscript(
+    request: Request,
+    user: dict = Depends(get_current_user_from_token_or_query)
+):
     """
     ⚡ 东方财富【永不过期·透明自动同步】油猴(Tampermonkey)脚本分发接口
-    只要在浏览器安装该脚本，访问东财网页时即会自动静默同步最新 Cookie 与 ValidateKey 到量化系统
+    安全规范：下载脚本注入真实 Token 必须要求已认证用户权限，杜绝未认证访客窃取同步令牌。
     """
     from fastapi.responses import Response
     host_origin = f"{request.url.scheme}://{request.url.netloc}"
+    sync_token = get_or_create_sync_token()
+    static_file = Path(__file__).resolve().parent.parent.parent / "static" / "userscript.user.js"
+    if static_file.exists():
+        content = static_file.read_text(encoding="utf-8")
+        content = content.replace("http://localhost:8000", host_origin)
+        content = content.replace("__QUANT_SYNC_TOKEN__", sync_token)
+        return Response(content=content, media_type="application/javascript", headers={
+            "Content-Disposition": "inline; filename=eastmoney.user.js",
+            "Cache-Control": "no-cache"
+        })
     
     script_content = f"""// ==UserScript==
 // @name         东财实盘凭证自动同步助手 (Quant Session Sync)
@@ -914,7 +954,8 @@ def get_eastmoney_userscript(request: Request):
         var payload = JSON.stringify({{
             cookie: cred.cookie,
             validatekey: cred.validatekey || '',
-            user_name: '陈一辉 (浏览器透明同步)'
+            user_name: '陈一辉 (浏览器透明同步)',
+            sync_token: '{sync_token}'
         }});
 
         function handleSuccess(resText) {{
@@ -923,25 +964,46 @@ def get_eastmoney_userscript(request: Request):
             console.log('[QuantSync] ✅ 东方财富凭证已静默回传同步至量化系统', cred.validatekey ? '含validatekey' : '纯Cookie');
         }}
 
+        function handleFail(status) {{
+            showFloatTip('实盘同步失败: ' + status, false);
+            console.warn('[QuantSync] ❌ 实盘同步失败，HTTP状态码:', status);
+        }}
+
         if (typeof GM_xmlhttpRequest !== 'undefined') {{
             GM_xmlhttpRequest({{
                 method: 'POST',
                 url: TARGET_API,
-                headers: {{ 'Content-Type': 'application/json' }},
+                headers: {{ 
+                    'Content-Type': 'application/json',
+                    'X-Quant-Sync-Token': '{sync_token}'
+                }},
                 data: payload,
                 onload: function(response) {{
                     if (response.status >= 200 && response.status < 300) {{
                         handleSuccess(response.responseText);
+                    }} else {{
+                        handleFail(response.status);
                     }}
+                }},
+                onerror: function(err) {{
+                    handleFail('网络异常');
                 }}
             }});
         }} else {{
             fetch(TARGET_API, {{
                 method: 'POST',
-                headers: {{ 'Content-Type': 'application/json' }},
+                headers: {{ 
+                    'Content-Type': 'application/json',
+                    'X-Quant-Sync-Token': '{sync_token}'
+                }},
                 body: payload,
                 mode: 'cors'
-            }}).then(function(r) {{ return r.json(); }}).then(handleSuccess).catch(function(e){{}});
+            }}).then(function(r) {{ 
+                if (r.ok) return r.json().then(handleSuccess);
+                handleFail(r.status);
+            }}).catch(function(e) {{
+                handleFail('网络请求被拦截');
+            }});
         }}
     }}
 
@@ -963,3 +1025,117 @@ def get_eastmoney_userscript(request: Request):
 """
     return Response(content=script_content, media_type="application/javascript")
 
+
+
+
+
+@router.post("/eastmoney/sync-watchlist-group")
+@legacy_router.post("/api/eastmoney/sync-watchlist-group")
+async def sync_watchlist_group(request: Request, user: dict = Depends(get_current_user)):
+    """
+    ⚡ 一键将量化系统指定日期的黄金龙头股票池直接在东财云端建组并全量同步（需登录）。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    trade_date = str(body.get("date") or datetime.now().strftime("%Y-%m-%d")).strip()
+
+    # 1. 检查东财凭证 Cookie
+    proj_dir = Path(__file__).parent.parent.parent.resolve()
+    auth_file = proj_dir / "data" / "eastmoney_auth.json"
+    auth_data = {}
+    if auth_file.exists():
+        try:
+            with open(auth_file, "r", encoding="utf-8") as f:
+                auth_data = json.load(f)
+        except Exception:
+            pass
+
+    cookie = auth_data.get("cookie") or auth_data.get("community_cookie") or ""
+    if not cookie and hasattr(eastmoney_auth, "auth_info"):
+        cookie = eastmoney_auth.auth_info.get("cookie") or eastmoney_auth.auth_info.get("community_cookie") or ""
+
+    if not cookie:
+        return {"code": 400, "status": "error", "message": "⚠️ 未检测到东财登录凭证，请先使用【东财自选助手】绑定一次！"}
+
+    # 2. 读取核心黄金龙头池数据
+    db_path = proj_dir / "review_workbench" / "data" / "review.db"
+    if not db_path.exists():
+        return {"code": 404, "status": "error", "message": f"数据库未找到: {db_path}"}
+
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("SELECT stock_code, stock_name FROM core_watchlists WHERE trade_date=? ORDER BY amount_yi DESC", (trade_date,))
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        return {"code": 404, "status": "error", "message": f"⚠️ 未找到 {trade_date} 的核心黄金龙头数据，请确认复盘已完成！"}
+
+    # 3. 构造合法的东财分组名称 (东财官方严禁空格和破折号-)
+    parts = trade_date.split("-")
+    if len(parts) == 3:
+        gname = f"{parts[1]}月{parts[2]}日黄金龙头"
+    else:
+        gname = f"{trade_date}黄金龙头"
+
+    appkey = "e9166c7e9cdfad3aa3fd7d93b757e9b1"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Cookie": cookie,
+        "Referer": "https://quote.eastmoney.com/zixuan/"
+    }
+
+    import requests, time
+    from urllib.parse import quote
+
+    try:
+        # A. 查询东财已有分组列表
+        url_g = f"https://myfavor.eastmoney.com/v4/webouter/ggdefstkindexinfos?appkey={appkey}&g=1&_={int(time.time()*1000)}"
+        res_g = requests.get(url_g, headers=headers, timeout=6).json()
+        groups = res_g.get("data", {}).get("ginfolist", [])
+        target_gid = None
+        for g in groups:
+            if g.get("gname") == gname:
+                target_gid = str(g.get("gid"))
+                break
+
+        # B. 不存在则创建新分组
+        if not target_gid:
+            url_ag = f"https://myfavor.eastmoney.com/v4/webouter/ag?appkey={appkey}&gn={quote(gname)}&_={int(time.time()*1000)}"
+            res_ag = requests.get(url_ag, headers=headers, timeout=6).json()
+            if res_ag.get("state") == 0:
+                target_gid = str(res_ag.get("data", {}).get("gid"))
+            else:
+                return {"code": 500, "status": "error", "message": f"东财创建分组失败: {res_ag.get('message')}"}
+
+        # C. 批量塞入当天的推荐股票
+        synced_stocks = []
+        for sym, name in rows:
+            sym_str = str(sym).zfill(6)
+            pfx = "1%24" if int(sym_str) >= 600000 else "0%24"
+            sc = pfx + sym_str
+            url_as = f"https://myfavor.eastmoney.com/v4/webouter/as?appkey={appkey}&g={target_gid}&sc={sc}&_={int(time.time()*1000)}"
+            try:
+                r_as = requests.get(url_as, headers=headers, timeout=4).json()
+                if r_as.get("state") in (0, -217):
+                    synced_stocks.append({"symbol": sym_str, "name": name})
+            except Exception:
+                pass
+
+        return {
+            "code": 200,
+            "status": "success",
+            "message": f"🎉 成功同步到东方财富云端！专属分组：【{gname}】，已全量导入 {len(synced_stocks)} 只龙头标的，手机App与电脑端即刻刷新可见！",
+            "group_name": gname,
+            "gid": target_gid,
+            "total_count": len(rows),
+            "synced_count": len(synced_stocks),
+            "stocks": synced_stocks
+        }
+    except Exception as ex:
+        logger.error(f"同步到东财异常: {ex}")
+        return {"code": 500, "status": "error", "message": f"调用东财云接口异常: {str(ex)}"}

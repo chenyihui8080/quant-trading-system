@@ -130,31 +130,35 @@ class ReviewScheduler:
             from pathlib import Path
             db_path = Path("data/prediction.db")
             if db_path.exists() and results:
-                with sqlite3.connect(str(db_path), timeout=15.0) as conn:
-                    conn.execute("PRAGMA journal_mode=WAL")
-                    conn.execute("PRAGMA busy_timeout=5000")
-                    cursor = conn.cursor()
-                    for r in results:
-                        # 检查今日该股票是否已入库
-                        cursor.execute("SELECT id FROM prediction_records WHERE record_date=? AND stock_code=?", (today, r["symbol"]))
-                        if not cursor.fetchone():
-                            cursor.execute("""
-                                INSERT INTO prediction_records
-                                (record_date, stock_code, stock_name, direction, entry_price, target_price, shares, confidence, reason, tags, is_correct, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, CURRENT_TIMESTAMP)
-                            """, (
-                                today,
-                                r["symbol"],
-                                r["name"],
-                                "buy",
-                                float(r.get("current_price", 0)),
-                                float(r.get("target_price_1", 0)),
-                                int(r.get("recommended_shares", 1000)),
-                                5,
-                                r.get("reason", "14:45 尾盘选股决策自动入库"),
-                                ",".join(r.get("triggered_rules", ["尾盘选股", "均线多头"]))
-                            ))
-                    conn.commit()
+                conn = sqlite3.connect(str(db_path), timeout=15.0)
+                try:
+                    with conn:
+                        conn.execute("PRAGMA journal_mode=WAL")
+                        conn.execute("PRAGMA busy_timeout=5000")
+                        cursor = conn.cursor()
+                        for r in results:
+                            # 检查今日该股票是否已入库
+                            cursor.execute("SELECT id FROM prediction_records WHERE record_date=? AND stock_code=?", (today, r["symbol"]))
+                            if not cursor.fetchone():
+                                cursor.execute("""
+                                    INSERT INTO prediction_records
+                                    (record_date, stock_code, stock_name, direction, entry_price, target_price, shares, confidence, reason, tags, is_correct, created_at)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, CURRENT_TIMESTAMP)
+                                """, (
+                                    today,
+                                    r["symbol"],
+                                    r["name"],
+                                    "buy",
+                                    float(r.get("current_price", 0)),
+                                    float(r.get("target_price_1", 0)),
+                                    int(r.get("recommended_shares", 1000)),
+                                    5,
+                                    r.get("reason", "14:45 尾盘选股决策自动入库"),
+                                    ",".join(r.get("triggered_rules", ["尾盘选股", "均线多头"]))
+                                ))
+                        conn.commit()
+                finally:
+                    conn.close()
 
             logger.info(f"✅ 14:45 尾盘选股完成，已自动建档入库 {len(results)} 只待结算标的")
         except Exception as e:
@@ -183,30 +187,34 @@ class ReviewScheduler:
             from pathlib import Path
             db_path = Path("data/prediction.db")
             if db_path.exists() and results:
-                with sqlite3.connect(str(db_path), timeout=15.0) as conn:
-                    conn.execute("PRAGMA journal_mode=WAL")
-                    cursor = conn.cursor()
-                    for r in results[:3]:
-                        cursor.execute("SELECT id FROM prediction_records WHERE record_date=? AND stock_code=?", (today, r["symbol"]))
-                        if not cursor.fetchone():
-                            cursor.execute("""
-                                INSERT INTO prediction_records
-                                (record_date, stock_code, stock_name, direction, entry_price, target_price, shares, confidence, reason, tags, is_correct, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-                            """, (
-                                today,
-                                r["symbol"],
-                                r["name"],
-                                "buy",
-                                float(r.get("current_price", 0)),
-                                float(r.get("target_price_1", 0)),
-                                int(r.get("recommended_shares", 1000)),
-                                5,
-                                r.get("reason", "08:30 盘前预案精选标的自动入库"),
-                                ",".join(r.get("triggered_rules", ["盘前预案", "开盘前精选"])),
-                                f"{today} 08:30:00"
-                            ))
-                    conn.commit()
+                conn = sqlite3.connect(str(db_path), timeout=15.0)
+                try:
+                    with conn:
+                        conn.execute("PRAGMA journal_mode=WAL")
+                        cursor = conn.cursor()
+                        for r in results[:3]:
+                            cursor.execute("SELECT id FROM prediction_records WHERE record_date=? AND stock_code=?", (today, r["symbol"]))
+                            if not cursor.fetchone():
+                                cursor.execute("""
+                                    INSERT INTO prediction_records
+                                    (record_date, stock_code, stock_name, direction, entry_price, target_price, shares, confidence, reason, tags, is_correct, created_at)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                                """, (
+                                    today,
+                                    r["symbol"],
+                                    r["name"],
+                                    "buy",
+                                    float(r.get("current_price", 0)),
+                                    float(r.get("target_price_1", 0)),
+                                    int(r.get("recommended_shares", 1000)),
+                                    5,
+                                    r.get("reason", "08:30 盘前预案精选标的自动入库"),
+                                    ",".join(r.get("triggered_rules", ["盘前预案", "开盘前精选"])),
+                                    f"{today} 08:30:00"
+                                ))
+                        conn.commit()
+                finally:
+                    conn.close()
 
             logger.info("✅ 08:30 Pipeline B 盘前预案执行与标的自动建档完成")
         except Exception as e:

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 量化交易系统 - 启动脚本
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PORT=18000
+PORT=8000
 
 kill_port() {
     local port=$1
@@ -14,16 +14,16 @@ kill_port() {
 }
 
 echo "=========================================="
-echo "   量化交易系统 - 启动脚本"
+echo "   股票交易系统 - 启动脚本"
 echo "=========================================="
 
 # 清理端口
 kill_port $PORT
 
 # 激活虚拟环境并启动
-echo "正在启动量化交易系统..."
+echo "正在启动股票交易系统..."
 cd "$PROJECT_DIR"
 source venv/bin/activate
 python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT
 
-echo "✅ 量化交易系统已启动: http://localhost:$PORT"
+echo "✅ 股票交易系统已启动: http://localhost:$PORT"

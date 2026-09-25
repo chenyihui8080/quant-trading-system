@@ -62,9 +62,10 @@ class StrategyRiskGuard:
         self.highest_price: float = 0.0
         self.daily_pnl: float = 0.0
         self.daily_reset_date: str = ""
+        self.last_pos: int = 0
 
     def on_trade(self, price: float, pos: int, qty: int = 0):
-        """成交回调（qty 默认按 pos 增量推断；显式传入更精确）"""
+        """成交回调（支持自动记录和推断平仓数量以准确累计单日盈亏）"""
         now = datetime.now().strftime("%Y-%m-%d")
         if now != self.daily_reset_date:
             self.daily_pnl = 0.0
@@ -75,15 +76,18 @@ class StrategyRiskGuard:
             self.highest_price = price
         elif pos > 0 and self.entry_price > 0:
             # 加仓：按加权平均更新成本
-            trade_qty = qty if qty > 0 else pos
-            self.entry_price = (self.entry_price * (pos - trade_qty) + price * trade_qty) / pos if pos > 0 else price
+            trade_qty = qty if qty > 0 else max(1, pos - self.last_pos)
+            self.entry_price = (self.entry_price * max(0, pos - trade_qty) + price * trade_qty) / pos if pos > 0 else price
             self.highest_price = max(self.highest_price, price)
         elif pos == 0:
-            if self.entry_price > 0 and qty > 0:
+            trade_qty = qty if qty > 0 else self.last_pos
+            if self.entry_price > 0 and trade_qty > 0:
                 # 平仓：按本次成交股数累计盈亏
-                self.daily_pnl += (price - self.entry_price) * qty
+                self.daily_pnl += (price - self.entry_price) * trade_qty
             self.entry_price = 0.0
             self.highest_price = 0.0
+
+        self.last_pos = pos
 
     def check(self, price: float, pos: int, capital: float) -> RiskResult:
         """策略层风控校验"""
@@ -95,8 +99,9 @@ class StrategyRiskGuard:
                 message="缺少有效入场价，无法计算盈亏比",
             )
 
-        # 止损
         pnl_pct = (price - self.entry_price) / self.entry_price * 100
+
+        # 固定止损
         if pnl_pct <= self.config.stop_loss_pct:
             return RiskResult(
                 passed=False, level="strategy", rule="stop_loss",
@@ -110,17 +115,18 @@ class StrategyRiskGuard:
                 message=f"止盈触发：盈利 {pnl_pct:.2f}%（阈值 {self.config.take_profit_pct}%）",
             )
 
-        # 移动止损
+        # 移动止损：从最高点回撤达到阈值即触发，无论当前是否仍处成本价上方
         self.highest_price = max(self.highest_price, price)
-        drawdown = (price - self.highest_price) / self.highest_price * 100
-        if drawdown <= self.config.trailing_stop_pct and pnl_pct > 0:
-            return RiskResult(
-                passed=False, level="strategy", rule="trailing_stop",
-                message=f"移动止损：从最高点回落 {drawdown:.2f}%",
-            )
+        if self.highest_price > 0:
+            drawdown = (price - self.highest_price) / self.highest_price * 100
+            if drawdown <= self.config.trailing_stop_pct:
+                return RiskResult(
+                    passed=False, level="strategy", rule="trailing_stop",
+                    message=f"移动止损触发：从最高点回落 {drawdown:.2f}%（阈值 {self.config.trailing_stop_pct}%）",
+                )
 
         # 单日最大亏损
-        if self.daily_pnl < 0:
+        if self.daily_pnl < 0 and capital > 0:
             daily_pnl_pct = self.daily_pnl / capital * 100
             if daily_pnl_pct <= self.config.max_daily_loss_pct:
                 return RiskResult(
@@ -131,7 +137,9 @@ class StrategyRiskGuard:
         return passed_result()
 
     def calc_position_size(self, price: float, capital: float) -> int:
-        """计算仓位大小"""
+        """计算仓位大小（杜绝除零崩溃保护）"""
+        if price <= 0:
+            return 0
         max_amount = capital * self.config.max_position_pct / 100
         shares = int(max_amount / price)
         return max(shares // 100 * 100, 100)
@@ -362,9 +370,6 @@ class RiskManager:
             if not r.passed:
                 return r
 
-        # 全部通过后提交频率计数
-        self.platform.check_frequency(strategy_name, commit=True)
-
         # 账户层
         r = self.account.check(symbol, order_price, qty, capital)
         if not r.passed:
@@ -376,12 +381,15 @@ class RiskManager:
             if not r.passed:
                 return r
 
+        # 全部风控检查均通过后再提交频率计数，避免废单占用频率配额
+        self.platform.check_frequency(strategy_name, commit=True)
+
         return passed_result()
 
     # 兼容旧接口
-    def on_trade(self, price: float, pos: int, capital: float):
-        """成交回调（兼容旧代码）"""
-        self.strategy.on_trade(price, pos)
+    def on_trade(self, price: float, pos: int, capital: float, qty: int = 0):
+        """成交回调（兼容旧代码，支持透传成交股数）"""
+        self.strategy.on_trade(price, pos, qty=qty)
         self.account.update_equity(capital)
 
     def check_stop_loss(self, price: float) -> str | None:

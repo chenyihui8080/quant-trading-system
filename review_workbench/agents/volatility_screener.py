@@ -55,14 +55,11 @@ class VolatilityScreener:
 
         # 0. 交易日与休市日合规性严格判定 (杜绝元旦/周末等休市日产生虚假行情快照)
         try:
-            dt_obj = datetime.strptime(current_date, "%Y-%m-%d")
-            # 周六 (5) 或 周日 (6) 判定为周末休市
-            is_weekend = dt_obj.weekday() >= 5
-            # 法定重大休市日判断 (元旦、国庆、五一、春节前后等)
-            is_holiday = (dt_obj.month == 1 and dt_obj.day == 1) or (dt_obj.month == 10 and 1 <= dt_obj.day <= 7) or (dt_obj.month == 5 and 1 <= dt_obj.day <= 3)
+            from utils.trading_calendar import check_trading_day
+            is_trade_day, holiday_reason = check_trading_day(current_date)
             
-            if is_weekend or is_holiday:
-                logger.info(f"⏸️ [{current_date}] 判定为 A 股休市日/周末，停止抓取实时行情，输出真实休市状态。")
+            if not is_trade_day:
+                logger.info(f"⏸️ [{current_date}] 判定为 A 股休市日【{holiday_reason}】，停止抓取实时行情，输出真实休市状态。")
                 holiday_stats = MarketStats(
                     trade_date=current_date,
                     total_stocks=0,
@@ -130,31 +127,20 @@ class VolatilityScreener:
         median_chg = round(float(df["change_pct"].median()), 2) if total_stocks > 0 else 0.0
         total_amount_yi = round(float(df["amount_yi"].sum()), 1) if "amount_yi" in df else 0.0
 
-        # 3. 统计涨停、跌停与真实炸板率 (严格分板块: 主板10%/双创20%/ST 5%)
-        def check_limit_status(row):
-            code = str(row.get("code", "")).strip()
-            name = str(row.get("name", "")).strip()
-            chg = float(row.get("change_pct", 0.0) or 0.0)
-            high = float(row.get("high_pct", 0.0) or 0.0)
+        # 3. 统计涨停、跌停与真实炸板率 (采用高性能向量化运算，严格分板块: 主板10%/双创20%/ST 5%)
+        st_mask = df["name"].astype(str).str.contains("ST|退", na=False)
+        kc_mask = df["code"].astype(str).str.startswith(("30", "688"))
 
-            # 阈值判定
-            if "ST" in name:
-                limit_threshold = 4.9
-            elif code.startswith(("30", "688")):
-                limit_threshold = 19.9
-            else:
-                limit_threshold = 9.9
+        limit_thresholds = pd.Series(9.9, index=df.index)
+        limit_thresholds[st_mask] = 4.9
+        limit_thresholds[kc_mask] = 19.9
 
-            is_up = (chg >= limit_threshold)
-            is_down = (chg <= -limit_threshold)
-            is_broken = (high >= limit_threshold) and (chg < limit_threshold) and (chg > -5.0)
+        chg_s = pd.to_numeric(df["change_pct"], errors="coerce").fillna(0.0)
+        high_s = pd.to_numeric(df["high_pct"], errors="coerce").fillna(0.0) if "high_pct" in df else chg_s
 
-            return pd.Series([is_up, is_down, is_broken], index=["is_up", "is_down", "is_broken"])
-
-        status_df = df.apply(check_limit_status, axis=1)
-        df["is_up"] = status_df["is_up"]
-        df["is_down"] = status_df["is_down"]
-        df["is_broken"] = status_df["is_broken"]
+        df["is_up"] = chg_s >= limit_thresholds
+        df["is_down"] = chg_s <= -limit_thresholds
+        df["is_broken"] = (high_s >= limit_thresholds) & (chg_s < limit_thresholds) & (chg_s > -5.0)
 
         limit_up_df = df[df["is_up"]].copy()
         limit_down_df = df[df["is_down"]]
@@ -167,6 +153,8 @@ class VolatilityScreener:
 
         # 4. 真实并发日K线回溯：计算涨停股真实连续连板数 (彻底废除假连板与换手率瞎猜)
         def fetch_stock_boards(row):
+            import time
+            time.sleep(0.02)  # 轻量防频控防抖
             code = str(row.get("code", "")).strip()
             name = str(row.get("name", "")).strip()
             chg = float(row.get("change_pct", 0.0) or 0.0)
@@ -203,7 +191,7 @@ class VolatilityScreener:
 
         if limit_up_cnt > 0:
             up_rows = [row for _, row in limit_up_df.iterrows()]
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            with ThreadPoolExecutor(max_workers=6) as executor:
                 boards_results = list(executor.map(fetch_stock_boards, up_rows))
 
             for idx, boards in enumerate(boards_results):
@@ -269,17 +257,28 @@ class VolatilityScreener:
         vol_df = df[(df["change_pct"].abs() >= 4.5) | (df["turnover_rate"] >= 4.0)].copy()
         vol_df = vol_df.sort_values(by=["amount_yi", "change_pct"], ascending=[False, False])
 
-        # 行业板块智能打标映射
+        # 行业板块智能打标映射 (优先直连 quant.db 中 80,000+ 条真实行业/概念成分库)
+        sector_dict = self._get_stock_sector_map()
+
         def guess_sector(name: str, code: str) -> str:
-            if any(k in name for k in ["旭创", "易盛", "天孚", "光讯", "剑桥"]): return "CPO/光模块"
-            if any(k in name for k in ["寒武", "华创", "中微", "芯片", "半导", "海光", "龙芯"]): return "芯片半导体"
-            if any(k in name for k in ["海直", "万丰", "宗申", "低空", "飞行"]): return "低空经济"
-            if any(k in name for k in ["中兴", "通信", "移动", "联通"]): return "通信算力"
-            if any(k in name for k in ["药", "生物", "沃森", "恒瑞", "百济"]): return "生物医药"
-            if any(k in name for k in ["金", "银", "铜", "铝", "稀土"]): return "有色资源"
-            if any(k in name for k in ["卫星", "航天", "火箭", "雷科"]): return "商业航天"
-            if code.startswith("688"): return "科创板硬科技"
-            if code.startswith("300"): return "创业板成长"
+            # 1. 优先从真实行业库匹配
+            clean_code = str(code).strip().zfill(6)
+            if clean_code in sector_dict:
+                return sector_dict[clean_code]
+            # 2. 核心龙头与题材关键词精准匹配
+            if any(k in name for k in ["旭创", "易盛", "天孚", "光讯", "剑桥", "太辰"]): return "CPO/光模块"
+            if any(k in name for k in ["寒武", "华创", "中微", "芯片", "半导", "海光", "龙芯", "圣邦", "兆易"]): return "芯片半导体"
+            if any(k in name for k in ["海直", "万丰", "宗申", "低空", "飞行", "亿航", "中信海直"]): return "低空经济"
+            if any(k in name for k in ["中兴", "通信", "移动", "联通", "新易盛", "紫光"]): return "通信算力"
+            if any(k in name for k in ["药", "生物", "沃森", "恒瑞", "百济", "复星", "药明"]): return "生物医药"
+            if any(k in name for k in ["金", "银", "铜", "铝", "稀土", "北方稀土", "紫金"]): return "有色资源"
+            if any(k in name for k in ["卫星", "航天", "火箭", "雷科", "航天电子"]): return "商业航天"
+            if any(k in name for k in ["特高压", "电网", "西电", "保变", "平高"]): return "智能电网"
+            if any(k in name for k in ["锂", "电池", "宁德", "比亚迪", "赣锋", "天齐"]): return "固态/锂电池"
+            # 3. 板块市场属性兜底
+            if clean_code.startswith("688"): return "科创板硬科技"
+            if clean_code.startswith("300"): return "创业板成长"
+            if clean_code.startswith("8") or clean_code.startswith("4"): return "北交所创新"
             return "主板核心题材"
 
         volatility_pool = []
@@ -392,36 +391,122 @@ class VolatilityScreener:
 
         return None
 
+    def _get_stock_sector_map(self) -> dict[str, str]:
+        """从本地行业成分库加载真实全市场行业映射字典 (结合 industry_constituents.json 与 quant.db 精品龙头标注)"""
+        if hasattr(self, "_cached_sector_map") and self._cached_sector_map:
+            return self._cached_sector_map
+
+        sector_dict = {}
+        # 1. 优先读取 49 大官方行业全量映射表 (涵盖近 3000 只上市公司真实行业)
+        try:
+            ind_json = Path(__file__).resolve().parent.parent.parent / "data" / "industry_constituents.json"
+            if ind_json.exists():
+                import json
+                with open(ind_json, "r", encoding="utf-8") as f:
+                    ind_data = json.load(f)
+                    for sec_name, sec_info in ind_data.items():
+                        stocks = sec_info.get("stocks", [])
+                        for st in stocks:
+                            c = str(st.get("code", "")).strip().zfill(6)
+                            if c:
+                                sector_dict[c] = sec_name.replace("行业", "")
+        except Exception as je:
+            logger.warning(f"读取 industry_constituents.json 异常: {je}")
+
+        # 2. 结合 quant.db 中的精品龙头真实精细标注进行高优先级覆盖与补充
+        try:
+            db_file = Path(__file__).resolve().parent.parent.parent / "data" / "quant.db"
+            if db_file.exists():
+                conn = sqlite3.connect(str(db_file), timeout=15.0)
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT stock_code, sector_name 
+                        FROM sector_constituents 
+                        WHERE business NOT LIKE '%A股上市公司，主营%' AND sector_type = 'industry'
+                    """)
+                    for code, sec in cursor.fetchall():
+                        c_str = str(code).strip().zfill(6)
+                        if c_str and sec:
+                            sector_dict[c_str] = sec.strip()
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger.warning(f"从 quant.db 读取精品龙头行业成分轻微异常: {e}")
+
+        self._cached_sector_map = sector_dict
+        return sector_dict
+
     def _get_all_a_stock_symbols(self) -> list[str]:
-        """获取全市场 A 股真实在交易股票代码列表 (带内存缓存)"""
+        """获取全市场 A 股真实在交易股票代码列表 (带内存缓存与自动持久化更新)"""
         if self._cached_symbols and len(self._cached_symbols) > 4000:
             return self._cached_symbols
 
         stocks = []
-        # 通道 1: 东方财富全球全市场快照实时代码
+        local_map = Path(__file__).resolve().parent.parent.parent / "data" / "stock_name_code_map.json"
+        is_stale = True
+
+        # 通道 0: 优先读取本地持久化 A 股代码字典
+        try:
+            if local_map.exists():
+                # 检查文件修改时间，若小于 7 天则视为新鲜有效
+                mtime = local_map.stat().st_mtime
+                if (time.time() - mtime) < 7 * 86400:
+                    is_stale = False
+
+                import json
+                with open(local_map, "r", encoding="utf-8") as f:
+                    name_code = json.load(f)
+                    for _, c in name_code.items():
+                        c_str = str(c).strip().zfill(6)
+                        if c_str.startswith(("60", "68")):
+                            stocks.append(f"sh{c_str}")
+                        elif c_str.startswith(("00", "30")):
+                            stocks.append(f"sz{c_str}")
+                if len(stocks) >= 4000 and not is_stale:
+                    self._cached_symbols = stocks
+                    return stocks
+        except Exception as le:
+            logger.warning(f"读取本地代码映射异常: {le}")
+
+        # 通道 1: 东方财富全球全市场快照实时代码 (若本地映射过期，则同时触发自动回写更新)
         try:
             em_url = "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6000&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f12,f13,f14"
-            resp = requests.get(em_url, timeout=4, headers={"User-Agent": "Mozilla/5.0"})
+            resp = requests.get(em_url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
             if resp.status_code == 200:
                 data = resp.json()
                 items = data.get("data", {}).get("diff", [])
+                fresh_name_code = {}
                 for it in items:
                     c = str(it.get("f12", "")).strip()
                     m = int(it.get("f13", 0))
+                    n = str(it.get("f14", "")).strip()
                     if c and len(c) == 6:
                         prefix = "sh" if m == 1 else "sz"
                         stocks.append(f"{prefix}{c}")
+                        if n:
+                            fresh_name_code[n] = c
+
+                # 若本地过期且拉取到超过 4000 只标的，自动持久化刷新 stock_name_code_map.json
+                if is_stale and len(fresh_name_code) >= 4000:
+                    try:
+                        import json
+                        local_map.parent.mkdir(parents=True, exist_ok=True)
+                        with open(local_map, "w", encoding="utf-8") as f:
+                            json.dump(fresh_name_code, f, ensure_ascii=False, indent=2)
+                        logger.info(f"✅ 自动更新并持久化全市场 A 股映射表: {len(fresh_name_code)} 只标的")
+                    except Exception as we:
+                        logger.warning(f"自动持久化更新 stock_name_code_map 失败: {we}")
         except Exception as e:
             logger.warning(f"东财接口拉取全市场代码列表轻微异常: {e}")
 
-        # 通道 2: 动态当前交易日 Baostock 兜底
-        # 非交易日（周末/节假日）当日 query_all_stock 返回空，需向前回溯最近交易日
+        # 通道 2: 动态当前交易日 Baostock 兜底 (最多回溯 2 天，避免长时卡死)
         if not stocks or len(stocks) < 1000:
             try:
                 import baostock as bs
                 bs.login()
                 candidate_day = datetime.now().strftime("%Y-%m-%d")
-                for _ in range(15):
+                for _ in range(2):
                     rs = bs.query_all_stock(day=candidate_day)
                     tmp = []
                     while rs.next():
@@ -434,7 +519,6 @@ class VolatilityScreener:
                     if len(tmp) >= 1000:
                         stocks = tmp
                         break
-                    # 当日无数据，向前回退一天继续尝试
                     dt = datetime.strptime(candidate_day, "%Y-%m-%d") - timedelta(days=1)
                     candidate_day = dt.strftime("%Y-%m-%d")
                 bs.logout()
@@ -447,29 +531,9 @@ class VolatilityScreener:
 
 
     def _get_fallback_quote_data(self) -> pd.DataFrame:
-        """从本地 SQLite 数据库读取最近一次成功的真实全市场快照 (绝不伪造虚假固定股票)"""
-        try:
-            db_file = Path(__file__).resolve().parent.parent / "data" / "review.db"
-            if db_file.exists():
-                with sqlite3.connect(str(db_file)) as conn:
-                    # 从最近一个交易日的真实观察池中还原数据
-                    query = """
-                        SELECT stock_code as code, stock_name as name, close_price as price,
-                               change_pct, turnover_rate, amount_yi, sector_name
-                        FROM core_watchlists
-                        WHERE close_price > 0
-                        ORDER BY id DESC LIMIT 100
-                    """
-                    df_cache = pd.read_sql_query(query, conn)
-                    if not df_cache.empty:
-                        df_cache["high_pct"] = df_cache["change_pct"]
-                        df_cache["consecutive_boards"] = 1
-                        logger.info(f"✅ 从本地 SQLite 读取到最近历史有效真实快照 {len(df_cache)} 条记录")
-                        return df_cache
-        except Exception as e:
-            logger.warning(f"读取本地离线快照轻微异常: {e}")
-
-        # 彻底无数据时诚实返回空 DataFrame，绝不制造假数据
+        """从本地 SQLite 数据库读取全市场快照 (实事求是，绝不以观察池 100 只自选冒充全市场 5000+ 标的)"""
+        # 严格规约：core_watchlists 是过滤后的重点观察池，不可用来推算全市场涨跌中位数和全市场成交额
+        # 若网络不可用且无全量离线行情快照，坚决返回空 DataFrame 由系统诚实提示降级，绝不制造假统计
         return pd.DataFrame()
 
 

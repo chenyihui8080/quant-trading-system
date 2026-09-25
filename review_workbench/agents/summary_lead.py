@@ -176,7 +176,8 @@ class SummaryLead:
 
         # 6. 安全持久化存入 daily_reviews 表 (自愈式建表保护)
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(str(DB_PATH)) as conn:
+        conn = sqlite3.connect(str(DB_PATH), timeout=15.0)
+        try:
             cursor = conn.cursor()
             from review_workbench.scripts.init_db import init_database
             try:
@@ -199,6 +200,8 @@ class SummaryLead:
                 json.dumps(degraded, ensure_ascii=False)
             ))
             conn.commit()
+        finally:
+            conn.close()
 
 
         review_result = {

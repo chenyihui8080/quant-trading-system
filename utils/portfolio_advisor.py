@@ -7,6 +7,7 @@
 """
 import json
 import math
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Optional, List, Dict, Any
 from utils.realtime import get_realtime_quote, get_realtime_kline
 from utils.alpha_engine import alpha_engine
 
+logger = logging.getLogger("PortfolioAdvisor")
 DATA_FILE = Path(__file__).parent.parent / "data" / "portfolio.json"
 
 
@@ -141,7 +143,7 @@ class PortfolioStore:
             self.total_capital = 0.0
             self.available_cash = 0.0
 
-    def save(self):
+    def save(self, force: bool = False):
         """保存到文件（内置数据校验与断流防空覆盖保护）"""
         DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
         existing_data = {}
@@ -158,10 +160,10 @@ class PortfolioStore:
             legacy_data = existing_data if isinstance(existing_data, dict) else {}
             users = {"default": legacy_data}
 
-        # 数据防断裂保护：若原用户存在有效持仓，而新数据因网络或Cookie掉线导致持仓为空，拒绝空数据覆写
+        # 数据防断裂保护：若原用户存在有效持仓，而新数据因网络或Cookie掉线导致持仓为空，拒绝空数据覆写（用户主动清空 force=True 时除外）
         old_user_data = users.get(self.current_user, {})
         old_pos = old_user_data.get("positions", {})
-        if old_pos and len(self.positions) == 0 and len(self.history_trades) == 0:
+        if not force and old_pos and len(self.positions) == 0 and len(self.history_trades) == 0:
             logger.warning(f"⚠️ [数据保护] 检测到用户 {self.current_user} 实盘持仓异常置空，已触发熔断保护拒绝覆盖！")
             return
 

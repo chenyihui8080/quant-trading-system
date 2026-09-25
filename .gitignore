@@ -98,3 +98,15 @@ checkpoints/
 # 量化系统
 old/
 
+# 敏感密钥与初始化凭证
+.jwt_secret
+data/.jwt_secret
+data/.admin_initial_password
+data/.sync_token
+*.sync_token
+*.jwt_secret
+
+# 本地运行时缓存与重构临时备份
+.backup_refactor/
+review_workbench/data/*.json
+data/twenty_questions_test_results.json

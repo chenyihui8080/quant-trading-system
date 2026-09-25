@@ -21,6 +21,21 @@ import requests
 logger = logging.getLogger("SectorFundFlow")
 
 
+def _safe_float(val, default: float = 0.0) -> float:
+    """安全浮点数转换，健壮拦截停牌股 '-'、None、空字符等脏数据，杜绝 ValueError 异常"""
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    val_str = str(val).strip()
+    if not val_str or val_str in ("-", "--", "None", "null", "NaN"):
+        return default
+    try:
+        return float(val_str.replace(",", ""))
+    except (ValueError, TypeError):
+        return default
+
+
 @dataclass
 class SectorFlowItem:
     """板块资金流向数据结构 (企业级严格定义)"""
@@ -47,7 +62,7 @@ class SectorFundFlowFetcher:
         self._cache_concept: list[dict] = []
         self._last_update_industry: float = 0.0
         self._last_update_concept: float = 0.0
-        self._cache_ttl = 45.0  # 45秒缓存刷新机制，兼顾实时性并防止高频阻塞
+        self._cache_ttl = 90.0  # 90秒缓存刷新机制，兼顾实时性并彻底防止并发排队阻塞
         self._fetch_lock = threading.Lock()  # 抓取互斥锁
         self._name_code_index: dict[str, str] = {}
         self._name_code_index_ts: float = 0.0
@@ -217,8 +232,8 @@ class SectorFundFlowFetcher:
             for it in items:
                 name = it.get("f14", "")
                 code = it.get("f12", "")
-                chg = float(it.get("f3") or 0.0)
-                raw_net = float(it.get("f62") or 0.0)
+                chg = _safe_float(it.get("f3"))
+                raw_net = _safe_float(it.get("f62"))
                 net_yi = round(raw_net / 100000000.0, 2)
                 
                 # 估算总成交与流入流出
@@ -226,7 +241,7 @@ class SectorFundFlowFetcher:
                 est_outflow = round(est_inflow - net_yi, 2)
                 
                 leader_name = it.get("f140") or it.get("f128") or name
-                leader_chg = float(it.get("f136") or chg)
+                leader_chg = _safe_float(it.get("f136"), default=chg)
 
                 parsed_list.append(asdict(SectorFlowItem(
                     sector_name=name,
@@ -323,14 +338,14 @@ class SectorFundFlowFetcher:
             for it in items:
                 name = it.get("f14", "")
                 code = it.get("f12", "")
-                chg = float(it.get("f3") or 0.0)
-                raw_net = float(it.get("f62") or 0.0)
+                chg = _safe_float(it.get("f3"))
+                raw_net = _safe_float(it.get("f62"))
                 net_yi = round(raw_net / 100000000.0, 2)
                 
                 est_inflow = round(abs(net_yi) * 1.5 + max(net_yi, 0), 2)
                 est_outflow = round(est_inflow - net_yi, 2)
                 leader_name = it.get("f140") or it.get("f128") or name
-                leader_chg = float(it.get("f136") or chg)
+                leader_chg = _safe_float(it.get("f136"), default=chg)
 
                 parsed_list.append(asdict(SectorFlowItem(
                     sector_name=name,

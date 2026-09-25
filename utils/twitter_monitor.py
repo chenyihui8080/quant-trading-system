@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 import logging
 import urllib.parse
 from typing import Optional, List, Dict, Any, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 import requests
 
@@ -51,6 +51,28 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 CONFIG_FILE_PATH = DATA_DIR / "twitter_config.json"
 DB_FILE_PATH = DATA_DIR / "twitter_intel.db"
 AUTHORS_CUSTOM_FILE = DATA_DIR / "twitter_authors_custom.json"
+
+from contextlib import contextmanager
+
+@contextmanager
+def get_intel_db():
+    """安全上下文管理器：退出时自动提交事务并显式调用 close()，彻底杜绝句柄泄漏"""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_FILE_PATH, timeout=20.0)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 # 推特官方 Web Client 公共 Bearer Token
 TWITTER_BEARER_TOKEN = (
@@ -98,7 +120,24 @@ FAMOUS_STOCKS_DICT = {
     "海光信息": {"symbol": "688041", "name": "海光信息", "market": "A"},
     "寒武纪": {"symbol": "688256", "name": "寒武纪", "market": "A"},
     "三花智控": {"symbol": "002050", "name": "三花智控", "market": "A"},
-    "德赛西威": {"symbol": "002920", "name": "德赛西威", "market": "A"}
+    "德赛西威": {"symbol": "002920", "name": "德赛西威", "market": "A"},
+    # 核心A股实盘大V常推个股补充
+    "宁德时代": {"symbol": "300750", "name": "宁德时代", "market": "A"},
+    "宁王": {"symbol": "300750", "name": "宁德时代", "market": "A"},
+    "比亚迪": {"symbol": "002594", "name": "比亚迪", "market": "A"},
+    "亚星锚链": {"symbol": "601890", "name": "亚星锚链", "market": "A"},
+    "黑猫股份": {"symbol": "002068", "name": "黑猫股份", "market": "A"},
+    "三力士": {"symbol": "002224", "name": "三力士", "market": "A"},
+    "海目星": {"symbol": "688559", "name": "海目星", "market": "A"},
+    "星源材质": {"symbol": "300568", "name": "星源材质", "market": "A"},
+    "贵州茅台": {"symbol": "600519", "name": "贵州茅台", "market": "A"},
+    "茅台": {"symbol": "600519", "name": "贵州茅台", "market": "A"},
+    "立讯精密": {"symbol": "002475", "name": "立讯精密", "market": "A"},
+    "歌尔股份": {"symbol": "002241", "name": "歌尔股份", "market": "A"},
+    "蓝思科技": {"symbol": "300433", "name": "蓝思科技", "market": "A"},
+    "中国卫星": {"symbol": "600118", "name": "中国卫星", "market": "A"},
+    "山东黄金": {"symbol": "600547", "name": "山东黄金", "market": "A"},
+    "紫金矿业": {"symbol": "601899", "name": "紫金矿业", "market": "A"}
 }
 
 
@@ -255,6 +294,9 @@ AUTHOR_PROFILE_MAP = {
     "snake_w": {
         "category": "A_STOCK",
         "name": "Crypto/戒色交易员",
+        "source_type": "following",
+        "title": "A股实战操盘手 · 仓位管理",
+        "recommend_reason": "您的关注大V：专注A股实盘仓位管理、大盘窄幅震荡避险、海南/农业防御板块与高低切",
         "is_vip": True,
         "desc": "【特级重点关注 VIP】仓位管理、大盘窄幅震荡预判、海南/农业防御板块与通达信指标",
         "focus_topics": ["大盘震荡", "海南板块", "农业防御", "通达信指标", "实盘仓位"]
@@ -262,6 +304,9 @@ AUTHOR_PROFILE_MAP = {
     "dacefupan": {
         "category": "A_STOCK",
         "name": "🇨🇳 大策复盘",
+        "source_type": "following",
+        "title": "A股复盘教练 · 连板情绪周期",
+        "recommend_reason": "您的关注大V：每日收盘全市场情绪复盘、连板热点梯队研判与短线情绪周期分析",
         "is_vip": False,
         "desc": "A股盘后全市场复盘、连板热点梯队与短线情绪周期分析",
         "focus_topics": ["每日大盘复盘", "连板梯队", "短线情绪", "热点题材"]
@@ -269,6 +314,9 @@ AUTHOR_PROFILE_MAP = {
     "aiwangupiao": {
         "category": "A_STOCK",
         "name": "爱玩股票AiWanGuPiao",
+        "source_type": "following",
+        "title": "A股短线量化 · 选股与买卖点",
+        "recommend_reason": "您的关注大V：每日午评/收评及时客观，短线选股策略与实战买卖点研判",
         "is_vip": False,
         "desc": "短线选股策略、买卖点量化判定与实盘操作心得",
         "focus_topics": ["短线选股", "实战买卖点", "量化波段"]
@@ -276,6 +324,9 @@ AUTHOR_PROFILE_MAP = {
     "xiajingfa8": {
         "category": "A_STOCK",
         "name": "证势交易",
+        "source_type": "following",
+        "title": "趋势交易体系 · 宏观与周期战法",
+        "recommend_reason": "您的关注大V：盘面技术形态、美元宏观推演、农业与大宗商品周期轮动战法",
         "is_vip": False,
         "desc": "盘面技术形态、趋势推演与实盘交易系统构建",
         "focus_topics": ["趋势推演", "技术形态", "交易系统"]
@@ -285,6 +336,9 @@ AUTHOR_PROFILE_MAP = {
     "asiafinance": {
         "category": "MACRO_GLOBAL",
         "name": "亚洲金融 Asia Finance",
+        "source_type": "following",
+        "title": "全球资本观察 · 亚太与中概股",
+        "recommend_reason": "您的关注大V：亚太资本流动、中概股深度剖析、外资动向与宏观金融大事件",
         "is_vip": False,
         "desc": "亚太资本流动、中概股深度剖析、外资动向与宏观金融大事件",
         "focus_topics": ["亚太资本", "中概股", "外资流动", "宏观金融"]
@@ -292,6 +346,9 @@ AUTHOR_PROFILE_MAP = {
     "supfin": {
         "category": "MACRO_GLOBAL",
         "name": "超级财经 SuperFinance",
+        "source_type": "following",
+        "title": "全球跨国财报 · 美联储数据跟踪",
+        "recommend_reason": "您的关注大V：全球跨国企业财报、美联储宏观经济数据与金融市场联动",
         "is_vip": False,
         "desc": "全球跨国企业财报、美联储宏观经济数据与金融市场联动",
         "focus_topics": ["美联储政策", "全球财报", "宏观利率"]
@@ -299,6 +356,9 @@ AUTHOR_PROFILE_MAP = {
     "ifinance": {
         "category": "MACRO_GLOBAL",
         "name": "iFinance",
+        "source_type": "following",
+        "title": "海外指数速递 · 外汇与大宗商品",
+        "recommend_reason": "您的关注大V：全球指数、外汇大宗与美股市场快速行情速递",
         "is_vip": False,
         "desc": "全球指数、外汇大宗与美股市场快速行情速递",
         "focus_topics": ["全球指数", "美股行情", "大宗商品"]
@@ -306,6 +366,9 @@ AUTHOR_PROFILE_MAP = {
     "globalmoney": {
         "category": "MACRO_GLOBAL",
         "name": "全球货币 Global Money",
+        "source_type": "following",
+        "title": "全球外汇智库 · 美元与离岸汇率",
+        "recommend_reason": "您的关注大V：全球离岸人民币、美元指数与央行外汇货币政策分析",
         "is_vip": False,
         "desc": "全球离岸人民币、美元指数与央行外汇货币政策分析",
         "focus_topics": ["货币政策", "汇率波动", "央行流动性"]
@@ -313,6 +376,9 @@ AUTHOR_PROFILE_MAP = {
     "ceobriefing": {
         "category": "MACRO_GLOBAL",
         "name": "总裁简报 CEO Briefing",
+        "source_type": "following",
+        "title": "商业宏观决策 · 跨国巨头战略",
+        "recommend_reason": "您的关注大V：商业经济要闻、宏观产业政策与跨国巨头战略动向",
         "is_vip": False,
         "desc": "商业经济要闻、宏观产业政策与跨国巨头战略动向",
         "focus_topics": ["商业经济", "宏观政策", "跨国巨头"]
@@ -322,6 +388,9 @@ AUTHOR_PROFILE_MAP = {
     "stanleysobest": {
         "category": "TECH_INDUSTRY",
         "name": "Stanley",
+        "source_type": "following",
+        "title": "果链硬件专家 · 苹果与消费电子",
+        "recommend_reason": "您的关注大V：苹果供应链（立讯/歌尔/蓝思等）、消费电子与数码硬件出货研判",
         "is_vip": False,
         "desc": "苹果供应链（立讯/歌尔/蓝思等）、消费电子、iPhone及数码科技硬件",
         "focus_topics": ["果链代工", "消费电子", "手机供应链", "科技硬件"]
@@ -329,6 +398,9 @@ AUTHOR_PROFILE_MAP = {
     "weiyux2021": {
         "category": "TECH_INDUSTRY",
         "name": "动物园园长",
+        "source_type": "following",
+        "title": "华强北芯片行家 · 现货价格行情",
+        "recommend_reason": "您的关注大V：华强北电子行情、元器件芯片流通现货价格、供应链一线动态",
         "is_vip": False,
         "desc": "华强北电子行情、元器件芯片流通价格、数码硬件供应链一手动态",
         "focus_topics": ["华强北电子", "数码硬件", "元器件行情", "供应链流通"]
@@ -336,6 +408,9 @@ AUTHOR_PROFILE_MAP = {
     "vincent_ainotes": {
         "category": "TECH_INDUSTRY",
         "name": "Vincent",
+        "source_type": "following",
+        "title": "AI算力与智能体 · 英伟达集群",
+        "recommend_reason": "您的关注大V：AI Agent、智能体落地框架、英伟达 Blackwell 算力集群应用",
         "is_vip": False,
         "desc": "AI Agent、智能体落地框架、英伟达 Blackwell 算力集群与大模型应用",
         "focus_topics": ["AI Agent", "英伟达算力", "大模型落地", "光模块算力"]
@@ -343,6 +418,9 @@ AUTHOR_PROFILE_MAP = {
     "berryxia": {
         "category": "TECH_INDUSTRY",
         "name": "Berryxia.AI",
+        "source_type": "following",
+        "title": "生成式AI评测 · 工具生态跟踪",
+        "recommend_reason": "您的关注大V：生成式 AI 应用评测、AI 生产力工具与前沿科技创新",
         "is_vip": False,
         "desc": "生成式 AI 应用评测、AI 生产力工具与前沿科技创新",
         "focus_topics": ["AI应用工具", "大模型前沿", "科技软件生态"]
@@ -350,6 +428,9 @@ AUTHOR_PROFILE_MAP = {
     "aleabitoreddit": {
         "category": "TECH_INDUSTRY",
         "name": "Serenity",
+        "source_type": "following",
+        "title": "硅谷半导体分析师 · 光通信与芯片",
+        "recommend_reason": "您的关注大V：先进制程芯片、光通信展会渠道核查、智驾硬件与算力基础设施",
         "is_vip": False,
         "desc": "先进制程芯片、激光与光刻设备、智能驾驶高精传感硬件",
         "focus_topics": ["半导体芯片", "光刻激光", "智驾硬件"]
@@ -463,25 +544,12 @@ AUTHOR_PROFILE_MAP = {
     },
 
     # ── 💡 系统精选/推荐大V (Curated) ──
-    "elonmusk": {
-        "category": "TECH_INDUSTRY",
-        "source_type": "curated",
-        "name": "Elon Musk",
-        "is_vip": False,
-        "desc": "【系统精选】特斯拉、SpaceX、xAI 创始人，全球科技与智能硬件风向标",
-        "focus_topics": ["特斯拉", "Robotaxi", "FSD", "xAI", "算力集群"]
-    },
-    "sama": {
-        "category": "TECH_INDUSTRY",
-        "source_type": "curated",
-        "name": "Sam Altman",
-        "is_vip": False,
-        "desc": "【系统精选】OpenAI CEO，大模型与生成式 AI 算力基础设施战略",
-        "focus_topics": ["OpenAI", "ChatGPT", "算力集群", "AI智能体"]
-    },
+    # ── 💡 系统精选/推荐大V (Curated) ──
     "tier10k": {
         "category": "MACRO_GLOBAL",
         "source_type": "curated",
+        "title": "华尔街第一手 · 彭博路透突发快讯",
+        "recommend_reason": "彭博/路透一手突发金融新闻秒级推特搬运，比国内财经快10~30分钟",
         "name": "tier10k",
         "is_vip": False,
         "desc": "【系统精选】华尔街突发金融要闻、美联储政策与全球快讯",
@@ -490,14 +558,38 @@ AUTHOR_PROFILE_MAP = {
     "zerohedge": {
         "category": "MACRO_GLOBAL",
         "source_type": "curated",
+        "title": "宏观对冲智库 · 全球流动性研判",
+        "recommend_reason": "全球宏观对冲基金必读深度宏观研判，涵盖美债流动性与地缘危机",
         "name": "ZeroHedge",
         "is_vip": False,
         "desc": "【系统精选】全球宏观流动性、美债收益率、地缘政治与对冲基金深度投研",
         "focus_topics": ["宏观对冲", "流动性", "美债市场"]
     },
+    "elonmusk": {
+        "category": "TECH_INDUSTRY",
+        "source_type": "curated",
+        "title": "科技产业巨头 · 特斯拉与AI算力",
+        "recommend_reason": "特斯拉、SpaceX、xAI 创始人，全球科技硬件、智驾FSD与AI算力集群风向标",
+        "name": "Elon Musk",
+        "is_vip": False,
+        "desc": "【系统精选】特斯拉、SpaceX、xAI 创始人，全球科技与智能硬件风向标",
+        "focus_topics": ["特斯拉", "Robotaxi", "FSD", "xAI", "算力集群"]
+    },
+    "sama": {
+        "category": "TECH_INDUSTRY",
+        "source_type": "curated",
+        "title": "前沿AI舵手 · OpenAI算力基础设施",
+        "recommend_reason": "OpenAI CEO，大模型训练集群与全球芯片供应链需求的最核心源头",
+        "name": "Sam Altman",
+        "is_vip": False,
+        "desc": "【系统精选】OpenAI CEO，大模型与生成式 AI 算力基础设施战略",
+        "focus_topics": ["OpenAI", "ChatGPT", "算力集群", "AI智能体"]
+    },
     "wublockchain": {
         "category": "NON_STOCK",
         "source_type": "curated",
+        "title": "行业资讯 · 加密监管动态",
+        "recommend_reason": "加密货币海外监管动态与行业热点跟踪",
         "name": "吴说区块链",
         "is_vip": False,
         "desc": "【系统精选】加密货币行业动态与海外监管跟踪",
@@ -610,6 +702,16 @@ class TwitterTweetItem:
     importance_score: int = 1             # 重要性评级 (3: 直接谈及股票标的[置顶/标星], 2: 核心产业链, 1: 宏观泛动态)
     is_demo: bool = False                 # 是否为演示模拟数据
     source_type: str = "following"        # ⭐️ 来源归属：following(我关注的), curated(系统精选)
+    media_urls: List[str] = field(default_factory=list)  # ⭐️ 推文包含的高清配图/媒体封面直链列表
+    hit_holding: bool = False                            # ⭐️ 实战穿透：是否精准命中当前用户的实盘持仓
+    hit_holding_symbol: str = ""                         # 命中实盘标的代码 (如 159278)
+    hit_holding_name: str = ""                           # 命中实盘标的名称 (如 机器人PH)
+    hit_holding_shares: int = 0                          # 命中实盘当前持仓股数
+    hit_watchlist: bool = False                          # ⭐️ 实战联动：是否精准命中当前用户的自选监控池
+    hit_watchlist_symbol: str = ""                       # 命中自选监控标的代码 (如 002617)
+    hit_watchlist_name: str = ""                         # 命中自选监控标的名称 (如 露笑科技)
+    is_noise: bool = False                               # ⭐️ AI 审查：是否属于引流/打卡/黑客琐事等噪音推文
+    ai_reason: str = ""                                  # ⭐️ AI 审查依据或判定标签
 
 
 class TwitterMonitorEngine:
@@ -671,11 +773,21 @@ class TwitterMonitorEngine:
             self._save_config_file(default_cfg)
         return default_cfg
 
+    def _save_config_file(self, config_dict: Dict[str, Any]):
+        """将推特最新监控配置与认证令牌持久化写入磁盘文件"""
+        try:
+            CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
+                json.dump(config_dict, f, ensure_ascii=False, indent=2)
+            logger.info("💾 推特监控配置文件已安全持久化写入磁盘")
+        except Exception as e:
+            logger.error(f"写入推特配置文件异常: {e}")
+
     def _init_db(self):
         """初始化 SQLite 本地持久化数据库，确保推文数据永久沉淀，并构建 FTS5 全文检索引擎"""
         try:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS twitter_tweets (
@@ -707,6 +819,22 @@ class TwitterMonitorEngine:
                     cursor.execute("ALTER TABLE twitter_tweets ADD COLUMN source_type TEXT DEFAULT 'following'")
                 except Exception:
                     pass
+                # 兼容升级：增加推文配图直链 media_urls 列表
+                try:
+                    cursor.execute("ALTER TABLE twitter_tweets ADD COLUMN media_urls TEXT DEFAULT '[]'")
+                except Exception:
+                    pass
+                # 兼容升级：增加 AI 审查噪音标记与依据
+                try:
+                    cursor.execute("ALTER TABLE twitter_tweets ADD COLUMN is_noise INTEGER DEFAULT 0")
+                except Exception:
+                    pass
+                try:
+                    cursor.execute("ALTER TABLE twitter_tweets ADD COLUMN ai_reason TEXT DEFAULT ''")
+                except Exception:
+                    pass
+
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_twitter_noise ON twitter_tweets(is_noise)")
 
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_twitter_ts ON twitter_tweets(created_timestamp DESC)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_twitter_stock ON twitter_tweets(has_stock_mention)")
@@ -848,10 +976,15 @@ class TwitterMonitorEngine:
         """获取所有关注博主详细清单 (包含发推数量、最新发推时间、当前分组、VIP状态)"""
         authors = []
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT author_handle, COUNT(*) as cnt, MAX(created_timestamp) as latest_ts, MAX(author_name), MAX(author_avatar)
+                    SELECT author_handle, 
+                           SUM(CASE WHEN is_noise = 0 THEN 1 ELSE 0 END) as clean_cnt,
+                           COUNT(*) as total_cnt, 
+                           MAX(created_timestamp) as latest_ts, 
+                           MAX(author_name), 
+                           MAX(author_avatar)
                     FROM twitter_tweets
                     GROUP BY author_handle
                 """)
@@ -859,10 +992,11 @@ class TwitterMonitorEngine:
                 for r in cursor.fetchall():
                     h = (r[0] or "").lower().replace("@", "").strip()
                     stats_map[h] = {
-                        "count": int(r[1] or 0),
-                        "latest_ts": float(r[2] or 0),
-                        "name": r[3] or "",
-                        "avatar": r[4] or ""
+                        "clean_count": int(r[1] or 0),
+                        "total_count": int(r[2] or 0),
+                        "latest_ts": float(r[3] or 0),
+                        "name": r[4] or "",
+                        "avatar": r[5] or ""
                     }
 
                 cursor.execute("SELECT handle, name, category, is_vip, desc, avatar, source_type, updated_at FROM twitter_author_profiles")
@@ -879,6 +1013,16 @@ class TwitterMonitorEngine:
                         except Exception:
                             pass
 
+                    # ⭐️ 核心改进：tweet_count 默认为纯净金融情报数量，杜绝“胶囊显示1条点进去却查无数据”的矛盾
+                    clean_cnt = st.get("clean_count", 0)
+                    total_cnt = st.get("total_count", 0)
+
+                    prof_mem = AUTHOR_PROFILE_MAP.get(h, {})
+                    src_val = r[6] or prof_mem.get("source_type", "following")
+                    default_title = "A股实战操盘" if cat_k == "A_STOCK" else ("科技供应链" if cat_k == "TECH_INDUSTRY" else ("宏观全球资产" if cat_k == "MACRO_GLOBAL" else "财经资讯"))
+                    title_val = prof_mem.get("title") or default_title
+                    reason_val = prof_mem.get("recommend_reason") or prof_mem.get("desc") or r[4] or ""
+
                     authors.append({
                         "handle": h,
                         "name": r[1] or st.get("name") or h,
@@ -890,9 +1034,13 @@ class TwitterMonitorEngine:
                         "category_color": cat_meta["color"],
                         "category_icon": cat_meta["icon"],
                         "is_vip": bool(r[3]),
+                        "title": title_val,
+                        "recommend_reason": reason_val,
                         "desc": r[4] or "",
-                        "source_type": r[6] or "following",
-                        "tweet_count": st.get("count", 0),
+                        "source_type": src_val,
+                        "source_type_name": "我关注的" if src_val == "following" else "系统推荐",
+                        "tweet_count": clean_cnt,
+                        "total_tweet_count": total_cnt,
                         "latest_tweet_time": latest_time_str,
                         "updated_at": r[7] or ""
                     })
@@ -911,7 +1059,7 @@ class TwitterMonitorEngine:
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT handle, name, category, is_vip, desc, avatar, source_type FROM twitter_author_profiles WHERE handle = ?", (clean_h,))
                 row = cursor.fetchone()
@@ -971,7 +1119,7 @@ class TwitterMonitorEngine:
         """一键恢复所有博主分组为系统推荐默认分类体系"""
         try:
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 for h, p in DEFAULT_AUTHOR_PROFILE_MAP.items():
                     cursor.execute("""
@@ -1007,7 +1155,7 @@ class TwitterMonitorEngine:
             return {"success": False, "message": "推文 ID 不能为空"}
 
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT text_raw, text_translated, author_name, author_handle, related_concept FROM twitter_tweets WHERE id = ?", (clean_id,))
                 row = cursor.fetchone()
@@ -1028,7 +1176,7 @@ class TwitterMonitorEngine:
                 translated_text = raw_text
 
             # 永久回写至 SQLite 数据库并更新 FTS5 倒排索引
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("UPDATE twitter_tweets SET text_translated = ? WHERE id = ?", (translated_text, clean_id))
                 full_content = f"{author_name or ''} {author_handle or ''} {raw_text} {translated_text} {related_concept or ''}"
@@ -1091,7 +1239,7 @@ class TwitterMonitorEngine:
     def _get_db_total_count(self) -> int:
         """获取本地 SQLite 数据库中永久存储的推文总条数"""
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM twitter_tweets")
                 row = cursor.fetchone()
@@ -1105,7 +1253,7 @@ class TwitterMonitorEngine:
             return set()
         existing = set()
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 batch_size = 500
                 for i in range(0, len(ids), batch_size):
@@ -1150,32 +1298,45 @@ class TwitterMonitorEngine:
                     mentioned.append(info)
                     seen_symbols.add(info["symbol"])
 
-        # 3. 检查是否命中 A 股实战交易/板块术语
-        has_trading_keyword = any(kw in combined for kw in A_SHARE_TRADING_KEYWORDS)
+        # 3. 引入本地 AI 智能审查官与金融语义判别器 (彻底废除盲目 VIP 赋予股票特权)
+        from utils.ai_tweet_classifier import classify_tweet
+        ai_res = classify_tweet(combined, author_handle=author_handle)
+        is_relevant = ai_res.get("is_stock_relevant", False)
+        is_spam = ai_res.get("is_spam", False)
+        ai_reason = ai_res.get("reason", "")
+        extra_syms = ai_res.get("stock_symbols", [])
 
-        # 4. 重点 VIP 博主判定 (Crypto/戒色交易员)
-        handle_clean = (author_handle or "").lower().replace("@", "")
-        name_clean = author_name or ""
-        is_vip_author = any(vip.lower() in handle_clean or vip in name_clean for vip in VIP_AUTHORS)
+        # 补充精准识别的股票代码
+        for sym in extra_syms:
+            if sym not in seen_symbols:
+                if sym in FAMOUS_STOCKS_DICT:
+                    mentioned.append(FAMOUS_STOCKS_DICT[sym])
+                else:
+                    mentioned.append({
+                        "symbol": sym,
+                        "name": f"${sym}" if not sym.isdigit() else sym,
+                        "market": "A" if sym.isdigit() else "US"
+                    })
+                seen_symbols.add(sym)
 
-        if is_vip_author:
-            # VIP 博主：最高置顶权重 10，无论是否带有具体代码，全量归入实战干货并置顶！
-            importance = 10
-            has_stock = True
+        # 4. 严谨实战分级：
+        # - 一票否决：判定为引流、生活琐事、打卡水推，权重归零 (0分)，is_noise = True
+        # - 精准提股：命中具体股票代码/明确标的，且非引流，权重 5 星，has_stock = True
+        # - 宏观产业：有效市场板块走势与宏观科技催化，权重 3 星，has_stock = False
+        if is_spam or not is_relevant:
+            importance = 0
+            has_stock = False
+            is_noise = True
         elif len(mentioned) > 0:
-            # 直接提及具体股票代码：5 星高权重
             importance = 5
             has_stock = True
-        elif has_trading_keyword:
-            # 谈论板块、大盘震荡、仓位控制、选股指标等实战：4 星实战权重
-            importance = 4
-            has_stock = True
+            is_noise = False
         else:
-            # 纯社会新闻/生活琐事/无关打卡：1 星普通，且不属于股票强相关
-            importance = 1
+            importance = 3
             has_stock = False
+            is_noise = False
 
-        return has_stock, mentioned, importance
+        return has_stock, mentioned, importance, is_noise, ai_reason
 
     def _upsert_tweets_to_db(self, items: List[TwitterTweetItem]):
         """将抓取的推文批量持久化插入或更新至 SQLite (永久保留历史)"""
@@ -1183,7 +1344,7 @@ class TwitterMonitorEngine:
             return
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 for it in items:
                     # 计算精确时间戳
@@ -1195,13 +1356,17 @@ class TwitterMonitorEngine:
                         ts = time.time()
 
                     src_type = getattr(it, 'source_type', 'following') or 'following'
+                    m_urls_json = json.dumps(getattr(it, 'media_urls', []) or [], ensure_ascii=False)
+                    is_n = 1 if getattr(it, 'is_noise', False) else 0
+                    ai_r = getattr(it, 'ai_reason', '') or ''
                     cursor.execute("""
                         INSERT INTO twitter_tweets (
                             id, author_name, author_handle, author_avatar, created_at, created_timestamp,
                             relative_time, text_raw, text_translated, likes, retweets, tweet_url,
                             related_concept, related_stocks, sentiment, has_stock_mention,
-                            mentioned_stocks, importance_score, is_demo, fetched_at, source_type
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            mentioned_stocks, importance_score, is_demo, fetched_at, source_type, media_urls,
+                            is_noise, ai_reason
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             likes = excluded.likes,
                             retweets = excluded.retweets,
@@ -1210,14 +1375,18 @@ class TwitterMonitorEngine:
                             mentioned_stocks = excluded.mentioned_stocks,
                             importance_score = excluded.importance_score,
                             relative_time = excluded.relative_time,
-                            source_type = excluded.source_type
+                            source_type = excluded.source_type,
+                            media_urls = excluded.media_urls,
+                            is_noise = excluded.is_noise,
+                            ai_reason = excluded.ai_reason
                     """, (
                         it.id, it.author_name, it.author_handle, it.author_avatar, it.created_at, ts,
                         it.relative_time, it.text_raw, it.text_translated, it.likes, it.retweets, it.tweet_url,
                         it.related_concept, json.dumps(it.related_stocks, ensure_ascii=False), it.sentiment,
                         1 if it.has_stock_mention else 0,
                         json.dumps(it.mentioned_stocks or [], ensure_ascii=False),
-                        it.importance_score, 1 if it.is_demo else 0, now_str, src_type
+                        it.importance_score, 1 if it.is_demo else 0, now_str, src_type, m_urls_json,
+                        is_n, ai_r
                     ))
 
                     # ⚡ 同步维护 SQLite FTS5 倒排索引 (结巴分词全文检索)
@@ -1235,16 +1404,190 @@ class TwitterMonitorEngine:
         except Exception as e:
             logger.error(f"持久化推特数据入库失败: {e}", exc_info=True)
 
+    def _match_portfolio_holdings(self, full_text: str, related_stocks: list, mentioned_stocks: list) -> Tuple[bool, str, str, int]:
+        """
+        核心战术穿透引擎：将推文语义/标的与当前用户的【实盘持仓】进行毫秒级反向穿透匹配
+        返回: (hit_holding: bool, symbol: str, name: str, shares: int)
+        """
+        try:
+            from utils.portfolio_advisor import portfolio_store
+            portfolio_store.load("admin")
+            positions = getattr(portfolio_store, "positions", {}) or {}
+            if not positions:
+                return False, "", "", 0
+
+            # 1. 收集推文中涉及的所有标的代码与名称
+            extracted_syms = set()
+            for s in (related_stocks or []):
+                if isinstance(s, dict) and s.get("symbol"):
+                    extracted_syms.add(str(s["symbol"]).strip())
+            for s in (mentioned_stocks or []):
+                if isinstance(s, dict) and s.get("symbol"):
+                    extracted_syms.add(str(s["symbol"]).strip())
+
+            # 2. 遍历用户真实实盘持仓做交叉验证
+            for sym, pos in positions.items():
+                if isinstance(pos, dict):
+                    clean_sym = str(pos.get("symbol", sym)).strip()
+                    pos_name = (pos.get("name") or "").strip()
+                    shares = int(pos.get("shares") or 0)
+                else:
+                    clean_sym = str(getattr(pos, "symbol", sym)).strip()
+                    pos_name = (getattr(pos, "name", "") or "").strip()
+                    shares = int(getattr(pos, "shares", 0) or 0)
+
+                # A. 股票代码直接命中 (如 159278)
+                if clean_sym in extracted_syms or clean_sym in full_text:
+                    return True, clean_sym, pos_name or clean_sym, shares
+
+                # B. 持仓标的中文名称命中 (如 "机器人PH", "中证证券")
+                if pos_name and len(pos_name) >= 2 and pos_name in full_text:
+                    return True, clean_sym, pos_name, shares
+
+                # C. 核心概念强穿透映射 (科技与实战持仓强关联)
+                # 若持有机器人ETF/机器人PH(159278)，海外提到 Optimus / 机器人 / Humanoid / 具身智能
+                if clean_sym in ["159278", "562500"] or "机器人" in pos_name:
+                    if any(kw in full_text.lower() for kw in ["robot", "optimus", "humanoid", "cybercab", "机器人", "具身智能"]):
+                        return True, clean_sym, pos_name or "机器人标的", shares
+
+                # 若持有证券ETF/中证证券(159841)，提到资本市场、券商、大金融
+                if clean_sym in ["159841", "512880"] or "证券" in pos_name or "券商" in pos_name:
+                    if any(kw in full_text for kw in ["券商", "证券", "资本市场", "降息刺激", "大金融"]):
+                        return True, clean_sym, pos_name or "证券ETF", shares
+
+        except Exception as e:
+            logger.debug(f"持仓穿透匹配跳过: {e}")
+        return False, "", "", 0
+
+    def _match_portfolio_watchlist(self, full_text: str, related_stocks: list, mentioned_stocks: list) -> Tuple[bool, str, str]:
+        """
+        核心战术穿透引擎：将推文语义/标的与当前用户的【自选监控池】进行毫秒级反向穿透匹配
+        返回: (hit_watchlist: bool, symbol: str, name: str)
+        """
+        try:
+            from utils.portfolio_advisor import portfolio_store
+            portfolio_store.load("admin")
+            watchlist = getattr(portfolio_store, "watchlist", {}) or {}
+            if not watchlist:
+                return False, "", ""
+
+            # 收集推文中涉及的所有标的代码与名称
+            extracted_syms = set()
+            for s in (related_stocks or []):
+                if isinstance(s, dict) and s.get("symbol"):
+                    extracted_syms.add(str(s["symbol"]).strip())
+            for s in (mentioned_stocks or []):
+                if isinstance(s, dict) and s.get("symbol"):
+                    extracted_syms.add(str(s["symbol"]).strip())
+
+            # 遍历用户自选池做交叉验证
+            for sym, item in watchlist.items():
+                if isinstance(item, dict):
+                    clean_sym = str(item.get("symbol", sym)).strip()
+                    item_name = (item.get("name") or "").strip()
+                else:
+                    clean_sym = str(getattr(item, "symbol", sym)).strip()
+                    item_name = (getattr(item, "name", "") or "").strip()
+
+                # A. 股票代码直接命中 (如 002617)
+                if clean_sym in extracted_syms or clean_sym in full_text:
+                    return True, clean_sym, item_name or clean_sym
+
+                # B. 标的中文名称命中 (如 "露笑科技")
+                if item_name and len(item_name) >= 2 and item_name in full_text:
+                    return True, clean_sym, item_name
+
+        except Exception as e:
+            logger.debug(f"自选穿透匹配跳过: {e}")
+        return False, "", ""
+
+    def get_watchlist_twitter_summary(self, symbols_map: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+        """
+        批量为自选股列表查询推特大V热评舆情摘要 (近 48 小时 / 最新 200 条)
+        :param symbols_map: 字典 {symbol: name}
+        :return: {symbol: {"hits_count": int, "latest_tweet": dict or None}}
+        """
+        results = {sym: {"hits_count": 0, "latest_tweet": None} for sym in symbols_map}
+        if not symbols_map or not Path(DB_FILE_PATH).exists():
+            return results
+
+        try:
+            with get_intel_db() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT author_name, author_handle, created_at, created_timestamp, relative_time,
+                           text_raw, text_translated, tweet_url, mentioned_stocks, related_stocks
+                    FROM twitter_tweets
+                    WHERE is_noise = 0
+                    ORDER BY created_timestamp DESC
+                    LIMIT 200
+                """)
+                rows = cursor.fetchall()
+                for r in rows:
+                    raw_txt = r["text_raw"] or ""
+                    trans_txt = r["text_translated"] or ""
+                    comb_txt = f"{raw_txt} {trans_txt}"
+
+                    rel_stocks = []
+                    try:
+                        rel_stocks = json.loads(r["related_stocks"] or "[]")
+                    except Exception:
+                        pass
+                    ment_stocks = []
+                    try:
+                        ment_stocks = json.loads(r["mentioned_stocks"] or "[]")
+                    except Exception:
+                        pass
+
+                    tweet_syms = set()
+                    for s in rel_stocks + ment_stocks:
+                        if isinstance(s, dict) and s.get("symbol"):
+                            tweet_syms.add(str(s["symbol"]).strip())
+
+                    for sym, name in symbols_map.items():
+                        is_match = False
+                        clean_sym = str(sym).strip()
+                        clean_name = (name or "").strip()
+
+                        if clean_sym in tweet_syms or clean_sym in comb_txt:
+                            is_match = True
+                        elif clean_name and len(clean_name) >= 2 and clean_name in comb_txt:
+                            is_match = True
+
+                        if is_match:
+                            results[sym]["hits_count"] += 1
+                            if results[sym]["latest_tweet"] is None:
+                                snippet = (trans_txt or raw_txt).strip().replace("\n", " ")
+                                if len(snippet) > 85:
+                                    snippet = snippet[:85] + "..."
+                                results[sym]["latest_tweet"] = {
+                                    "author_name": r["author_name"] or r["author_handle"] or "推特大V",
+                                    "author_handle": r["author_handle"] or "",
+                                    "created_at": r["created_at"],
+                                    "relative_time": r["relative_time"] or "刚刚",
+                                    "text_snippet": snippet,
+                                    "tweet_url": r["tweet_url"] or ""
+                                }
+        except Exception as e:
+            logger.error(f"批量查询自选股推特舆情失败: {e}")
+
+        return results
+
     def query_tweets_from_db(self, page: int = 1, page_size: int = 15, keyword: str = "",
                              only_stocks: bool = False, author: str = "", category: str = "ALL",
-                             source_type: str = "ALL") -> Dict[str, Any]:
-        """从 SQLite 数据库中按分页、关键词(FTS5倒排索引+BM25)、提股标星、博主专业归类及来源归属多维检索历史推文"""
+                             source_type: str = "ALL", pure_mode: bool = True) -> Dict[str, Any]:
+        """从 SQLite 数据库中按分页、关键词(FTS5倒排索引+BM25)、提股标星、博主专业归类、来源归属及纯净AI过滤多维检索历史推文"""
         page = max(1, page)
         page_size = max(1, min(100, page_size))
         offset = (page - 1) * page_size
 
         where_clauses = ["1=1"]
         params = []
+
+        # ⭐️ 核心 AI 纯净交易模式：默认过滤掉打卡引流、黑客水推与日常琐事
+        if pure_mode:
+            where_clauses.append("is_noise = 0")
 
         if only_stocks:
             where_clauses.append("has_stock_mention = 1")
@@ -1256,9 +1599,32 @@ class TwitterMonitorEngine:
         elif clean_src == "CURATED":
             where_clauses.append("source_type = 'curated'")
 
-        # ⭐️ 核心分类过滤支持 (精选股票博主 / A股实盘 / 宏观全球 / 科技产业 / 非股票)
+        # ⭐️ 核心分类过滤支持 (我的自选 / 精选股票博主 / A股实盘 / 宏观全球 / 科技产业 / 非股票)
         clean_cat = (category or "ALL").upper().strip()
-        if clean_cat == "STOCKS_ONLY":
+        if clean_cat == "MY_WATCHLIST":
+            try:
+                from utils.portfolio_advisor import portfolio_store
+                portfolio_store.load("admin")
+                wl = portfolio_store.watchlist or {}
+                wl_terms = []
+                for sym, item in wl.items():
+                    s_sym = str(sym).strip()
+                    if s_sym:
+                        wl_terms.append(s_sym)
+                    nm = getattr(item, "name", "") if not isinstance(item, dict) else item.get("name", "")
+                    if nm and len(nm) >= 2:
+                        wl_terms.append(nm.strip())
+                if wl_terms:
+                    or_subs = []
+                    for t in wl_terms:
+                        or_subs.append("(text_raw LIKE ? OR text_translated LIKE ? OR mentioned_stocks LIKE ? OR related_stocks LIKE ?)")
+                        params.extend([f"%{t}%", f"%{t}%", f"%{t}%", f"%{t}%"])
+                    where_clauses.append(f"({' OR '.join(or_subs)})")
+                else:
+                    where_clauses.append("1=0")
+            except Exception as e:
+                logger.error(f"构建自选推特SQL过滤子句异常: {e}")
+        elif clean_cat == "STOCKS_ONLY":
             # 精选股票博主合集：自动过滤李老师、韩跑跑及纯币圈平台推广
             non_stock_handles = [h for h, p in AUTHOR_PROFILE_MAP.items() if p.get("category") == "NON_STOCK"]
             if non_stock_handles:
@@ -1292,7 +1658,7 @@ class TwitterMonitorEngine:
                 safe_words = [w for w in safe_words if w]
                 if safe_words:
                     fts_expr = " AND ".join(f'"{w}"' for w in safe_words)
-                    with sqlite3.connect(DB_FILE_PATH) as fts_conn:
+                    with get_intel_db() as fts_conn:
                         fts_cursor = fts_conn.cursor()
                         fts_cursor.execute(
                             "SELECT id, bm25(twitter_tweets_fts) as rank FROM twitter_tweets_fts WHERE twitter_tweets_fts MATCH ? ORDER BY rank LIMIT 300",
@@ -1320,7 +1686,7 @@ class TwitterMonitorEngine:
         total_count = 0
         tweets_list = []
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
 
@@ -1329,17 +1695,30 @@ class TwitterMonitorEngine:
                 row = cursor.fetchone()
                 total_count = row["cnt"] if row else 0
 
-                # 2. 分页查询列表，按重要性评分降序 + 发布时间倒序
+                # 2. 分页查询列表，严格按发布时间就近倒序 (最新发布的排在最前)
+                # ⭐️ 核心防御：查询时预留缓冲池 (buffer)，即使内存去重丢弃重复条目，也能填满 page_size 条，彻底杜绝网格缺角留白！
+                buffer_limit = max(page_size + 10, page_size * 2)
                 query_sql = f"""
                     SELECT * FROM twitter_tweets
                     WHERE {where_sql}
-                    ORDER BY importance_score DESC, created_timestamp DESC
+                    ORDER BY created_timestamp DESC
                     LIMIT ? OFFSET ?
                 """
-                cursor.execute(query_sql, params + [page_size, offset])
+                cursor.execute(query_sql, params + [buffer_limit, offset])
                 rows = cursor.fetchall()
 
+                seen_fingerprints = set()
                 for r in rows:
+                    if len(tweets_list) >= page_size:
+                        break
+
+                    raw_text_val = r["text_raw"] or ""
+                    # ⭐️ 核心去重：过滤完全相同的转推副本 (如亚洲金融转推超级财经，消除双胞胎卡片)
+                    cleaned_body = re.sub(r"^RT\s*@[a-zA-Z0-9_]+:\s*", "", raw_text_val).strip()[:80]
+                    if cleaned_body in seen_fingerprints:
+                        continue
+                    seen_fingerprints.add(cleaned_body)
+
                     rel_stocks = []
                     try:
                         rel_stocks = json.loads(r["related_stocks"] or "[]")
@@ -1359,16 +1738,66 @@ class TwitterMonitorEngine:
                     except Exception:
                         src_val = author_prof.get("source_type", "following")
 
+                    # 提取推文配图列表
+                    m_urls = []
+                    try:
+                        if "media_urls" in r.keys() and r["media_urls"]:
+                            m_urls = json.loads(r["media_urls"])
+                    except Exception:
+                        m_urls = []
+
+                    is_n_val = False
+                    ai_r_val = ""
+                    try:
+                        if "is_noise" in r.keys():
+                            is_n_val = bool(r["is_noise"])
+                        if "ai_reason" in r.keys():
+                            ai_r_val = r["ai_reason"] or ""
+                    except Exception:
+                        pass
+
+                    # ⭐️ 动态根据时间戳实时计算真实相对时间 (彻底解决静态字符串导致几天前的推文显示为1小时前的Bug)
+                    rel_time_display = r["relative_time"] or "刚刚"
+                    try:
+                        ts_val = float(r["created_timestamp"] or 0)
+                        if ts_val > 0:
+                            diff_sec = int(time.time() - ts_val)
+                            if diff_sec < 60:
+                                rel_time_display = "刚刚"
+                            elif diff_sec < 3600:
+                                rel_time_display = f"{diff_sec // 60}分钟前"
+                            elif diff_sec < 86400:
+                                rel_time_display = f"{diff_sec // 3600}小时前"
+                            elif diff_sec < 86400 * 30:
+                                rel_time_display = f"{diff_sec // 86400}天前"
+                            else:
+                                rel_time_display = datetime.fromtimestamp(ts_val).strftime("%m-%d")
+                    except Exception:
+                        pass
+
+                    # ⭐️ 核心战术穿透：实时反向匹配当前用户实盘持仓与自选监控池
+                    full_content_str = f"{r['text_raw'] or ''} {r['text_translated'] or ''} {r['related_concept'] or ''}"
+                    hit_h, hit_sym, hit_nm, hit_sh = self._match_portfolio_holdings(
+                        full_content_str, rel_stocks, ment_stocks
+                    )
+                    hit_w, hit_w_sym, hit_w_nm = self._match_portfolio_watchlist(
+                        full_content_str, rel_stocks, ment_stocks
+                    )
+                    if clean_cat == "MY_WATCHLIST" and not hit_w:
+                        continue
+
                     tweets_list.append({
                         "id": r["id"],
                         "author_name": r["author_name"],
                         "author_handle": r["author_handle"],
                         "author_avatar": r["author_avatar"],
                         "author_profile": author_prof,
+                        "author_title": author_prof.get("title", ""),
+                        "recommend_reason": author_prof.get("recommend_reason", ""),
                         "source_type": src_val,
                         "source_type_name": "我关注的" if src_val == "following" else "系统精选",
                         "created_at": r["created_at"],
-                        "relative_time": r["relative_time"],
+                        "relative_time": rel_time_display,
                         "text_raw": r["text_raw"],
                         "text_translated": r["text_translated"],
                         "likes": r["likes"],
@@ -1381,7 +1810,17 @@ class TwitterMonitorEngine:
                         "mentioned_stocks": ment_stocks,
                         "importance_score": r["importance_score"],
                         "is_demo": bool(r["is_demo"]),
-                        "fetched_at": r["fetched_at"]
+                        "fetched_at": r["fetched_at"],
+                        "media_urls": m_urls,
+                        "hit_holding": hit_h,
+                        "hit_holding_symbol": hit_sym,
+                        "hit_holding_name": hit_nm,
+                        "hit_holding_shares": hit_sh,
+                        "hit_watchlist": hit_w,
+                        "hit_watchlist_symbol": hit_w_sym,
+                        "hit_watchlist_name": hit_w_nm,
+                        "is_noise": is_n_val,
+                        "ai_reason": ai_r_val
                     })
         except Exception as e:
             logger.error(f"查询 SQLite 推特数据库异常: {e}", exc_info=True)
@@ -1391,7 +1830,7 @@ class TwitterMonitorEngine:
         # 统计各来源数量
         source_type_counts = {"ALL": 0, "FOLLOWING": 0, "CURATED": 0}
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM twitter_tweets")
                 source_type_counts["ALL"] = cursor.fetchone()[0] or 0
@@ -1475,6 +1914,7 @@ class TwitterMonitorEngine:
         active_authors = []
         category_counts = {
             "ALL": 0,
+            "MY_WATCHLIST": 0,
             "STOCKS_ONLY": 0,
             "A_STOCK": 0,
             "MACRO_GLOBAL": 0,
@@ -1498,7 +1938,7 @@ class TwitterMonitorEngine:
             }
 
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*), SUM(has_stock_mention) FROM twitter_tweets")
                 row = cursor.fetchone()
@@ -1506,6 +1946,20 @@ class TwitterMonitorEngine:
                     db_total_count = int(row[0] or 0)
                     db_stock_count = int(row[1] or 0)
                     category_counts["ALL"] = db_total_count
+                try:
+                    from utils.portfolio_advisor import portfolio_store
+                    portfolio_store.load("admin")
+                    wl_syms = [str(s).strip() for s in (portfolio_store.watchlist or {}).keys() if str(s).strip()]
+                    if wl_syms:
+                        clauses = []
+                        wl_params = []
+                        for s in wl_syms:
+                            clauses.append("(mentioned_stocks LIKE ? OR related_stocks LIKE ? OR text_raw LIKE ? OR text_translated LIKE ?)")
+                            wl_params.extend([f"%{s}%", f"%{s}%", f"%{s}%", f"%{s}%"])
+                        cursor.execute(f"SELECT COUNT(*) FROM twitter_tweets WHERE ({' OR '.join(clauses)})", wl_params)
+                        category_counts["MY_WATCHLIST"] = cursor.fetchone()[0] or 0
+                except Exception:
+                    pass
                 
                 cursor.execute("""
                     SELECT author_name, author_handle, COUNT(*) as cnt 
@@ -1543,7 +1997,7 @@ class TwitterMonitorEngine:
 
         source_type_counts = {"ALL": db_total_count, "FOLLOWING": db_total_count, "CURATED": 0}
         try:
-            with sqlite3.connect(DB_FILE_PATH) as conn:
+            with get_intel_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM twitter_tweets WHERE source_type = 'curated'")
                 cur_cnt = cursor.fetchone()[0] or 0
@@ -1781,15 +2235,21 @@ class TwitterMonitorEngine:
         if not to_translate:
             return results
 
-        # 并发最多 6 个子线程同时翻译，总耗时控制在 2 秒内
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(to_translate), 6)) as executor:
+        # 并发最多 8 个子线程同时翻译，优雅降级容灾
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(to_translate), 8)) as executor:
             future_to_text = {executor.submit(self.translate_to_chinese, txt): txt for txt in to_translate}
-            for future in concurrent.futures.as_completed(future_to_text, timeout=3.5):
-                txt = future_to_text[future]
-                try:
-                    results[txt] = future.result()
-                except Exception:
-                    results[txt] = txt
+            try:
+                for future in concurrent.futures.as_completed(future_to_text, timeout=8.0):
+                    txt = future_to_text[future]
+                    try:
+                        results[txt] = future.result()
+                    except Exception:
+                        results[txt] = txt
+            except Exception:
+                # 超时容灾：未完成翻译的直接兜底使用原文本
+                for f, txt in future_to_text.items():
+                    if txt not in results:
+                        results[txt] = txt
 
         for t in texts:
             if t not in results:
@@ -2001,8 +2461,8 @@ class TwitterMonitorEngine:
             # 智能匹配 A 股概念与标的
             concept, stocks, sentiment = self.map_a_share_concepts(text_raw + " " + text_translated)
 
-            # 智能提取直接提及的具体股票与重要性加权 (结合作者权重与实战词库)
-            has_stock, ment_stocks, importance = self._extract_stocks_and_importance(
+            # 智能提取直接提及的具体股票与本地 AI 审查 (彻底废除盲目特权，内容为王)
+            has_stock, ment_stocks, importance, is_noise, ai_reason = self._extract_stocks_and_importance(
                 text_raw, text_translated, author_handle=author_handle, author_name=author_name
             )
             if ment_stocks:
@@ -2013,6 +2473,20 @@ class TwitterMonitorEngine:
 
             screen_name_clean = user_obj.get("screen_name", "")
             tweet_url = f"https://x.com/{screen_name_clean}/status/{tweet_id}" if screen_name_clean else f"https://x.com/i/web/status/{tweet_id}"
+
+            # 提取推文附带的高清配图直链 (支持多图与媒体预览)
+            m_urls = []
+            try:
+                media_list = (
+                    tw.get("extended_entities", {}).get("media", [])
+                    or tw.get("entities", {}).get("media", [])
+                )
+                for m in media_list:
+                    mu = m.get("media_url_https", "") or m.get("media_url", "")
+                    if mu and mu not in m_urls:
+                        m_urls.append(mu)
+            except Exception:
+                m_urls = []
 
             item = TwitterTweetItem(
                 id=tweet_id,
@@ -2032,7 +2506,10 @@ class TwitterMonitorEngine:
                 has_stock_mention=has_stock,
                 mentioned_stocks=ment_stocks,
                 importance_score=importance,
-                is_demo=False
+                is_demo=False,
+                media_urls=m_urls,
+                is_noise=is_noise,
+                ai_reason=ai_reason
             )
             items.append(item)
 
@@ -2153,7 +2630,7 @@ class TwitterMonitorEngine:
         return self.sync_incremental(force_first_init=False)
 
     def _get_fallback_demo_tweets(self) -> List[TwitterTweetItem]:
-        """备用精选雷达样本 (当网络受阻或无凭证时使用)"""
+        """备用精选雷达样本 (当网络受阻或无凭证时使用，附带高清行业实操配图)"""
         demo_data = [
             {
                 "id": "demo_1",
@@ -2164,7 +2641,8 @@ class TwitterMonitorEngine:
                 "raw": "Tesla Cybercab & Robotaxi production is scaling rapidly. Unsupervised FSD will roll out to customers in Texas and California soon.",
                 "trans": "特斯拉 Cybercab 与 Robotaxi 量产进程正在极速扩张。无人监督版完全自动驾驶 (FSD) 即将在德克萨斯州和加利福尼亚州面向公众推送。",
                 "likes": 48200,
-                "retweets": 9300
+                "retweets": 9300,
+                "media_urls": ["https://pbs.twimg.com/media/GZbGjS3aEAA2Bvj?format=jpg&name=medium"]
             },
             {
                 "id": "demo_2",
@@ -2175,7 +2653,8 @@ class TwitterMonitorEngine:
                 "raw": "Compute clusters are growing 10x per generation. The bottleneck is energy and advanced interconnect, not algorithmic limits.",
                 "trans": "算力集群的规模正在以每代 10 倍的速度暴增。当前核心瓶颈是能源供应与先进互联网络，而非算法层面的极限。",
                 "likes": 32100,
-                "retweets": 5200
+                "retweets": 5200,
+                "media_urls": ["https://pbs.twimg.com/media/GeuF6U2aQAAc-gJ?format=jpg&name=medium"]
             }
         ]
 
@@ -2197,9 +2676,9 @@ class TwitterMonitorEngine:
                 related_concept=concept,
                 related_stocks=stocks,
                 sentiment=sentiment,
-                is_demo=True
-            )
-        )
+                is_demo=True,
+                media_urls=d.get("media_urls", [])
+            ))
         return items
 
 

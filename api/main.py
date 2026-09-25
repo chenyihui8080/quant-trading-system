@@ -13,9 +13,10 @@ import os
 import asyncio
 import logging
 from pathlib import Path
+from datetime import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
 
@@ -69,6 +70,27 @@ async def lifespan(app: FastAPI):
     
     asyncio.get_event_loop().call_soon(_start_em_daemon)
 
+    # 异步启动 Twitter/X 关注流自动增量监控守护线程 (保障推特情报实时在线)
+    def _start_twitter_daemon():
+        import threading, time
+        def _twitter_loop():
+            time.sleep(5) # 服务完全就绪后启动首轮抓取
+            while True:
+                try:
+                    from utils.twitter_monitor import TwitterMonitorEngine
+                    t_engine = TwitterMonitorEngine()
+                    sync_res = t_engine.sync_incremental()
+                    logger.info(f"🐦 [Twitter后台守护] 增量抓取完成: {sync_res.get('message', '')}")
+                except Exception as te:
+                    logger.debug(f"🐦 [Twitter后台守护] 轮询异常 (网络或代理暂不可用): {te}")
+                time.sleep(180) # 每隔 3 分钟轮询一次关注流
+
+        t_thread = threading.Thread(target=_twitter_loop, name="TwitterMonitorDaemon", daemon=True)
+        t_thread.start()
+        logger.info("🚀 Twitter/X 顶级操盘情报自动增量监控守护线程已成功启动！")
+
+    asyncio.get_event_loop().call_soon(_start_twitter_daemon)
+
     yield
 
     # 极速优雅退出 (0.2s 超时防挂起)
@@ -106,11 +128,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 1.1 全局 CORS 跨域中间件（文档声明的能力必须真正落地，否则跨域前端/工具会因预检被拦截失败）
+# 1.1 全局 CORS 跨域中间件 (规范合规与防 CSRF 跨域越权)
+# 规约：allow_credentials=True 时禁止 allow_origins=["*"]。严格限定合法源与正则匹配。
 from fastapi.middleware.cors import CORSMiddleware
+cors_env_origins = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+default_origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_env_origins or default_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://([a-zA-Z0-9-]+\.)*(eastmoney\.com|18\.cn)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -119,9 +150,14 @@ app.add_middleware(
 @app.middleware("http")
 async def add_cors_pna_and_cache_header(request: Request, call_next):
     # 支持 Chrome Private Network Access (PNA) 预检请求放行
+    origin = request.headers.get("origin")
     if request.method == "OPTIONS":
         response = Response(status_code=200)
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "*"
         response.headers["Access-Control-Allow-Headers"] = "*"
         response.headers["Access-Control-Allow-Private-Network"] = "true"
@@ -171,15 +207,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """全局兜底拦截所有未处理未知异常 (500)，记录堆栈并返回标准友好响应，确保主服务永不宕机"""
+    """全局兜底拦截所有未处理未知异常 (500)，详细堆栈安全入库/入日志，对外返回标准脱敏响应，杜绝泄露内部 SQL 或绝对路径"""
     error_trace = traceback.format_exc()
-    logger.error(f"🔥 [全局未捕获异常] 请求路径: {request.url.path} | 错误类型: {type(exc).__name__} | 错误详情: {str(exc)}\n{error_trace}")
+    import uuid
+    trace_id = uuid.uuid4().hex[:12]
+    logger.error(f"🔥 [全局未捕获异常 TRACE-{trace_id}] 请求路径: {request.url.path} | 错误类型: {type(exc).__name__} | 错误详情: {str(exc)}\n{error_trace}")
     return JSONResponse(
         status_code=500,
         content={
             "code": 500,
-            "message": f"系统处理异常: {str(exc)}",
-            "detail": str(exc),
+            "message": "系统处理异常，已记录审计日志，请稍后重试或联系管理员",
+            "detail": "Internal Server Error",
+            "trace_id": trace_id,
             "path": request.url.path
         }
     )
@@ -210,6 +249,8 @@ _safe_include_router(app, "api.routers.legacy_router", "router")
 _safe_include_router(app, "api.routers.portfolio_router", "router")
 _safe_include_router(app, "api.routers.alpha_router", "router")
 _safe_include_router(app, "api.routers.prediction_router", "router")
+_safe_include_router(app, "api.routers.backtest_router", "router")
+_safe_include_router(app, "api.routers.paper_portfolio_router", "router")
 
 if HAS_REVIEW_WORKBENCH and review_router:
     try:
@@ -231,37 +272,18 @@ async def health_check():
     except Exception as de:
         db_status = f"error: {str(de)}"
 
-# 3.1 油猴脚本分发路由 (Tampermonkey Userscript Direct Endpoint)
-from fastapi.responses import FileResponse, Response
+    return {
+        "status": "ok" if "error" not in db_status else "degraded",
+        "database": db_status,
+        "service": "quant-trading-system",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
 
-@app.get("/api/eastmoney/userscript.user.js")
-@app.get("/eastmoney.user.js")
-@app.get("/api/eastmoney/tampermonkey-script")
-async def serve_eastmoney_userscript(request: Request):
-    """直接下发东方财富自动同步油猴脚本"""
-    userscript_path = STATIC_DIR / "userscript.user.js"
-    if userscript_path.exists():
-        content = userscript_path.read_text(encoding="utf-8")
-        # 动态替换 API host 为当前请求的 scheme 和 host
-        host_origin = f"{request.url.scheme}://{request.url.netloc}"
-        content = content.replace("http://localhost:8000", host_origin)
-        return Response(content=content, media_type="application/javascript", headers={
-            "Content-Disposition": "inline; filename=eastmoney.user.js",
-            "Cache-Control": "no-cache"
-        })
-    return Response(content="// Userscript not found", media_type="application/javascript", status_code=404)
+
 
 # 4. 挂载静态文件目录
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-# 5. 公开免认证路径集合
-PUBLIC_PATHS = {
-    "/", "/docs", "/openapi.json",
-    "/redoc", "/docs/oauth2-redirect", "/api/health",
-    "/api/eastmoney/userscript.user.js", "/eastmoney.user.js", "/static/userscript.user.js",
-    "/api/eastmoney/tampermonkey-script"
-}
 
 
 

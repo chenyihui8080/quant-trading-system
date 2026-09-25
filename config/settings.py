@@ -17,8 +17,8 @@ BACKTEST_CONFIG = {
 }
 
 # API 配置
-API_HOST = "0.0.0.0"
-API_PORT = 8000
+API_HOST = os.getenv("API_HOST", "0.0.0.0")
+API_PORT = int(os.getenv("PORT", os.getenv("QUANT_PORT", 8000)))
 
 # 已注册策略
 STRATEGIES = {

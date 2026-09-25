@@ -109,7 +109,7 @@ class EastMoneySyncDaemon:
         self.auth = auth_manager
         self.running = False
         self.auto_sync_enabled = True
-        self.sync_interval_sec = 10         # 行情刷新 10 秒/次
+        self.sync_interval_sec = 60         # 行情刷新优化为 60 秒/次，兼顾实时性与系统稳定性
         self.heartbeat_interval_sec = 300   # 心跳保活 5 分钟/次
         self.last_sync_time: Optional[str] = None
         self.last_sync_status: str = "就绪"
@@ -227,7 +227,7 @@ class EastMoneySyncDaemon:
                 else:
                     last_err_msg = f"HTTP {resp.status_code}"
             except Exception as e:
-                last_err_msg = f"网络波动: {str(e)[:25]}"
+                last_err_msg = "凭证已过期 (请点书签同步)"
 
         # B. 备用探活方案：若有 Cookie，尝试通过东财云自选/通行证探活
         if cookie:
@@ -265,11 +265,11 @@ class EastMoneySyncDaemon:
             return {"status": "alive", "message": self.last_heartbeat_status, "time": now_str}
 
         self.is_session_alive = False
-        self.last_heartbeat_status = last_err_msg or "东财探活未通过"
+        self.last_heartbeat_status = last_err_msg or "凭证已过期 (请点书签同步)"
         
-        # ⚡ 自动尝试触发一次后台静默自愈（无头利用持久化Profile快速提取最新Token）
-        self.trigger_silent_reauth_background()
-
+        # ⚡ 严禁在后台无限制静默拉起无头 Chromium 浏览器（避免 CPU 飙升与进程死锁）
+        # 静默自愈仅在用户在界面显式点击「一键续期」时触发
+        
         return {"status": "expired", "message": self.last_heartbeat_status, "time": now_str}
 
     def _daemon_loop(self):
@@ -283,9 +283,8 @@ class EastMoneySyncDaemon:
                 if is_auth and (time.time() - self._last_heartbeat_ts >= dynamic_interval):
                     self.keep_alive_heartbeat()
 
-                # 2. 在配置自动同步时执行实时刷新
-                if self.auto_sync_enabled:
-                    # 若未认证凭证，不向东财发送无效的交易网关请求，避免浪费网络IO
+                # 2. 仅在已认证且开启自动同步时才执行远程接口拉取
+                if self.auto_sync_enabled and is_auth:
                     self.sync_all(quiet=True)
             except Exception as e:
                 logger.error(f"东财守护线程轮询异常: {e}")

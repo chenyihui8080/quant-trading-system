@@ -45,6 +45,7 @@ body.theme-alpha {
   --sys-bg-card: #ffffff;
   --sys-bg-panel: #ffffff;
   --sys-bg-card-inner: #fafafa;
+  --sys-bg-sub: #f8fafc;
   --sys-bg-hover: #f5f7fa;
   
   --sys-input-bg: #ffffff;
@@ -79,80 +80,82 @@ body.theme-alpha {
   --sys-accent-glow: rgba(64, 158, 255, 0.25);
 }
 
-/* 👑 系统二主题：深空紫水晶与琥珀金 (WorkBuddy Deep Cosmic Purple & Gold) */
+/* 👑 系统二主题：交易复盘与智能体中枢 (Element Plus 官方浅色紫韵规范) */
 body.theme-review {
-  --sys-bg-app: #090813;
-  --sys-bg-header: #0f0c1d;
-  --sys-bg-nav: #16122a;
-  --sys-bg-card: #15102a;
-  --sys-bg-panel: #16122a;
-  --sys-bg-card-inner: #1e173b;
-  --sys-bg-hover: #2a204e;
+  --sys-bg-app: #f0f2f5;
+  --sys-bg-header: #ffffff;
+  --sys-bg-nav: #f5f7fa;
+  --sys-bg-card: #ffffff;
+  --sys-bg-panel: #ffffff;
+  --sys-bg-card-inner: #fafafa;
+  --sys-bg-sub: #f8fafc;
+  --sys-bg-hover: #f5f7fa;
   
-  --sys-input-bg: #1e173b;
-  --sys-input-border: #35265e;
-  --sys-border: #35265e;
-  --sys-border-hover: #8957e5;
-  --sys-border-subtle: #241b40;
-  --sys-modal-mask: rgba(0, 0, 0, 0.75);
+  --sys-input-bg: #ffffff;
+  --sys-input-border: #dcdfe6;
+  --sys-border: #ebeef5;
+  --sys-border-hover: #7c3aed;
+  --sys-border-subtle: #f2f6fc;
+  --sys-modal-mask: rgba(0, 0, 0, 0.5);
   
-  --sys-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  --sys-shadow-card: 0 4px 20px rgba(137, 87, 229, 0.08);
-  --sys-shadow-popover: 0 16px 45px rgba(0, 0, 0, 0.75);
+  --sys-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --sys-shadow-card: 0 0 12px rgba(0, 0, 0, 0.05);
+  --sys-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.12);
   
-  --sys-popover-bg: #16122a;
-  --sys-popover-border: #35265e;
-  --sys-popover-hover: #221a42;
-  --sys-code-bg: #110d22;
-  --sys-drawer-bg: #0f0c1d;
+  --sys-popover-bg: #ffffff;
+  --sys-popover-border: #e4e7ed;
+  --sys-popover-hover: #f5f7fa;
+  --sys-code-bg: #fafafa;
+  --sys-drawer-bg: #ffffff;
   
-  --sys-text-title: #f5f0ff;
-  --sys-text-primary: #e6ddff;
-  --sys-text-sub: #a497c6;
+  --sys-text-title: #303133;
+  --sys-text-primary: #606266;
+  --sys-text-sub: #909399;
   
-  --sys-accent: #8957e5;
-  --sys-accent-hover: #a371f7;
-  --sys-accent-sub: #d2a8ff;
-  --sys-gradient-title: linear-gradient(135deg, #d2a8ff 0%, #f0883e 100%);
-  --sys-accent-glow: rgba(137, 87, 229, 0.35);
+  --sys-accent: #7c3aed;
+  --sys-accent-hover: #8b5cf6;
+  --sys-accent-sub: #c4b5fd;
+  --sys-gradient-title: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  --sys-accent-glow: rgba(124, 58, 237, 0.2);
 }
 
-/* 📈 系统三主题：石板灰与晨曦流火金 (Slate Champagne Gold & Carbon) */
+/* 📈 系统三主题：量化穿透实验室 (Element Plus 官方浅色金砂规范) */
 body.theme-quant {
-  --sys-bg-app: #0d1117;
-  --sys-bg-header: #161b22;
-  --sys-bg-nav: #1c2128;
-  --sys-bg-card: #161b22;
-  --sys-bg-panel: #161b22;
-  --sys-bg-card-inner: #21262d;
-  --sys-bg-hover: #30363d;
+  --sys-bg-app: #f0f2f5;
+  --sys-bg-header: #ffffff;
+  --sys-bg-nav: #f5f7fa;
+  --sys-bg-card: #ffffff;
+  --sys-bg-panel: #ffffff;
+  --sys-bg-card-inner: #fafafa;
+  --sys-bg-sub: #f8fafc;
+  --sys-bg-hover: #f5f7fa;
   
-  --sys-input-bg: #21262d;
-  --sys-input-border: #30363d;
-  --sys-border: #30363d;
-  --sys-border-hover: #f59e0b;
-  --sys-border-subtle: #21262d;
-  --sys-modal-mask: rgba(0, 0, 0, 0.8);
+  --sys-input-bg: #ffffff;
+  --sys-input-border: #dcdfe6;
+  --sys-border: #ebeef5;
+  --sys-border-hover: #d97706;
+  --sys-border-subtle: #f2f6fc;
+  --sys-modal-mask: rgba(0, 0, 0, 0.5);
   
-  --sys-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
-  --sys-shadow-card: 0 4px 16px rgba(0, 0, 0, 0.25);
-  --sys-shadow-popover: 0 16px 45px rgba(0, 0, 0, 0.85);
+  --sys-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --sys-shadow-card: 0 0 12px rgba(0, 0, 0, 0.05);
+  --sys-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.12);
   
-  --sys-popover-bg: #161b22;
-  --sys-popover-border: #30363d;
-  --sys-popover-hover: #262c36;
-  --sys-code-bg: #090d13;
-  --sys-drawer-bg: #0d1117;
+  --sys-popover-bg: #ffffff;
+  --sys-popover-border: #e4e7ed;
+  --sys-popover-hover: #f5f7fa;
+  --sys-code-bg: #fafafa;
+  --sys-drawer-bg: #ffffff;
   
-  --sys-text-title: #ffffff;
-  --sys-text-primary: #e6edf3;
-  --sys-text-sub: #8b949e;
+  --sys-text-title: #303133;
+  --sys-text-primary: #606266;
+  --sys-text-sub: #909399;
   
-  --sys-accent: #f59e0b;
-  --sys-accent-hover: #d97706;
-  --sys-accent-sub: #fbbf24;
-  --sys-gradient-title: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
-  --sys-accent-glow: rgba(245, 158, 11, 0.25);
+  --sys-accent: #d97706;
+  --sys-accent-hover: #b45309;
+  --sys-accent-sub: #fde68a;
+  --sys-gradient-title: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+  --sys-accent-glow: rgba(217, 119, 6, 0.2);
 }
 
 
@@ -521,6 +524,46 @@ body {
   box-shadow: var(--sys-shadow-card);
 }
 
+/* 实盘决策台子 Tab 专属激活色彩 */
+#alphaSubTabs .tab {
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+#alphaSubTabs .tab:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+#alphaSubTabs .tab.active {
+  background: var(--sys-bg-card);
+  border: 1px solid var(--sys-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+#subTabBtnPos.active {
+  background: rgba(63, 185, 80, 0.12) !important;
+  border-color: rgba(63, 185, 80, 0.4) !important;
+  color: #3fb950 !important;
+}
+#subTabBtnPaper20k.active {
+  background: rgba(240, 136, 62, 0.12) !important;
+  border-color: rgba(240, 136, 62, 0.4) !important;
+  color: #f0883e !important;
+}
+#subTabBtnWatchpool.active {
+  background: rgba(248, 81, 73, 0.12) !important;
+  border-color: rgba(248, 81, 73, 0.4) !important;
+  color: #f85149 !important;
+}
+#subTabBtnDecision.active {
+  background: rgba(88, 166, 255, 0.12) !important;
+  border-color: rgba(88, 166, 255, 0.4) !important;
+  color: #58a6ff !important;
+}
+#subTabBtnBacktest.active {
+  background: rgba(37, 99, 235, 0.12) !important;
+  border-color: rgba(37, 99, 235, 0.4) !important;
+  color: #2563eb !important;
+}
+
 /* ==================== 6. 面板与容器体系 (Panels & Layout) ==================== */
 .container {
   padding: 16px 20px;
@@ -725,7 +768,7 @@ table td, .el-table td {
   border-left: none !important;
   border-right: 1px solid var(--sys-border) !important;
   border-bottom: 1px solid var(--sys-border) !important;
-  color: var(--sys-text-primary) !important;
+  color: var(--sys-text-primary);
   transition: background 0.15s ease !important;
 }
 
@@ -817,21 +860,40 @@ input[type="password"],
 input[type="search"], 
 input[type="number"], 
 select, 
-textarea,
-.el-input__inner,
-.el-textarea__inner {
-  width: 100%;
-  height: 34px;
-  line-height: 34px;
-  padding: 0 14px;
+.el-input__inner {
+  max-width: 100%;
+  height: 34px !important;
+  line-height: 34px !important;
+  padding: 0 10px !important;
   background: var(--sys-input-bg) !important;
   border: 1px solid var(--sys-input-border) !important;
-  border-radius: 4px !important;
+  border-radius: 6px !important;
   color: var(--sys-text-primary) !important;
-  font-size: 13px;
+  font-size: 12.5px !important;
   outline: none;
   transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
   box-sizing: border-box;
+}
+
+textarea,
+.el-textarea__inner {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--sys-input-bg) !important;
+  border: 1px solid var(--sys-input-border) !important;
+  border-radius: 6px !important;
+  color: var(--sys-text-primary) !important;
+  font-size: 12.5px !important;
+  outline: none;
+  box-sizing: border-box;
+}
+
+input[type="checkbox"] {
+  width: 15px !important;
+  height: 15px !important;
+  accent-color: #2563eb !important;
+  cursor: pointer;
+  vertical-align: middle;
 }
 
 input:focus, select:focus, textarea:focus, .el-input__inner:focus, .el-textarea__inner:focus {
@@ -1054,9 +1116,9 @@ textarea, .el-textarea__inner {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: #161b22;
+  background: var(--sys-bg-sub, #f8fafc);
   color: #ffffff;
-  border: 1px solid #30363d;
+  border: 1px solid var(--sys-border, #e2e8f0);
   padding: 10px 18px;
   border-radius: 8px;
   font-size: 13px;
@@ -1316,55 +1378,55 @@ textarea, .el-textarea__inner {
   box-shadow: 0 0 0 3px var(--sys-accent-glow) !important;
 }
 
-/* ==================== 8. 全局日期选择器 (Dark Mode & 高清发光日历图标) ==================== */
+/* ==================== 8. 全局日期选择器 (浅色清爽模式 & 原生高质感日历) ==================== */
 html, body, :root {
-  color-scheme: dark;
+  color-scheme: light !important;
 }
 
 input[type="date"] {
-  color-scheme: dark !important;
-  background: var(--sys-bg-card-inner, #161b22) !important;
-  color: #58a6ff !important;
-  border: 1px solid var(--sys-border, #30363d) !important;
+  color-scheme: light !important;
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
   border-radius: 6px !important;
-  padding: 6px 12px !important;
-  font-family: 'JetBrains Mono', monospace !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
+  padding: 5px 10px !important;
+  font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
   outline: none;
   transition: all 0.2s ease;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 
 input[type="date"]:hover {
-  border-color: var(--sys-accent, #388bfd) !important;
-  background: var(--sys-bg-hover, #21262d) !important;
+  border-color: #3b82f6 !important;
+  background: #f8fafc !important;
 }
 
 input[type="date"]:focus {
-  border-color: var(--sys-accent, #388bfd) !important;
-  box-shadow: 0 0 0 2px var(--sys-accent-glow, rgba(56, 139, 253, 0.25)) !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
 }
 
-/* 核心：彻底解决深色背景下黑色日历图标看不清的问题 (高亮亮白发光图标按钮) */
+/* 原生清爽浅色日历图标 */
 input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer !important;
-  filter: invert(1) brightness(2.5) contrast(1.5) drop-shadow(0 0 3px #58a6ff) !important;
-  opacity: 1 !important;
-  width: 20px !important;
-  height: 20px !important;
-  padding: 3px !important;
-  margin-left: 8px !important;
+  filter: none !important;
+  opacity: 0.75 !important;
+  width: 18px !important;
+  height: 18px !important;
+  padding: 2px !important;
+  margin-left: 6px !important;
   border-radius: 4px !important;
-  background-color: rgba(88, 166, 255, 0.2) !important;
-  border: 1px solid rgba(88, 166, 255, 0.4) !important;
+  background-color: transparent !important;
+  border: none !important;
   transition: all 0.2s ease !important;
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator:hover {
-  background-color: #388bfd !important;
-  filter: invert(1) brightness(3) drop-shadow(0 0 8px #58a6ff) !important;
-  transform: scale(1.15) !important;
+  opacity: 1 !important;
+  transform: scale(1.08);
 }
 
 /* 日期包裹容器美化 */
@@ -1372,8 +1434,8 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--sys-bg-card-inner, #161b22);
-  border: 1px solid var(--sys-border, #30363d);
+  background: var(--sys-bg-card-inner, var(--sys-bg-sub, #f8fafc));
+  border: 1px solid var(--sys-border, var(--sys-border, #e2e8f0));
   padding: 4px 10px;
   border-radius: 8px;
   transition: all 0.2s ease;
@@ -1401,21 +1463,19 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 #reviewSubTabHoverCard {
   position: fixed;
   z-index: 10050;
-  width: 340px;
-  background: rgba(13, 17, 23, 0.98);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(88, 166, 255, 0.4);
+  width: 360px;
+  background: #ffffff;
+  border: 1px solid var(--sys-border, #e2e8f0);
   border-radius: 10px;
-  padding: 14px 16px;
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  padding: 16px 18px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
   pointer-events: none;
   opacity: 0;
   transform: translateY(6px);
   transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 #reviewSubTabHoverCard.show {
@@ -1427,100 +1487,46 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sys-border, #f1f5f9);
+  padding-bottom: 10px;
 }
 
 #reviewSubTabHoverCard .hover-card-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #58a6ff;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--sys-accent, #7c3aed);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-#reviewSubTabHoverCard .hover-card-header .agent-duty-pill {
-  font-size: 10px;
-  font-weight: 700;
-  color: #388bfd;
-  background: rgba(56, 139, 253, 0.15);
-  border: 1px solid rgba(56, 139, 253, 0.3);
-  padding: 2px 8px;
-  border-radius: 12px;
-}
-
-/* ==================== 10. Layui 标准数据表格工业级全域自适应美化规范 ==================== */
-.layui-table {
-  width: 100% !important;
-  background-color: transparent !important;
-  color: var(--sys-text-primary) !important;
-  border-collapse: collapse !important;
-  border: 1px solid var(--sys-border) !important;
-  margin: 0 !important;
-  font-size: 13px !important;
-  border-radius: 6px !important;
-  overflow: hidden !important;
-}
-
-.layui-table thead tr {
-  background-color: var(--sys-table-header) !important;
-  color: var(--sys-text-sub) !important;
-  font-weight: 600 !important;
-  border-bottom: 1px solid var(--sys-border) !important;
-}
-
-.layui-table th {
-  padding: 10px 14px !important;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  border: none !important;
-  border-bottom: 1px solid var(--sys-border) !important;
-  white-space: nowrap !important;
-  color: var(--sys-text-sub) !important;
-}
-
-.layui-table td {
-  padding: 10px 14px !important;
-  font-size: 13px !important;
-  border: none !important;
-  border-bottom: 1px solid var(--sys-border) !important;
-  transition: background 0.15s ease !important;
-}
-
-.layui-table tbody tr:hover,
-.layui-table-hover {
-  background-color: var(--sys-table-hover) !important;
-}
-
-.layui-table-even tr:nth-child(even) {
-  background-color: var(--sys-bg-card-inner) !important;
-}
-
 #reviewSubTabHoverCard .hover-card-badge {
   font-size: 11px;
   font-weight: 700;
-  background: rgba(88, 166, 255, 0.18);
-  color: #58a6ff;
+  background: rgba(124, 58, 237, 0.08);
+  color: var(--sys-accent, #7c3aed);
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px solid rgba(88, 166, 255, 0.35);
+  border: 1px solid rgba(124, 58, 237, 0.2);
 }
 
 #reviewSubTabHoverCard .hover-card-desc {
-  font-size: 12px;
-  color: #e6edf3;
+  font-size: 12.5px;
+  color: var(--sys-text-primary, #334155);
   line-height: 1.6;
 }
 
 #reviewSubTabHoverCard .hover-card-scene {
-  font-size: 11.5px;
-  color: #c9d1d9;
-  background: rgba(0, 0, 0, 0.45);
-  padding: 8px 10px;
+  font-size: 12px;
+  color: #475569;
+  background: #f8fafc;
+  padding: 10px 12px;
   border-radius: 6px;
-  border-left: 3px solid #e3b341;
-  line-height: 1.55;
+  border-left: 3px solid #eab308;
+  line-height: 1.6;
+  border: 1px solid var(--sys-border, #e2e8f0);
+  border-left-width: 3px;
+  border-left-color: #eab308;
 }
 
 /* ==========================================================================
@@ -1533,17 +1539,17 @@ select,
   appearance: none !important;
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
-  height: 32px !important;
-  line-height: 32px !important;
-  padding: 0 28px 0 12px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  padding: 0 26px 0 10px !important;
   background-color: #ffffff !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024' width='12' height='12'%3E%3Cpath fill='%23909399' d='M831.872 340.777L512 652.672 192.128 340.777a30.592 30.592 0 0 0-42.71 0 29.568 29.568 0 0 0 0 42.325l341.333 332.8a30.592 30.592 0 0 0 42.71 0l341.333-332.8a29.568 29.568 0 0 0 0-42.325 30.592 30.592 0 0 0-42.71 0z'/%3E%3C/svg%3E") !important;
   background-repeat: no-repeat !important;
   background-position: right 10px center !important;
   background-size: 12px !important;
   border: 1px solid #dcdfe6 !important;
-  border-radius: 4px !important;
-  font-size: 13px !important;
+  border-radius: 6px !important;
+  font-size: 12.5px !important;
   color: #606266 !important;
   cursor: pointer !important;
   outline: none !important;
@@ -1707,133 +1713,350 @@ body[data-theme="dark"] .el-pagination .el-pagination__editor {
   color: #e5eaf3 !important;
 }
 
-/* 3. Element Plus 日历选择器下拉浮层体系 (彻底消除浏览器原生黑框日历) */
-.el-date-editor {
-  display: inline-flex !important;
-  align-items: center !important;
-  position: relative !important;
-  height: 32px !important;
-  padding: 0 10px !important;
-  background-color: #ffffff !important;
-  border: 1px solid #dcdfe6 !important;
-  border-radius: 4px !important;
-  font-size: 13px !important;
-  color: #606266 !important;
-  cursor: pointer !important;
-  transition: border-color 0.2s !important;
-  box-sizing: border-box !important;
-}
-.el-date-editor:hover {
-  border-color: #c0c4cc !important;
-}
-.el-date-editor:focus-within {
-  border-color: #409eff !important;
-  box-shadow: 0 0 0 1px #409eff inset !important;
-}
-.el-date-editor .el-icon-calendar {
-  color: #909399 !important;
-  margin-right: 6px !important;
-  font-size: 14px !important;
-}
-.el-date-editor input {
-  border: none !important;
-  background: transparent !important;
-  outline: none !important;
-  font-size: 13px !important;
-  color: #606266 !important;
-  cursor: pointer !important;
-  width: 95px !important;
-  padding: 0 !important;
+/* ==================== 官方标准 Element Plus Checkbox 复选框规范 (彻底根除原生暗黑方块) ==================== */
+.el-checkbox {
+  color: #606266;
+  font-weight: 500;
+  font-size: 13px;
+  position: relative;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  user-select: none;
 }
 
+.el-checkbox:hover .el-checkbox__label {
+  color: #409eff;
+}
+
+/* 原生 checkbox 全局 Element Plus 化 (纯白底色 + 浅灰边框 + 蓝底白勾) */
+input[type="checkbox"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  width: 16px !important;
+  height: 16px !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 3px !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  cursor: pointer !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  position: relative !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), background-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+}
+
+input[type="checkbox"]:hover {
+  border-color: #409eff !important;
+}
+
+input[type="checkbox"]:focus,
+input[type="checkbox"]:focus-visible,
+input[type="checkbox"]:active {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+
+/* 选中态：Element Plus 官方品牌蓝 (#409eff) + 纯白对勾 */
+input[type="checkbox"]:checked {
+  background: #409eff !important;
+  background-color: #409eff !important;
+  border-color: #409eff !important;
+}
+
+input[type="checkbox"]:checked::after {
+  content: "" !important;
+  box-sizing: content-box !important;
+  border: 2px solid #ffffff !important;
+  border-left: 0 !important;
+  border-top: 0 !important;
+  height: 7px !important;
+  left: 4.5px !important;
+  position: absolute !important;
+  top: 1.5px !important;
+  transform: rotate(45deg) scaleY(1) !important;
+  width: 3.5px !important;
+}
+
+
+.el-date-editor,
+.el-date-editor--daterange,
+#btDateRangeWrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  background: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 6px !important;
+  padding: 0 10px !important;
+  height: 38px !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), box-shadow 0.2s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+  cursor: pointer !important;
+  user-select: none !important;
+}
+
+.el-date-editor:hover,
+.el-date-editor--daterange:hover,
+#btDateRangeWrapper:hover {
+  border-color: #c0c4cc !important;
+}
+
+.el-date-editor:focus-within,
+.el-date-editor.is-active,
+.el-date-editor--daterange:focus-within,
+.el-date-editor--daterange.is-active,
+#btDateRangeWrapper:focus-within,
+#btDateRangeWrapper.is-active {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+
+.el-date-editor i.el-icon-calendar {
+  color: #909399 !important;
+  font-size: 15px !important;
+  margin-right: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.el-date-editor span.el-date-label {
+  font-size: 12px !important;
+  color: #606266 !important;
+  margin-right: 6px !important;
+  flex-shrink: 0 !important;
+  font-weight: 500 !important;
+}
+
+.el-date-editor input,
+.el-date-editor input[type="text"],
+.el-date-editor input:hover,
+.el-date-editor input:focus,
+.el-date-editor input:focus-visible,
+.el-date-editor input:active,
+.el-date-editor input[type="text"]:focus,
+.el-date-editor input[type="text"]:hover,
+.el-date-editor input[type="text"]:active {
+  border: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  -webkit-appearance: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  font-size: 13px !important;
+  font-family: var(--sys-font-mono, monospace), var(--sys-font-sans, -apple-system, BlinkMacSystemFont, sans-serif) !important;
+  font-weight: 600 !important;
+  color: #303133 !important;
+  cursor: pointer !important;
+  width: 98px !important;
+  min-width: 98px !important;
+  padding: 0 2px !important;
+  margin: 0 !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  text-align: center !important;
+}
+
+/* 浮层面板 (彻底告别突兀纯黑，全面融入现代浅色后台) */
 .el-date-picker-dropdown {
   position: absolute !important;
   background: #ffffff !important;
   border: 1px solid #e4e7ed !important;
-  border-radius: 4px !important;
-  box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.08), 0 8px 20px rgba(0, 0, 0, 0.04) !important;
-  padding: 12px 14px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.1), 0 8px 20px rgba(0, 0, 0, 0.06) !important;
+  padding: 14px 16px !important;
   user-select: none !important;
-  font-family: var(--sys-font-sans) !important;
-  width: 280px !important;
+  font-family: var(--sys-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif) !important;
+  width: 300px !important;
   box-sizing: border-box !important;
+  z-index: 100000 !important;
 }
 
+/* 头部导航 */
 .el-date-picker-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
-  margin-bottom: 12px !important;
+  margin-bottom: 10px !important;
+  padding: 2px 4px !important;
 }
 .el-date-picker-header .el-date-picker-title {
   font-size: 14px !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   color: #303133 !important;
+  letter-spacing: 0.5px !important;
 }
 .el-date-picker-header .el-picker-btn {
   border: none !important;
   background: transparent !important;
   color: #909399 !important;
   font-size: 16px !important;
+  font-weight: 700 !important;
   cursor: pointer !important;
-  padding: 0 4px !important;
-  transition: color 0.15s !important;
-}
-.el-date-picker-header .el-picker-btn:hover {
-  color: #409eff !important;
-}
-
-.el-date-table {
-  width: 100% !important;
-  border-collapse: collapse !important;
-  text-align: center !important;
-  font-size: 12.5px !important;
-}
-.el-date-table th {
-  padding: 6px 0 !important;
-  color: #909399 !important;
-  font-weight: 400 !important;
-  border-bottom: 1px solid #ebeef5 !important;
-}
-.el-date-table td {
-  padding: 4px 0 !important;
-  cursor: pointer !important;
-  transition: all 0.15s !important;
-  color: #606266 !important;
-  height: 32px !important;
-}
-.el-date-table td span {
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 26px !important;
-  height: 26px !important;
+  line-height: 1 !important;
+}
+.el-date-picker-header .el-picker-btn:hover {
+  color: #409eff !important;
+  background: #f0f7ff !important;
+}
+
+/* 表格全局强隔离 */
+.el-date-picker-dropdown table.el-date-table,
+table.el-date-table {
+  width: 100% !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  text-align: center !important;
+  font-size: 12px !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+.el-date-picker-dropdown table.el-date-table thead tr,
+table.el-date-table thead tr {
+  background: transparent !important;
+}
+.el-date-picker-dropdown table.el-date-table th,
+table.el-date-table th {
+  padding: 8px 0 !important;
+  color: #909399 !important;
+  font-weight: 500 !important;
+  border: none !important;
+  border-bottom: 1px solid #ebeef5 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  font-size: 12px !important;
+  text-align: center !important;
+}
+.el-date-picker-dropdown table.el-date-table tbody tr,
+table.el-date-table tbody tr,
+.el-date-picker-dropdown table.el-date-table tbody tr:nth-child(even),
+table.el-date-table tbody tr:nth-child(even),
+.el-date-picker-dropdown table.el-date-table tbody tr:hover,
+table.el-date-table tbody tr:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.el-date-picker-dropdown table.el-date-table td,
+table.el-date-table td {
+  padding: 3px 0 !important;
+  cursor: pointer !important;
+  height: 34px !important;
+  border: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+.el-date-picker-dropdown table.el-date-table td span,
+table.el-date-table td span {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
   border-radius: 50% !important;
-  transition: all 0.15s !important;
+  transition: all 0.15s ease !important;
+  font-family: var(--sys-font-sans, -apple-system, BlinkMacSystemFont, sans-serif) !important;
+  font-size: 12.5px !important;
+  color: #606266 !important;
 }
-.el-date-table td.prev-month,
-.el-date-table td.next-month {
-  color: #c0c4cc !important;
+
+/* 单元格交互状态 */
+/* 【涂色系统】有数据交易日：底色涂色、浅蓝边框、蓝字加粗、底部圆点 */
+.el-date-picker-dropdown table.el-date-table td.has-data span,
+table.el-date-table td.has-data span {
+  background: #e0f2fe !important;
+  border: 1px solid #7dd3fc !important;
+  color: #0369a1 !important;
+  font-weight: 700 !important;
+  position: relative !important;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.18) !important;
 }
-.el-date-table td.available:hover span {
+.el-date-picker-dropdown table.el-date-table td.has-data span::after,
+table.el-date-table td.has-data span::after {
+  content: '' !important;
+  position: absolute !important;
+  bottom: 2px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 4px !important;
+  height: 4px !important;
+  border-radius: 50% !important;
+  background: #0284c7 !important;
+}
+
+/* 有数据交易日悬停深蓝强调态 */
+.el-date-picker-dropdown table.el-date-table td.has-data:hover span,
+table.el-date-table td.has-data:hover span {
+  background: #409eff !important;
+  color: #ffffff !important;
+  border-color: #409eff !important;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.4) !important;
+}
+.el-date-picker-dropdown table.el-date-table td.is-selected.has-data span::after,
+table.el-date-table td.is-selected.has-data span::after {
+  background: #ffffff !important;
+}
+.el-date-picker-dropdown table.el-date-table td.has-data:hover span::after,
+table.el-date-table td.has-data:hover span::after {
+  background: #ffffff !important;
+}
+
+.el-date-picker-dropdown table.el-date-table td.available:hover span,
+table.el-date-table td.available:hover span {
   background: #f0f7ff !important;
   color: #409eff !important;
 }
-.el-date-table td.is-today span {
+.el-date-picker-dropdown table.el-date-table td.prev-month span,
+.el-date-picker-dropdown table.el-date-table td.next-month span,
+table.el-date-table td.prev-month span,
+table.el-date-table td.next-month span {
+  color: #c0c4cc !important;
+}
+.el-date-picker-dropdown table.el-date-table td.is-today span,
+table.el-date-table td.is-today span {
   color: #409eff !important;
   font-weight: 700 !important;
+  border: 1px solid #409eff !important;
 }
-.el-date-table td.is-selected span {
+.el-date-picker-dropdown table.el-date-table td.is-selected span,
+table.el-date-table td.is-selected span {
+  position: relative !important;
   background: #409eff !important;
   color: #ffffff !important;
   font-weight: 700 !important;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.4) !important;
+}
+.el-date-picker-dropdown table.el-date-table td.is-selected.has-data span::after,
+table.el-date-table td.is-selected.has-data span::after {
+  background: #ffffff !important;
 }
 
+/* 底部操作条 */
 .el-date-picker-footer {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
-  margin-top: 10px !important;
+  margin-top: 8px !important;
   padding-top: 8px !important;
   border-top: 1px solid #ebeef5 !important;
 }
@@ -1841,10 +2064,531 @@ body[data-theme="dark"] .el-pagination .el-pagination__editor {
   border: none !important;
   background: transparent !important;
   font-size: 12px !important;
+  font-weight: 600 !important;
   color: #409eff !important;
   cursor: pointer !important;
-  padding: 0 4px !important;
+  padding: 3px 8px !important;
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
 }
 .el-date-picker-footer .el-picker-text-btn:hover {
-  text-decoration: underline !important;
+  color: #66b1ff !important;
+  background: #f0f7ff !important;
+  text-decoration: none !important;
 }
+
+/* ==========================================================================
+   🏛️ ELEMENT PLUS 工业级全套设计规范终极统领层 (ALL STYLES PASS ELEMENT PLUS)
+   全站所有表单控件、按钮、标签、表格、弹窗与滚动条 100% 浅色官方标准统一
+   ========================================================================== */
+
+/* 1. 全局单选框 (el-radio 官方标准) */
+input[type="radio"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  width: 16px !important;
+  height: 16px !important;
+  background-color: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 50% !important;
+  outline: none !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  position: relative !important;
+  margin: 0 6px 0 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), background-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+}
+input[type="radio"]:hover {
+  border-color: #409eff !important;
+}
+input[type="radio"]:focus,
+input[type="radio"]:focus-visible {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+input[type="radio"]:checked {
+  background-color: #409eff !important;
+  border-color: #409eff !important;
+}
+input[type="radio"]:checked::after {
+  content: "" !important;
+  width: 5px !important;
+  height: 5px !important;
+  border-radius: 50% !important;
+  background-color: #ffffff !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* 2. 全局下拉选择器 (el-select 官方标准·告别粗糙原生箭头，统一紧凑高度 34px) */
+select,
+.el-select-input {
+  background-color: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 6px !important;
+  color: #303133 !important;
+  font-size: 12.5px !important;
+  padding: 0 26px 0 10px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), box-shadow 0.2s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024' width='12' height='12'%3E%3Cpath fill='%23909399' d='M831.872 340.777a32 32 0 0 1 45.312 45.248l-341.333 341.333a32 32 0 0 1-45.312 0l-341.333-341.333a32 32 0 0 1 45.248-45.248L512 659.818l319.872-319.04z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+}
+select:hover,
+.el-select-input:hover {
+  border-color: #c0c4cc !important;
+}
+select:focus,
+.el-select-input:focus {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+select option {
+  background-color: #ffffff !important;
+  color: #303133 !important;
+  padding: 6px 10px !important;
+  font-size: 12.5px !important;
+}
+
+/* 3. 全局文本输入控件 (el-input 官方标准，统一紧凑高度 34px) */
+input[type="text"]:not(.el-date-editor input):not(#paperSnapshotDatePicker),
+input[type="password"],
+input[type="number"],
+input[type="search"],
+.el-input__inner:not(select):not(.el-date-editor input) {
+  background-color: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 6px !important;
+  color: #303133 !important;
+  font-size: 12.5px !important;
+  padding: 0 10px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), box-shadow 0.2s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+}
+input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="number"]:hover,
+input[type="search"]:hover {
+  border-color: #c0c4cc !important;
+}
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="search"]:focus {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+
+/* 4. 全局开关控件 (el-switch 官方标准) */
+.el-switch {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  font-size: 13px;
+  line-height: 20px;
+  height: 20px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.el-switch__core {
+  display: inline-block;
+  position: relative;
+  width: 40px;
+  height: 20px;
+  border: 1px solid #dcdfe6;
+  outline: none;
+  border-radius: 10px;
+  box-sizing: border-box;
+  background: #dcdfe6;
+  cursor: pointer;
+  transition: border-color .3s,background-color .3s;
+}
+.el-switch.is-checked .el-switch__core {
+  border-color: #409eff;
+  background-color: #409eff;
+}
+
+/* 5. 全局卡片与数据容器 (el-card 官方标准) */
+.panel,
+.card-panel,
+.el-card {
+  background: #ffffff !important;
+  border: 1px solid #e4e7ed !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+}
+.panel:hover,
+.card-panel:hover,
+.el-card:hover {
+  box-shadow: 0 6px 18px 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 6. 全局表格体系 (el-table 官方标准) */
+table.data-table,
+.el-table {
+  width: 100% !important;
+  background: #ffffff !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 1px solid #ebeef5 !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+}
+table.data-table th,
+.el-table th {
+  background-color: #fafafa !important;
+  color: #606266 !important;
+  font-weight: 600 !important;
+  font-size: 12.5px !important;
+  padding: 10px 14px !important;
+  border-bottom: 1px solid #ebeef5 !important;
+  text-align: left !important;
+}
+table.data-table td,
+.el-table td {
+  padding: 10px 14px !important;
+  border-bottom: 1px solid #ebeef5 !important;
+  color: inherit;
+  font-size: 13px !important;
+  background: #ffffff !important;
+  transition: background-color 0.15s ease !important;
+}
+table.data-table tr:hover td,
+.el-table tbody tr:hover td {
+  background-color: #f5f7fa !important;
+}
+
+
+/* ==================== 跨系统互斥根容器强力显示保障 ==================== */
+body.theme-alpha #sysSectionAlpha {
+  display: block !important;
+  visibility: visible !important;
+}
+body.theme-alpha #sysSectionReview {
+  display: none !important;
+}
+
+body.theme-review #sysSectionReview {
+  display: block !important;
+  visibility: visible !important;
+  min-height: 80vh;
+}
+body.theme-review #sysSectionAlpha {
+  display: none !important;
+}
+
+
+/* ==============================================================================
+   🔴🟢 A股全系统权威红涨绿跌规范与测算器精准定位高亮动效
+   ============================================================================== */
+.stock-up, .text-up, [data-dir="up"], .color-up {
+  color: #f85149 !important;
+  font-weight: 700 !important;
+}
+.stock-down, .text-down, [data-dir="down"], .color-down {
+  color: #3fb950 !important;
+  font-weight: 700 !important;
+}
+.stock-flat, .text-flat {
+  color: #94a3b8 !important;
+}
+
+/* 测算器精准定位聚焦高亮脉冲光效 */
+@keyframes calcPulseHighlight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+    border-color: #2563eb;
+    transform: scale(1);
+  }
+  30% {
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.35);
+    border-color: #2563eb;
+    transform: scale(1.008);
+  }
+  60% {
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+    border-color: #2563eb;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    transform: scale(1);
+  }
+}
+
+.calc-focus-highlight {
+  animation: calcPulseHighlight 2s ease-in-out 2 !important;
+  border-color: #2563eb !important;
+}
+
+/* ====================================================================
+   全真模拟盘·实战每日盈亏日历 (PnL Calendar) 专属样式 (Element Plus 浅色高质感)
+   ==================================================================== */
+.paper-pnl-calendar-container {
+  background: #ffffff;
+  border: 1px solid var(--sys-border, #dcdfe6);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.paper-pnl-calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--sys-border-light, #ebeef5);
+  margin-bottom: 12px;
+}
+
+.paper-cal-month-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.paper-cal-month-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.paper-cal-month-btn:hover {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.paper-cal-month-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 0 6px;
+  letter-spacing: 0.3px;
+}
+
+.paper-cal-summary-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.paper-cal-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+.paper-cal-stat-pill.stat-profit {
+  background: #fef0f0;
+  color: #cf222e;
+  border-color: #fde2e2;
+  font-weight: 600;
+}
+.paper-cal-stat-pill.stat-loss {
+  background: #f0fdf4;
+  color: #1a7f37;
+  border-color: #dcfce7;
+  font-weight: 600;
+}
+
+/* 7 列网格表头与单元格 */
+.paper-cal-grid-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.paper-cal-grid-header-col {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 4px 0;
+}
+
+.paper-cal-grid-body {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.paper-cal-cell {
+  position: relative;
+  min-height: 70px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  padding: 6px 7px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.paper-cal-cell:hover:not(.is-disabled):not(.is-empty) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #94a3b8;
+  z-index: 2;
+}
+
+/* 当前被选中/正在回溯的快照日期 */
+.paper-cal-cell.is-active-snapshot {
+  border: 2px solid #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18), 0 4px 10px rgba(37, 99, 235, 0.12) !important;
+  background: #eff6ff !important;
+  z-index: 3;
+}
+
+/* 涨跌着色 (遵循 A股红涨绿跌经典美学) */
+.paper-cal-cell.is-up {
+  background: #fff8f8;
+  border-color: #fecaca;
+}
+.paper-cal-cell.is-up:hover {
+  border-color: #f87171;
+}
+
+.paper-cal-cell.is-down {
+  background: #f6fbf7;
+  border-color: #bbf7d0;
+}
+.paper-cal-cell.is-down:hover {
+  border-color: #4ade80;
+}
+
+.paper-cal-cell.is-flat {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.paper-cal-cell.is-weekend,
+.paper-cal-cell.is-holiday {
+  background: #f8fafc;
+  border-color: #edf2f7;
+  cursor: default;
+  opacity: 0.75;
+}
+
+.paper-cal-cell.is-future,
+.paper-cal-cell.is-empty {
+  background: #fbfcfe;
+  border: 1px dashed #e2e8f0;
+  cursor: default;
+  opacity: 0.45;
+}
+
+.paper-cal-date-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.paper-cal-action-tag {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+.paper-cal-action-tag.tag-win {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.paper-cal-action-tag.tag-loss {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.paper-cal-pnl-val {
+  font-size: 13.5px;
+  font-family: var(--sys-font-mono, monospace);
+  font-weight: 800;
+  margin: 3px 0 1px 0;
+  letter-spacing: -0.3px;
+}
+.paper-cal-pnl-val.text-up {
+  color: #cf222e;
+}
+.paper-cal-pnl-val.text-down {
+  color: #1a7f37;
+}
+.paper-cal-pnl-val.text-flat {
+  color: #64748b;
+}
+
+.paper-cal-return-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  width: fit-content;
+}
+.paper-cal-return-tag.tag-up {
+  background: rgba(207, 34, 46, 0.08);
+  color: #cf222e;
+}
+.paper-cal-return-tag.tag-down {
+  background: rgba(26, 127, 55, 0.08);
+  color: #1a7f37;
+}
+.paper-cal-return-tag.tag-flat {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.paper-cal-non-trading-label {
+  font-size: 11px;
+  color: #94a3b8;
+  margin: auto 0;
+  text-align: center;
+  font-weight: 500;
+}
+

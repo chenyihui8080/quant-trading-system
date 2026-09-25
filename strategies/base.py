@@ -58,7 +58,9 @@ class RiskStrategy(CtaTemplate):
         elif self.pos == 0:
             self.entry_price = 0.0
 
-        self.risk.on_trade(trade.price, self.pos, 1_000_000)
+        trade_volume = int(getattr(trade, "volume", 0) or getattr(trade, "qty", 0) or 0)
+        current_capital = float(getattr(self, "capital", 1_000_000) or 1_000_000)
+        self.risk.on_trade(trade.price, self.pos, current_capital, qty=trade_volume)
 
         if self._signal_gen:
             self._signal_gen.check_signal(

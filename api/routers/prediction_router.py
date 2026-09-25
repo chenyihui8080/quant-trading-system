@@ -20,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from utils.auth import get_optional_user
+from utils.auth import get_optional_user, get_current_user, log_audit
 
 logger = logging.getLogger("PredictionRouter")
 router = APIRouter(prefix="/api/prediction", tags=["预测记录与AI复盘"])
@@ -66,15 +66,46 @@ def get_db():
             reviewed_at TEXT                    -- 复盘时间
         )
     """)
-    # 兼容旧表升级：尝试添加 stop_loss 列
-    try:
-        conn.execute("ALTER TABLE prediction_records ADD COLUMN stop_loss REAL;")
-        conn.commit()
-    except Exception:
-        pass
+    # 兼容旧表升级：尝试添加字段
+    upgrade_columns = [
+        ("stop_loss", "REAL"),
+        ("playbook_id", "TEXT"),
+        ("playbook_name", "TEXT"),
+        ("playbook_params", "TEXT"),
+        ("is_auto_generated", "INTEGER DEFAULT 0"),
+        ("actual_max_profit", "REAL"),
+        ("actual_max_loss", "REAL")
+    ]
+    for col_name, col_type in upgrade_columns:
+        try:
+            conn.execute(f"ALTER TABLE prediction_records ADD COLUMN {col_name} {col_type};")
+            conn.commit()
+        except Exception:
+            pass
+
+    # 确保战法胜率统计表存在
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS playbook_stats (
+            playbook_id TEXT PRIMARY KEY,
+            playbook_name TEXT,
+            total_count INTEGER DEFAULT 0,
+            win_count INTEGER DEFAULT 0,
+            win_rate REAL DEFAULT 0.0,
+            avg_profit_pct REAL DEFAULT 0.0,
+            avg_loss_pct REAL DEFAULT 0.0,
+            realized_rr REAL DEFAULT 0.0,
+            max_drawdown REAL DEFAULT 0.0,
+            adaptive_status TEXT DEFAULT 'normal',
+            adaptive_position_pct REAL,
+            adaptive_rr_threshold REAL,
+            last_updated TEXT
+        )
+    """)
+
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pred_rec_date ON prediction_records(record_date);")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pred_rev_date ON prediction_records(review_date);")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pred_correct ON prediction_records(is_correct);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pred_playbook ON prediction_records(playbook_id);")
     conn.commit()
     return conn
 
@@ -93,6 +124,10 @@ class PredictionCreate(BaseModel):
     confidence: int = 3                  # 1-5 星
     reason: str = ""                     # 判断理由
     tags: str = ""                       # 标签
+    playbook_id: Optional[str] = None    # 专属战法ID
+    playbook_name: Optional[str] = None  # 战法名称
+    playbook_params: Optional[str] = None # 战法定制参数快照
+    is_auto_generated: Optional[int] = 0 # 1=全市场扫描自动生成, 0=人工测算/录入
 
 
 class ReviewTrigger(BaseModel):
@@ -372,23 +407,42 @@ async def _ai_review_prediction(record: dict, quote: dict) -> str:
 
 @router.post("/add")
 @router.post("/record")
-async def add_prediction(body: PredictionCreate, user=Depends(get_optional_user)):
-    """新增一条操盘判断记录（同时支持 /add 与 /record 路由）"""
+async def add_prediction(body: PredictionCreate, user: dict = Depends(get_current_user)):
+    """新增一条操盘判断记录（需登录，同时支持 /add 与 /record 路由，绑定专属战法指纹）"""
     conn = get_db()
     try:
+        # 如果未传入 playbook_id，则尝试根据理由/标签或默认推导
+        pb_id = body.playbook_id
+        pb_name = body.playbook_name
+        if not pb_id:
+            from utils.playbook_engine import detect_best_playbook, PLAYBOOK_REGISTRY
+            pb_id = detect_best_playbook({"price": body.entry_price or 0})
+            pb_name = PLAYBOOK_REGISTRY.get(pb_id, {}).get("name", "专属量化战法")
+        elif not pb_name:
+            from utils.playbook_engine import PLAYBOOK_REGISTRY
+            pb_name = PLAYBOOK_REGISTRY.get(pb_id, {}).get("name", "专属量化战法")
+
         conn.execute("""
             INSERT INTO prediction_records
             (record_date, stock_code, stock_name, direction, target_price, stop_loss,
-             entry_price, shares, confidence, reason, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             entry_price, shares, confidence, reason, tags,
+             playbook_id, playbook_name, playbook_params, is_auto_generated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             body.record_date, body.stock_code.strip(), body.stock_name.strip(),
             body.direction, body.target_price, body.stop_loss, body.entry_price,
-            body.shares, body.confidence, body.reason, body.tags
+            body.shares, body.confidence, body.reason, body.tags,
+            pb_id, pb_name, body.playbook_params, body.is_auto_generated or 0
         ))
         conn.commit()
         record_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        return {"code": 200, "message": "判断记录已保存", "id": record_id}
+        return {
+            "code": 200,
+            "message": "判断记录已保存，已成功绑定战法指纹",
+            "id": record_id,
+            "playbook_id": pb_id,
+            "playbook_name": pb_name
+        }
     except Exception as e:
         logger.error(f"保存预测记录失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -399,14 +453,15 @@ async def add_prediction(body: PredictionCreate, user=Depends(get_optional_user)
 @router.get("/list")
 async def list_predictions(
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = 10,  # 默认统一为 10
     record_date: str = "",
     direction: str = "",
     reviewed: str = "",      # "yes"=已复盘, "no"=未复盘, ""=全部
     correct: str = "",       # "yes"=仅看正确, "no"=仅看失误, ""=全部
-    user=Depends(get_optional_user)
+    category: str = "",      # "all"=全部, "position"/"持仓"=实盘持仓, "watchlist"/"自选"=核心自选, "screened"/"筛选"=量化与AI筛选
+    user=Depends(get_current_user)
 ):
-    """分页查询判断记录列表（按日期倒序排列，带自动对账守卫）"""
+    """分页查询判断记录列表（按日期倒序排列，支持持仓/自选/筛选三分类，带自动对账守卫）"""
     conn = get_db()
     try:
         # 自动对账守卫：只有收盘后(>=15:00)才能结算昨日预测；早盘盘前仅自动结算前天及更早的历史记录
@@ -425,7 +480,7 @@ async def list_predictions(
             except Exception as e:
                 logger.warning(f"自动补齐历史未复盘记录异常: {e}")
 
-        # 今日预测保障守卫：若今日尚未建档任何预测记录，自动触发盘前精选标的建档
+        # 今日预测保障守卫：若今日尚未建档任何预测记录，自动触发全量自选、持仓与战法筛选打法验证建档
         today_records_count = conn.execute(
             "SELECT COUNT(*) FROM prediction_records WHERE record_date = ?",
             (today_iso,)
@@ -434,27 +489,57 @@ async def list_predictions(
             try:
                 from review_workbench.pipeline.scheduler import review_scheduler
                 if review_scheduler:
-                    review_scheduler._job_pipeline_b()
+                    review_scheduler._job_pipeline_morning_scan()
             except Exception as se:
-                logger.warning(f"自动补充今日预测异常: {se}")
+                logger.warning(f"自动补充今日全量自选持仓预测异常: {se}")
 
-        where_clauses = []
-        params = []
+        # 基础查询子句（不含 category，用于统计分类总数）
+        base_where = []
+        base_params = []
         if record_date:
-            where_clauses.append("record_date = ?")
-            params.append(record_date)
+            base_where.append("record_date = ?")
+            base_params.append(record_date)
         if direction:
-            where_clauses.append("direction = ?")
-            params.append(direction)
+            base_where.append("direction = ?")
+            base_params.append(direction)
         if reviewed == "yes":
-            where_clauses.append("review_date IS NOT NULL")
+            base_where.append("review_date IS NOT NULL")
         elif reviewed == "no":
-            where_clauses.append("review_date IS NULL")
+            base_where.append("review_date IS NULL")
         
         if correct == "yes":
-            where_clauses.append("is_correct = 1")
+            base_where.append("is_correct = 1")
         elif correct == "no":
-            where_clauses.append("is_correct = 0")
+            base_where.append("is_correct = 0")
+
+        base_where_sql = ("WHERE " + " AND ".join(base_where)) if base_where else ""
+
+        # 统计三类数量（持仓、自选、筛选、全部）
+        count_all = conn.execute(f"SELECT COUNT(*) FROM prediction_records {base_where_sql}", base_params).fetchone()[0]
+        
+        pos_where = list(base_where) + ["tags LIKE '%持仓%'"]
+        pos_sql = "WHERE " + " AND ".join(pos_where)
+        count_pos = conn.execute(f"SELECT COUNT(*) FROM prediction_records {pos_sql}", base_params).fetchone()[0]
+
+        watch_where = list(base_where) + ["tags LIKE '%自选%'"]
+        watch_sql = "WHERE " + " AND ".join(watch_where)
+        count_watch = conn.execute(f"SELECT COUNT(*) FROM prediction_records {watch_sql}", base_params).fetchone()[0]
+
+        screened_where = list(base_where) + ["(tags LIKE '%筛选%' OR tags LIKE '%早盘%' OR tags LIKE '%尾盘%' OR (tags NOT LIKE '%持仓%' AND tags NOT LIKE '%自选%'))"]
+        screened_sql = "WHERE " + " AND ".join(screened_where)
+        count_screened = conn.execute(f"SELECT COUNT(*) FROM prediction_records {screened_sql}", base_params).fetchone()[0]
+
+        # 实际过滤条件（叠加 category）
+        where_clauses = list(base_where)
+        params = list(base_params)
+
+        cat_clean = category.strip().lower()
+        if cat_clean in ("position", "pos", "持仓"):
+            where_clauses.append("tags LIKE '%持仓%'")
+        elif cat_clean in ("watchlist", "watch", "自选"):
+            where_clauses.append("tags LIKE '%自选%'")
+        elif cat_clean in ("screened", "filter", "筛选"):
+            where_clauses.append("(tags LIKE '%筛选%' OR tags LIKE '%早盘%' OR tags LIKE '%尾盘%' OR (tags NOT LIKE '%持仓%' AND tags NOT LIKE '%自选%'))")
 
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
         total = conn.execute(
@@ -470,20 +555,36 @@ async def list_predictions(
         ).fetchall()
 
         records = [dict(r) for r in rows]
-        # 解析 ai_review JSON
+        # 解析 ai_review JSON 并标注 category
         for r in records:
             if r.get("ai_review"):
                 try:
                     r["ai_review"] = json.loads(r["ai_review"])
                 except Exception:
                     pass
+            tags_str = r.get("tags") or ""
+            if "持仓" in tags_str:
+                r["category"] = "position"
+                r["category_label"] = "持仓"
+            elif "自选" in tags_str:
+                r["category"] = "watchlist"
+                r["category_label"] = "自选"
+            else:
+                r["category"] = "screened"
+                r["category_label"] = "筛选"
 
         return {
             "code": 200,
             "total": total,
             "page": page,
             "page_size": page_size,
-            "records": records
+            "records": records,
+            "category_counts": {
+                "all": count_all,
+                "position": count_pos,
+                "watchlist": count_watch,
+                "screened": count_screened
+            }
         }
     finally:
         conn.close()
@@ -580,9 +681,9 @@ async def get_stats(
 
 
 @router.post("/review")
-async def trigger_review(body: ReviewTrigger, user=Depends(get_optional_user)):
+async def trigger_review(body: ReviewTrigger, user: dict = Depends(get_current_user)):
     """
-    对指定日期或全部未复盘记录进行自动复盘：
+    对指定日期或全部未复盘记录进行自动复盘（需登录）：
     1. 校验到期状态（今日新预测需在次日收盘后结算，避免同日盘中价混淆次日结算价）；
     2. 多通道拉取真实收盘/实时行情；
     3. 判定预测对错与盈亏；
@@ -648,6 +749,12 @@ async def trigger_review(body: ReviewTrigger, user=Depends(get_optional_user)):
                 conn.execute("UPDATE prediction_records SET entry_price = ? WHERE id = ?", (entry_price, record["id"]))
                 record["entry_price"] = entry_price
 
+            # 计算次日实际盘中最大冲高%与最大下探回撤%
+            actual_high = float(quote.get("high") or 0)
+            actual_low = float(quote.get("low") or 0)
+            actual_max_profit = round(((actual_high - entry_price) / entry_price) * 100.0, 2) if entry_price > 0 and actual_high > 0 else 0.0
+            actual_max_loss = round(((actual_low - entry_price) / entry_price) * 100.0, 2) if entry_price > 0 and actual_low > 0 else 0.0
+
             # 判断对错与收益（综合真实入场成本、次日收盘涨跌幅及盘中最高价触达止盈情况）
             is_correct, profit_pct = _judge_correct(
                 record.get("direction", "buy"),
@@ -678,6 +785,8 @@ async def trigger_review(body: ReviewTrigger, user=Depends(get_optional_user)):
                     actual_high = ?,
                     actual_low = ?,
                     actual_change_pct = ?,
+                    actual_max_profit = ?,
+                    actual_max_loss = ?,
                     is_correct = ?,
                     profit_pct = ?,
                     ai_review = ?,
@@ -688,6 +797,8 @@ async def trigger_review(body: ReviewTrigger, user=Depends(get_optional_user)):
                 quote.get("open"), quote.get("close"),
                 quote.get("high"), quote.get("low"),
                 quote.get("change_pct"),
+                actual_max_profit,
+                actual_max_loss,
                 is_correct, profit_pct,
                 ai_review_json,
                 record["id"]
@@ -699,13 +810,26 @@ async def trigger_review(body: ReviewTrigger, user=Depends(get_optional_user)):
                 "stock": f"{record['stock_name']}({code})",
                 "direction": record["direction"],
                 "actual_change_pct": quote.get("change_pct"),
+                "actual_max_profit": actual_max_profit,
+                "actual_max_loss": actual_max_loss,
                 "is_correct": is_correct,
                 "profit_pct": profit_pct
             })
 
+        # 对账完成后自动触发战法胜率自适应调优器，实现完全自主进化闭环
+        tuning_summary = None
+        if reviewed_count > 0:
+            try:
+                from utils.adaptive_tuner import global_adaptive_tuner
+                tuning_res = global_adaptive_tuner.run_tuning()
+                tuning_summary = tuning_res.get("data")
+                logger.info("🤖 [自适应飞轮] 对账后战法自适应调优完成")
+            except Exception as te:
+                logger.error(f"自适应调优触发异常: {te}")
+
         msg_parts = []
         if reviewed_count > 0:
-            msg_parts.append(f"成功复盘结算 {reviewed_count} 条记录")
+            msg_parts.append(f"成功复盘结算 {reviewed_count} 条记录并完成战法自适应调优")
         if skipped_today_count > 0:
             msg_parts.append(f"{skipped_today_count} 条今日预测将在次日收盘后验证结算")
         if failed_records:
@@ -730,8 +854,8 @@ async def trigger_review(body: ReviewTrigger, user=Depends(get_optional_user)):
 
 
 @router.delete("/record/{record_id}")
-async def delete_prediction(record_id: int, user=Depends(get_optional_user)):
-    """删除一条预测记录"""
+async def delete_prediction(record_id: int, user: dict = Depends(get_current_user)):
+    """删除一条预测记录（需登录）"""
     conn = get_db()
     try:
         conn.execute("DELETE FROM prediction_records WHERE id = ?", (record_id,))
@@ -765,3 +889,369 @@ async def get_pending_review_dates(user=Depends(get_optional_user)):
         }
     finally:
         conn.close()
+
+
+# ==================== 战法胜率自适应飞轮 API ====================
+
+@router.get("/playbook_stats")
+async def get_playbook_stats(user=Depends(get_optional_user)):
+    """获取六大专属战法的实操胜率排行榜与当前自适应调优状态 (看板专用)"""
+    try:
+        from utils.adaptive_tuner import global_adaptive_tuner
+        stats = global_adaptive_tuner.get_all_stats()
+        return {
+            "code": 200,
+            "message": "获取战法胜率自适应统计成功",
+            "stats": stats
+        }
+    except Exception as e:
+        logger.error(f"获取战法统计失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/force_tuning")
+async def force_playbook_tuning(user=Depends(get_current_user)):
+    """手动或外部Cron触发战法胜率自适应调优（重新聚合真实对账数据并更新参数）"""
+    try:
+        from utils.adaptive_tuner import global_adaptive_tuner
+        from utils.feishu_client import send_feishu_card
+        res = global_adaptive_tuner.run_tuning()
+        
+        # 发送飞书卡片通知
+        card_md = f"**调优执行状态**: ✅ 调优完成\n"
+        card_md += f"**样本总量**: {res.get('total_reviewed', 0)} 笔\n"
+        card_md += f"**整体胜率**: {res.get('overall_win_rate', 0)}%\n\n"
+        card_md += "**六大战法参数调优结果**:\n"
+        for item in res.get("details", [])[:6]:
+            card_md += f"- **{item.get('name')}**: 胜率 {item.get('win_rate')}% | 状态: `{item.get('status')}`\n"
+        send_feishu_card("🧬 【量化战法自适应调优】15:30 飞轮执行完成", card_md, header_color="purple")
+        return res
+    except Exception as e:
+        logger.error(f"强制战法调优失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/force_premarket")
+async def force_premarket(user=Depends(get_current_user)):
+    """08:30 盘前博弈预案与精选建档 (支持外部Cron触发)"""
+    try:
+        from review_workbench.pipeline.scheduler import review_scheduler
+        from utils.feishu_client import send_feishu_card
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        review_scheduler._job_pipeline_b()
+        
+        card_md = f"**预案生成日期**: {today}\n"
+        card_md += "**执行状态**: ✅ 盘前博弈预案流水线已就绪，精选核心标的已自动入库待观察\n"
+        card_md += "建议在 09:15~09:25 重点观察核心标的竞价溢价幅度与资金承接意愿。"
+        send_feishu_card("🌅 【盘前博弈预案】08:30 策略简报已生成", card_md, header_color="blue")
+        return {"code": 200, "message": "08:30 盘前预案执行完成并已推送飞书"}
+    except Exception as e:
+        logger.error(f"强制盘前预案执行失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/force_morning_scan")
+async def force_morning_scan(user=Depends(get_current_user)):
+    """09:15 早盘战法自动扫描建档 (支持外部Cron触发，涵盖持仓、自选、筛选三类)"""
+    try:
+        from review_workbench.pipeline.scheduler import review_scheduler
+        from utils.feishu_client import send_feishu_card
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        review_scheduler._job_pipeline_morning_scan()
+        
+        # 查出今日命中的预测标的
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT stock_name, stock_code, playbook_name, entry_price, stop_loss, target_price, tags
+            FROM prediction_records
+            WHERE record_date = ?
+            ORDER BY id ASC
+        """, (today,)).fetchall()
+        
+        pos_count = sum(1 for r in rows if "持仓" in (r["tags"] or ""))
+        watch_count = sum(1 for r in rows if "自选" in (r["tags"] or ""))
+        screened_count = len(rows) - pos_count - watch_count
+
+        card_md = f"**验证日期**: {today} 早盘 09:15\n"
+        card_md += f"**验证总规模**: 共 **{len(rows)}** 只标的（💼 实盘持仓 **{pos_count}** 只 + 📌 核心自选 **{watch_count}** 只 + 🎯 量化与AI筛选 **{screened_count}** 只）\n"
+        card_md += "核心目标：**全量验证六大战法与AI筛选在实盘持仓、核心自选及全市场潜力股中的胜率与走势适配度**。\n\n"
+
+        if rows:
+            for r in rows[:18]:
+                t_str = r["tags"] or ""
+                prefix = "💼 [持仓]" if "持仓" in t_str else ("📌 [自选]" if "自选" in t_str else "🎯 [筛选]")
+                card_md += f"{prefix} **{r['stock_name']}** ({r['stock_code']}): {r['playbook_name']} | 入:¥{r['entry_price']} ➔ 目:¥{r['target_price']} (止损:¥{r['stop_loss']})\n"
+            if len(rows) > 18:
+                card_md += f"\n... 以及其余 **{len(rows) - 18}** 只标的已全部录入预测日记待次日对账比对。"
+        else:
+            card_md += "⚠️ 今日未检测到有效标的。"
+            
+        send_feishu_card("⚡ 【全量打法验证】09:15 三分类推演就绪", card_md, header_color="orange")
+        return {"code": 200, "message": "全量三分类打法验证推演完成并已推送飞书", "count": len(rows), "pos": pos_count, "watch": watch_count, "screened": screened_count}
+    except Exception as e:
+        logger.error(f"强制早盘战法扫描执行失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/force_tail_scan")
+async def force_tail_scan(user=Depends(get_current_user)):
+    """14:30 尾盘决战选股与预测入库 (支持外部Cron触发，涵盖持仓、自选、筛选三类)"""
+    try:
+        from review_workbench.pipeline.scheduler import review_scheduler
+        from utils.feishu_client import send_feishu_card
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        review_scheduler._job_pipeline_tail_alpha()
+        
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT stock_name, stock_code, playbook_name, entry_price, stop_loss, target_price, tags
+            FROM prediction_records
+            WHERE record_date = ?
+            ORDER BY id ASC
+        """, (today,)).fetchall()
+        
+        pos_count = sum(1 for r in rows if "持仓" in (r["tags"] or ""))
+        watch_count = sum(1 for r in rows if "自选" in (r["tags"] or ""))
+        screened_count = len(rows) - pos_count - watch_count
+
+        card_md = f"**决战时间**: {today} 尾盘 14:30\n"
+        card_md += f"**全量标的池**: 共 **{len(rows)}** 只标的（💼 实盘持仓 **{pos_count}** 只 + 📌 核心自选 **{watch_count}** 只 + 🎯 量化与AI筛选 **{screened_count}** 只）\n"
+        card_md += "尾盘价位已全部刷新锁定，静待 15:05 自动对账验证打法有效性。\n\n"
+
+        if rows:
+            for r in rows[:18]:
+                t_str = r["tags"] or ""
+                prefix = "💼 [持仓]" if "持仓" in t_str else ("📌 [自选]" if "自选" in t_str else "🎯 [筛选]")
+                card_md += f"{prefix} **{r['stock_name']}** ({r['stock_code']}): {r['playbook_name']} | 尾盘价:¥{r['entry_price']} ➔ 目:¥{r['target_price']}\n"
+            if len(rows) > 18:
+                card_md += f"\n... 以及其余 **{len(rows) - 18}** 只标的尾盘点位已锁定。"
+        else:
+            card_md += "🟢 尾盘风控正常运行。"
+            
+        send_feishu_card("🎯 【尾盘全量战法锁定】14:30 数据刷新完成", card_md, header_color="turquoise")
+        return {"code": 200, "message": "尾盘全量战法数据更新完成并已推送飞书", "count": len(rows), "pos": pos_count, "watch": watch_count, "screened": screened_count}
+    except Exception as e:
+        logger.error(f"强制尾盘选股失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/force_review_all")
+async def force_review_all(user=Depends(get_current_user)):
+    """15:05 盘后深度复盘与打脸对账流水线 (支持外部Cron触发)"""
+    try:
+        from utils.feishu_client import send_feishu_card
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # 1. 触发对账
+        review_res = await trigger_review(ReviewTrigger(record_date="all", use_ai=False))
+        reviewed_cnt = review_res.get("reviewed", 0)
+        
+        # 2. 查询今日/昨日结算记录
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT stock_name, stock_code, playbook_name, is_correct, profit_pct, actual_change_pct
+            FROM prediction_records
+            WHERE review_date = ?
+        """, (today,)).fetchall()
+        
+        win_count = sum(1 for r in rows if r["is_correct"] == 1)
+        total = len(rows)
+        win_rate = round(win_count / total * 100, 1) if total > 0 else 0.0
+        
+        card_md = f"**对账结算日期**: {today} 15:05 盘后\n"
+        card_md += f"**今日对账样本**: {total} 笔 | **胜率**: {win_rate}%\n\n"
+        if rows:
+            for r in rows:
+                status_icon = "🎯 [止盈/正确]" if r["is_correct"] == 1 else "🛑 [止损/失误]"
+                profit = r['profit_pct'] or 0.0
+                card_md += f"- **{r['stock_name']} ({r['stock_code']})**: {status_icon} 收益 `{profit:+.2f}%` (所属: {r['playbook_name']})\n"
+        else:
+            card_md += "今日暂无满足次日到期结算条件的预测记录。"
+            
+        send_feishu_card("📊 【盘后真实对账简报】15:05 结算完成", card_md, header_color="green" if win_rate >= 60 else "orange")
+        return {"code": 200, "message": "15:05 盘后对账完成并已推送飞书", "data": review_res}
+    except Exception as e:
+        logger.error(f"强制盘后对账失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+@router.get("/auto_scan_preview")
+async def get_auto_scan_preview(user=Depends(get_optional_user)):
+    """
+    预览全自动飞轮扫描候选池：
+    基于 Alpha 规则初筛 + 六大专属战法引擎形态识别与买卖点风控计算
+    """
+    try:
+        from api.routers.alpha_router import scan_alpha_candidates
+        from utils.playbook_engine import detect_best_playbook, calculate_playbook_levels, PLAYBOOK_REGISTRY
+        from utils.adaptive_tuner import global_adaptive_tuner
+
+        scan_res = scan_alpha_candidates()
+        results = scan_res.get("results", []) if isinstance(scan_res, dict) else []
+
+        preview_list = []
+        for r in results:
+            symbol = r.get("symbol")
+            price = float(r.get("current_price", 0))
+            quote = {"price": price, "change_pct": r.get("change_pct", 0), "open": price}
+            
+            # 识别最适合该股的战法
+            pb_id = detect_best_playbook(quote)
+            pb_stat = global_adaptive_tuner.get_stat(pb_id) or {}
+            
+            # 若战法处于冷冻期 (frozen)，且总胜率极差，跳过推荐
+            if pb_stat.get("adaptive_status") == "frozen":
+                continue
+
+            tuned_pos = pb_stat.get("adaptive_position_pct")
+            tuned_rr = pb_stat.get("adaptive_rr_threshold")
+
+            # 按专属战法精准测算
+            pb_calc = calculate_playbook_levels(
+                playbook_id=pb_id,
+                quote=quote,
+                tuned_position_pct=tuned_pos,
+                tuned_rr_threshold=tuned_rr
+            )
+
+            preview_list.append({
+                "symbol": symbol,
+                "name": r.get("name", symbol),
+                "current_price": price,
+                "change_pct": r.get("change_pct", 0),
+                "playbook_id": pb_id,
+                "playbook_name": pb_calc["playbook_name"],
+                "playbook_style": pb_calc["playbook_style"],
+                "adaptive_status": pb_stat.get("adaptive_status", "normal"),
+                "win_rate": pb_stat.get("win_rate", 50.0),
+                "buy_price_low": pb_calc["buy_price_low"],
+                "buy_price_high": pb_calc["buy_price_high"],
+                "stop_loss_price": pb_calc["stop_loss_price"],
+                "stop_loss_pct": pb_calc["stop_loss_pct"],
+                "target_price_1": pb_calc["target_price_1"],
+                "target_profit_pct_1": pb_calc["target_profit_pct_1"],
+                "risk_reward_ratio": pb_calc["risk_reward_ratio"],
+                "position_pct": pb_calc["position_pct"],
+                "recommended_shares": pb_calc["recommended_shares"],
+                "reason": f"命中【{pb_calc['playbook_name']}】：{pb_calc['rule_rationale']}"
+            })
+
+        return {
+            "code": 200,
+            "count": len(preview_list),
+            "results": preview_list
+        }
+    except Exception as e:
+        logger.error(f"自动扫描预览失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 战法穿透归因与 7 成胜率进化调优 ====================
+
+class PlaybookRepairPayload(BaseModel):
+    playbook_id: str
+    trigger_reason: str
+    proposed_params: dict
+    repair_type: Optional[str] = "ai_diagnostic"
+    operator: Optional[str] = "AI进化引擎"
+    loss_attribution: Optional[str] = None
+
+
+@router.get("/loss_attribution", summary="战法失败单穿透归因与7成胜率推演诊断")
+def get_loss_attribution(playbook_id: Optional[str] = None, user=Depends(get_optional_user)):
+    """
+    穿透审计战法失败单（单笔亏损与假突破）：
+    输出失误原因排行榜、具体诊断细节与预期胜率跃升至 70% 的修复参数方案。
+    """
+    try:
+        from utils.loss_attribution_engine import global_attribution_engine
+        result = global_attribution_engine.analyze_failures(playbook_id=playbook_id)
+        return result
+    except Exception as e:
+        logger.error(f"获取失误穿透归因失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/playbook_repair", summary="应用战法修复并归档进化履历")
+def apply_playbook_repair(payload: PlaybookRepairPayload, user=Depends(get_current_user)):
+    """
+    应用对战法参数的修复（买点、止损、止盈等，需管理员权限）：
+    1. 归档进 playbook_repair_history 表（Changelog 时间线）；
+    2. 热加载至 playbook_custom_params，立即在选股和测算中生效；
+    3. 推动战法胜率向 70% 目标稳步收敛。
+    """
+    try:
+        from utils.loss_attribution_engine import global_attribution_engine
+        op_name = payload.operator or (user.get("username") if user else "AI进化引擎")
+        result = global_attribution_engine.apply_repair(
+            playbook_id=payload.playbook_id,
+            trigger_reason=payload.trigger_reason,
+            params_after=payload.proposed_params,
+            repair_type=payload.repair_type or "ai_diagnostic",
+            operator=op_name,
+            loss_attribution=payload.loss_attribution
+        )
+        return result
+    except Exception as e:
+        logger.error(f"应用战法修复异常: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/repair_history", summary="获取战法进化履历时间线")
+def get_playbook_repair_history(playbook_id: Optional[str] = None, user=Depends(get_optional_user)):
+    """
+    获取战法版本迭代履历 (Changelog)，支持像 GitHub Commit 一样查看每次修复前后参数与胜率变化
+    """
+    try:
+        from utils.loss_attribution_engine import global_attribution_engine
+        history = global_attribution_engine.get_repair_history(playbook_id=playbook_id)
+        return {
+            "code": 200,
+            "playbook_id": playbook_id or "all",
+            "count": len(history),
+            "history": history
+        }
+    except Exception as e:
+        logger.error(f"获取战法修复历史失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/custom_params", summary="获取战法当前生效动态参数")
+def get_custom_playbook_params(playbook_id: Optional[str] = None, user=Depends(get_optional_user)):
+    """获取战法当前热加载生效参数"""
+    try:
+        from utils.loss_attribution_engine import global_attribution_engine
+        if playbook_id:
+            param = global_attribution_engine.get_custom_params(playbook_id)
+            return {"code": 200, "playbook_id": playbook_id, "params": param}
+        else:
+            params = global_attribution_engine.get_all_custom_params()
+            return {"code": 200, "params": params}
+    except Exception as e:
+        logger.error(f"获取战法动态参数失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/custom_params/reset", summary="重置战法参数为初始版本")
+def reset_playbook_params(payload: dict, user=Depends(get_current_user)):
+    """重置指定战法参数（需管理员权限）"""
+    playbook_id = payload.get("playbook_id")
+    if not playbook_id:
+        raise HTTPException(status_code=400, detail="缺少 playbook_id")
+    try:
+        from utils.loss_attribution_engine import global_attribution_engine
+        with global_attribution_engine._get_connection() as conn:
+            conn.execute("DELETE FROM playbook_custom_params WHERE playbook_id = ?", (playbook_id,))
+            conn.commit()
+        return {"code": 200, "message": f"战法 {playbook_id} 参数已重置为代码默认"}
+    except Exception as e:
+        logger.error(f"重置战法参数失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+

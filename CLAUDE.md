@@ -10,10 +10,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 服务 | 入口 | 端口 | 说明 |
 |------|------|------|------|
-| 量化主系统 | `api.main:app` | 8000（`start.command`/Docker 用 18000） | 回测、行情、策略、风控、模拟/实盘交易 |
+| 量化主系统 | `api.main:app` | 8000 (支持环境变量 `PORT`) | 回测、行情、策略、风控、模拟/实盘交易 |
 | 复盘工作台 | `review_workbench.api.main:app` | 8001 | 盘后复盘流水线（Pipeline A/B），独立运行 |
 
-> 注意端口不一致：`config/settings.py` 和 README 写 8000，但 `start.command`、`Dockerfile`、`docker-compose.yml`、`run_ui_tests.sh` 都用 18000。开发时以 18000 为准（`start.command` 会自动杀掉占用端口的进程）。
+> 系统已全面统一主服务标准端口为 **8000**（`start_server.py`、`start.command`、`Dockerfile`、`docker-compose.yml`、`config/settings.py` 均保持一致，并支持环境变量 `PORT` 覆盖）。
 
 ## 常用命令
 
@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 
 # 启动主系统（开发，热重载）
-python -m uvicorn api.main:app --host 0.0.0.0 --port 18000 --reload
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 启动复盘工作台
 python -m uvicorn review_workbench.api.main:app --port 8001

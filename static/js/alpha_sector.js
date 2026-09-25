@@ -3,13 +3,37 @@
  * 职责：大盘概念/实体行业资金流向排行、多维排序翻页、成分股全息画像透视弹窗
  */
 
+// A 股标准交易颜色体系 (严格遵循国内A股习惯：红涨绿跌、红进绿出)
+const SECTOR_COLOR_UP = '#f56c6c';   // 鲜亮正红 (涨 / 净流入 / 买入)
+const SECTOR_COLOR_DOWN = '#10b981'; // 鲜亮青绿 (跌 / 净流出 / 卖出)
+const SECTOR_COLOR_FLAT = '#909399'; // 中性灰 (平盘 / 0)
+
+/** 获取 A 股红绿数值颜色 */
+function getSectorStockColor(val) {
+  const num = typeof val === 'number' ? val : parseFloat(val || 0);
+  if (num > 0.0001) return SECTOR_COLOR_UP;
+  if (num < -0.0001) return SECTOR_COLOR_DOWN;
+  return SECTOR_COLOR_FLAT;
+}
+
+/** 判断当前是否处于 A 股盘中交易时段 */
+function isAshareTradingTime() {
+  const now = new Date();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return false; // 周末非交易日
+  const curMinutes = now.getHours() * 60 + now.getMinutes();
+  // 早盘 09:15 ~ 11:35，午盘 12:55 ~ 15:05
+  const isMorning = curMinutes >= (9 * 60 + 15) && curMinutes <= (11 * 60 + 35);
+  const isAfternoon = curMinutes >= (12 * 60 + 55) && curMinutes <= (15 * 60 + 5);
+  return isMorning || isAfternoon;
+}
 
 let _allSectorFlows = [];
 let _sectorSortField = 'net_inflow_amount';
 let _sectorSortAsc = false;
 let _sectorSearchKeyword = '';
 let _sectorFlowsCurrentPage = 1;
-const _sectorFlowsPageSize = 15;
+let _sectorFlowsPageSize = 10;
 
 function sortSectorFlows(field) {
   if (_sectorSortField === field) {
@@ -39,10 +63,29 @@ function updateSectorSortHeaders() {
   });
 }
 
-function changeSectorFlowsPage(delta) {
-  _sectorFlowsCurrentPage += delta;
+function jumpSectorFlowsPage(p) {
+  let list = [..._allSectorFlows];
+  if (_sectorSearchKeyword) {
+    const kw = _sectorSearchKeyword.toLowerCase();
+    list = list.filter(f => 
+      (f.sector_name && f.sector_name.toLowerCase().includes(kw)) ||
+      (f.leader_stock_name && f.leader_stock_name.toLowerCase().includes(kw)) ||
+      (f.sector_code && f.sector_code.toLowerCase().includes(kw))
+    );
+  }
+  const total = list.length;
+  const totalPages = Math.ceil(total / _sectorFlowsPageSize) || 1;
+  const target = parseInt(p) || 1;
+  if (target < 1 || target > totalPages || target === _sectorFlowsCurrentPage) return;
+  _sectorFlowsCurrentPage = target;
   renderSectorFlowsTable();
 }
+window.jumpSectorFlowsPage = jumpSectorFlowsPage;
+
+function changeSectorFlowsPage(delta) {
+  jumpSectorFlowsPage(_sectorFlowsCurrentPage + delta);
+}
+window.changeSectorFlowsPage = changeSectorFlowsPage;
 
 function renderSectorFlowsTable() {
   const tbody = document.getElementById('sectorFlowsTableBody');
@@ -96,23 +139,36 @@ function renderSectorFlowsTable() {
   const startIdx = (_sectorFlowsCurrentPage - 1) * _sectorFlowsPageSize;
   const pageItems = list.slice(startIdx, startIdx + _sectorFlowsPageSize);
 
-  // 4. 渲染当前页
-  tbody.innerHTML = pageItems.map(f => {
+  // 4. 渲染当前页 (严格采用红涨绿跌、红进绿出)
+  if (typeof window.renderElementPlusPagination === 'function') {
+    window.renderElementPlusPagination({
+      mount: '#sectorFlowsPagination',
+      total: total,
+      page: _sectorFlowsCurrentPage,
+      pageSize: _sectorFlowsPageSize,
+      pageSizes: [10, 20, 50],
+      totalTemplate: '共监控 <b style="color:#58a6ff">{total}</b> 个核心板块',
+      onPageChange: 'jumpSectorFlowsPage',
+      onSizeChange: 'onSectorFlowsPageSizeChanged'
+    });
+  }
+
+    tbody.innerHTML = pageItems.map(f => {
     const chg = typeof f.change_pct === 'number' ? f.change_pct : parseFloat(f.change_pct || 0);
-    const isUp = chg >= 0;
-    const chgColor = isUp ? '#3fb950' : '#f85149';
+    const chgColor = getSectorStockColor(chg);
+    const chgSign = chg > 0 ? '+' : '';
 
     const netInflow = typeof f.net_inflow_amount === 'number' ? f.net_inflow_amount : parseFloat(f.net_inflow_amount || 0);
-    const isInflow = netInflow >= 0;
-    const inflowColor = isInflow ? '#3fb950' : '#f85149';
-    const sign = isInflow ? '+' : '';
+    const netColor = getSectorStockColor(netInflow);
+    const netSign = netInflow > 0 ? '+' : '';
 
     const inflow = typeof f.inflow_amount === 'number' ? f.inflow_amount : parseFloat(f.inflow_amount || 0);
     const outflow = typeof f.outflow_amount === 'number' ? f.outflow_amount : parseFloat(f.outflow_amount || 0);
 
     const leaderName = f.leader_stock_name || f.sector_name || '-';
     const leaderChg = typeof f.leader_stock_change === 'number' ? f.leader_stock_change : parseFloat(f.leader_stock_change || 0);
-    const leaderChgColor = leaderChg >= 0 ? '#3fb950' : '#f85149';
+    const leaderChgColor = getSectorStockColor(leaderChg);
+    const leaderSign = leaderChg > 0 ? '+' : '';
 
     return `
       <tr style="border-bottom:1px solid var(--sys-border);transition:background 0.2s;cursor:pointer" 
@@ -120,34 +176,34 @@ function renderSectorFlowsTable() {
           onmouseout="this.style.background='transparent'" 
           onclick="openSectorDetailModal('${jsStr(f.sector_name)}', '${jsStr(f.sector_type)}')"
           title="点击查看 ${escapeHtml(f.sector_name)} 全部成分股与企业主营业务画像">
-        <td style="padding:10px 8px;text-align:left">
+        <td style="padding:10px 12px;text-align:left">
           <div style="font-weight:700;color:var(--sys-text-title);font-size:14px;display:flex;align-items:center;gap:6px">
             <span>${escapeHtml(f.sector_name)}</span>
             <span style="font-size:11px;color:var(--sys-accent);font-weight:normal;opacity:0.85;background:rgba(88,166,255,0.1);padding:1px 5px;border-radius:3px">🔍 详情</span>
           </div>
           <div style="margin-top:3px">
-            <span style="display:inline-block;padding:1px 6px;background:${f.sector_type === 'concept' ? 'rgba(56,139,253,0.15)' : 'rgba(63,185,80,0.15)'};color:${f.sector_type === 'concept' ? 'var(--sys-accent)' : '#3fb950'};border-radius:3px;font-size:11px;font-weight:600">${f.sector_type === 'concept' ? '🏷️ 概念题材' : '🏢 实体行业'}</span>
+            <span style="display:inline-block;padding:1px 6px;background:${f.sector_type === 'concept' ? 'rgba(56,139,253,0.15)' : 'rgba(37,99,235,0.1)'};color:${f.sector_type === 'concept' ? '#2563eb' : '#3b82f6'};border-radius:3px;font-size:11px;font-weight:600">${f.sector_type === 'concept' ? '🏷️ 概念题材' : '🏢 实体行业'}</span>
           </div>
         </td>
-        <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:13px;color:${chgColor}">
-          ${isUp ? '+' : ''}${chg.toFixed(2)}%
+        <td style="padding:10px 12px;text-align:right">
+          <b style="color:${chgColor};font-size:13.5px;font-weight:700">${chgSign}${chg.toFixed(2)}%</b>
         </td>
-        <td style="padding:10px 8px;text-align:right;font-weight:800;font-size:14px;color:${inflowColor}">
-          ${sign}${netInflow.toFixed(2)} 亿
+        <td style="padding:10px 12px;text-align:right">
+          <b style="color:${netColor};font-size:14px;font-weight:800">${netSign}${netInflow.toFixed(2)} 亿</b>
         </td>
-        <td style="padding:10px 8px;text-align:right;font-size:12px;color:#3fb950;font-weight:600">
-          +${inflow.toFixed(2)} 亿
+        <td style="padding:10px 12px;text-align:right">
+          <b style="color:${SECTOR_COLOR_UP};font-size:12.5px;font-weight:600">+${inflow.toFixed(2)} 亿</b>
         </td>
-        <td style="padding:10px 8px;text-align:right;font-size:12px;color:#f85149;font-weight:600">
-          -${outflow.toFixed(2)} 亿
+        <td style="padding:10px 12px;text-align:right">
+          <b style="color:${SECTOR_COLOR_DOWN};font-size:12.5px;font-weight:600">-${outflow.toFixed(2)} 亿</b>
         </td>
-        <td style="padding:10px 8px;text-align:right;font-size:12px;color:var(--sys-text-sub)">
+        <td style="padding:10px 12px;text-align:right;font-size:12px;color:var(--sys-text-sub)">
           ${f.company_count ? f.company_count + ' 家' : '-'}
         </td>
-        <td style="padding:10px 8px;text-align:right">
+        <td style="padding:10px 12px;text-align:right">
           <div style="font-weight:700;color:var(--sys-accent);font-size:13px">${escapeHtml(leaderName)}</div>
-          <div style="font-size:11px;color:${leaderChgColor};margin-top:2px;font-weight:600">
-            ${leaderChg >= 0 ? '+' : ''}${leaderChg.toFixed(2)}%
+          <div style="font-size:11.5px;color:${leaderChgColor};margin-top:2px;font-weight:700">
+            ${leaderSign}${leaderChg.toFixed(2)}%
           </div>
         </td>
       </tr>
@@ -159,7 +215,7 @@ function renderSectorFlowsTable() {
 let _currentModalSectorStocks = [];
 let _modalFilteredStocks = [];
 let _modalCurrentPage = 1;
-const _modalPageSize = 20;
+let _modalPageSize = 10;
 
 async function openSectorDetailModal(sectorName, sectorType) {
   const modal = document.getElementById('sectorDetailModal');
@@ -217,14 +273,20 @@ function filterModalStocks(kw) {
   renderModalStocksTable();
 }
 
-function changeModalPage(delta) {
-  const totalPages = Math.ceil(_modalFilteredStocks.length / _modalPageSize) || 1;
-  const newPage = _modalCurrentPage + delta;
-  if (newPage >= 1 && newPage <= totalPages) {
-    _modalCurrentPage = newPage;
-    renderModalStocksTable();
-  }
+function jumpModalPage(p) {
+  const total = _modalFilteredStocks.length;
+  const totalPages = Math.ceil(total / _modalPageSize) || 1;
+  const target = parseInt(p) || 1;
+  if (target < 1 || target > totalPages || target === _modalCurrentPage) return;
+  _modalCurrentPage = target;
+  renderModalStocksTable();
 }
+window.jumpModalPage = jumpModalPage;
+
+function changeModalPage(delta) {
+  jumpModalPage(_modalCurrentPage + delta);
+}
+window.changeModalPage = changeModalPage;
 
 function renderModalStocksTable() {
   const tbody = document.getElementById('modalStocksTableBody');
@@ -252,9 +314,23 @@ function renderModalStocksTable() {
   const startIdx = (_modalCurrentPage - 1) * _modalPageSize;
   const pageItems = _modalFilteredStocks.slice(startIdx, startIdx + _modalPageSize);
 
-  tbody.innerHTML = pageItems.map(s => {
-    const isUp = s.change_pct >= 0;
-    const chgColor = isUp ? '#3fb950' : '#f85149';
+  if (typeof window.renderElementPlusPagination === 'function') {
+    window.renderElementPlusPagination({
+      mount: '#modalPagination',
+      total: total,
+      page: _modalCurrentPage,
+      pageSize: _modalPageSize,
+      pageSizes: [10, 20, 50],
+      totalTemplate: '共 <b style="color:#58a6ff">{total}</b> 家成分股',
+      onPageChange: 'jumpModalPage',
+      onSizeChange: ''
+    });
+  }
+
+    tbody.innerHTML = pageItems.map(s => {
+    const chg = typeof s.change_pct === 'number' ? s.change_pct : parseFloat(s.change_pct || 0);
+    const chgColor = getSectorStockColor(chg);
+    const chgSign = chg > 0 ? '+' : '';
     return `
       <tr style="border-bottom:1px solid var(--sys-border);transition:background 0.15s" onmouseover="this.style.background='var(--sys-bg-hover)'" onmouseout="this.style.background='transparent'">
         <td style="padding:10px 12px">
@@ -264,10 +340,10 @@ function renderModalStocksTable() {
         <td style="padding:10px 12px;text-align:right;font-weight:700;font-size:13px;color:var(--sys-text-title)">
           ¥${s.price > 0 ? s.price.toFixed(2) : '--'}
         </td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700;font-size:13px;color:${chgColor}">
-          ${isUp ? '+' : ''}${s.change_pct.toFixed(2)}%
+        <td style="padding:10px 12px;text-align:right">
+          <b style="color:${chgColor};font-size:13px;font-weight:700">${chgSign}${chg.toFixed(2)}%</b>
         </td>
-        <td style="padding:10px 12px;color:#d1d4dc;font-size:12px;line-height:1.5">
+        <td style="padding:10px 12px;color:var(--sys-text-sub);font-size:12px;line-height:1.5">
           ${escapeHtml(s.business)}
         </td>
         <td style="padding:10px 12px;text-align:center">
@@ -331,25 +407,25 @@ async function modalCalcStock(code) {
       </div>
       
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;font-size:12px">
-        <div style="background:#0d1117;padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
+        <div style="background:var(--sys-bg-card-inner, #f8fafc);padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
           <div style="color:var(--sys-text-sub);font-size:11px;margin-bottom:2px">建议买入区间</div>
           <b style="color:var(--sys-accent);font-size:13px">¥${r.buy_price_low} ~ ¥${r.buy_price_high}</b>
         </div>
-        <div style="background:#0d1117;padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
+        <div style="background:var(--sys-bg-card-inner, #f8fafc);padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
           <div style="color:var(--sys-text-sub);font-size:11px;margin-bottom:2px">硬性止损价位</div>
           <b style="color:#f85149;font-size:13px">¥${r.stop_loss_price} (${r.stop_loss_pct}%)</b>
         </div>
-        <div style="background:#0d1117;padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
+        <div style="background:var(--sys-bg-card-inner, #f8fafc);padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
           <div style="color:var(--sys-text-sub);font-size:11px;margin-bottom:2px">第一 / 第二止盈目标</div>
           <b style="color:#3fb950;font-size:13px">¥${r.target_price_1} / ¥${r.target_price_2}</b>
         </div>
-        <div style="background:#0d1117;padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
+        <div style="background:var(--sys-bg-card-inner, #f8fafc);padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border)">
           <div style="color:var(--sys-text-sub);font-size:11px;margin-bottom:2px">预期盈亏比 / 建议仓位</div>
           <b style="color:${rrColor};font-size:13px">${r.risk_reward_ratio} : 1</b> <span style="color:var(--sys-text-sub)">(${r.recommended_shares.toLocaleString()}股)</span>
         </div>
       </div>
       
-      <div style="margin-top:10px;font-size:12px;color:#d1d4dc;background:#0d1117;padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border);line-height:1.5">
+      <div style="margin-top:10px;font-size:12px;color:var(--sys-text-primary, #303133);background:var(--sys-bg-card-inner, #f8fafc);padding:8px 12px;border-radius:6px;border:1px solid var(--sys-border);line-height:1.5">
         💡 <b>量化操盘策略：</b>${escapeHtml(r.summary)}
       </div>
     `;
@@ -384,11 +460,14 @@ async function modalAddWatch(code) {
   await quickAddWatchlist(code);
 }
 
-async function loadSectorFlows() {
+let _isRefreshingSectors = false;
+let _sectorAutoTimer = null;
+
+async function loadSectorFlows(isSilent = false) {
   if (_isRefreshingSectors) return;
   _isRefreshingSectors = true;
   const tbody = document.getElementById('sectorFlowsTableBody');
-  if (tbody && (!tbody.hasChildNodes() || _allSectorFlows.length === 0)) {
+  if (!isSilent && tbody && (!tbody.hasChildNodes() || _allSectorFlows.length === 0)) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:25px;color:var(--sys-text-sub)"><span class="spinner"></span> 正在实时抓取各大板块资金流动数据...</td></tr>`;
   }
 
@@ -396,7 +475,7 @@ async function loadSectorFlows() {
     const res = await authFetch(`/api/market/sector-flows?type=${_currentSectorType}`);
     const data = await res.json();
     if (!res.ok) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:#f85149">抓取资金流向失败: ${data.detail || '接口异常'}</td></tr>`;
+      if (tbody && !isSilent) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:${SECTOR_COLOR_UP}">抓取资金流向失败: ${data.detail || '接口异常'}</td></tr>`;
       return;
     }
 
@@ -420,10 +499,42 @@ async function loadSectorFlows() {
     updateSectorSortHeaders();
     renderSectorFlowsTable();
 
+    // 更新最近更新时间与状态指示器
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0];
+    const timeEl = document.getElementById('sectorLastUpdateTime');
+    if (timeEl) {
+      timeEl.textContent = `⏱ 最近更新: ${timeStr}`;
+    }
+    const badgeEl = document.getElementById('sectorRefreshBadge');
+    if (badgeEl) {
+      if (isAshareTradingTime()) {
+        badgeEl.innerHTML = `<span style="width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block"></span> 盘中实时更新中 (30s 自动刷新)`;
+        badgeEl.style.color = '#10b981';
+        badgeEl.style.background = 'rgba(16,185,129,0.12)';
+        badgeEl.style.borderColor = 'rgba(16,185,129,0.25)';
+      } else {
+        badgeEl.innerHTML = `💤 盘后结算状态 (30s 自动刷新)`;
+        badgeEl.style.color = '#909399';
+        badgeEl.style.background = 'rgba(144,147,153,0.1)';
+        badgeEl.style.borderColor = 'rgba(144,147,153,0.25)';
+      }
+    }
+
   } catch(e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:#f85149">请求异常: ${e.message}</td></tr>`;
+    if (tbody && !isSilent) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:${SECTOR_COLOR_UP}">请求异常: ${e.message}</td></tr>`;
   } finally {
     _isRefreshingSectors = false;
+  }
+}
+
+/** 
+ * 板块资金流刷新模式：已彻底移除 60 秒后台轮询，改为纯按需加载 (切入Tab或用户点击【刷新】时触发)
+ */
+function startSectorAutoRefresh() {
+  if (_sectorAutoTimer) {
+    clearInterval(_sectorAutoTimer);
+    _sectorAutoTimer = null;
   }
 }
 
@@ -459,9 +570,6 @@ function switchSectorType(type) {
   loadSectorFlows();
 }
 
-
-
-
 // 显式导出全局调用接口，保障所有 HTML 内联事件 100% 正常调用
 window.loadSectorFlows = loadSectorFlows;
 window.sortSectorFlows = sortSectorFlows;
@@ -470,3 +578,11 @@ window.changeSectorFlowsPage = changeSectorFlowsPage;
 window.clearSectorSearch = clearSectorSearch;
 window.openSectorDetailModal = openSectorDetailModal;
 window.closeSectorDetailModal = closeSectorDetailModal;
+window.startSectorAutoRefresh = startSectorAutoRefresh;
+
+function onSectorFlowsPageSizeChanged(newSize) {
+  _sectorFlowsPageSize = parseInt(newSize) || 10;
+  _sectorFlowsCurrentPage = 1;
+  renderSectorFlowsTable();
+}
+window.onSectorFlowsPageSizeChanged = onSectorFlowsPageSizeChanged;

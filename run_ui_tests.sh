@@ -8,7 +8,7 @@
 
 set -e
 
-PORT=18000
+PORT="${PORT:-8000}"
 VENV_PYTHON="venv/bin/python"
 REPORT_DIR="test-reports"
 SCREENSHOT_DIR="screenshots"

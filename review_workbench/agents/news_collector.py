@@ -72,23 +72,54 @@ class NewsCollector:
     def collect_and_curate(self, trade_date: Optional[str] = None) -> list[CuratedNews]:
         """执行当日实时抓取、SimHash 去重降噪与精炼归类"""
         current_date = trade_date or datetime.now().strftime("%Y-%m-%d")
-        logger.info(f"📰 [情报搜集员] 启动 {current_date} 当日全网最新 7x24 财经快讯与产业证据抓取...")
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"📰 [情报搜集员] 启动 {current_date} 全网最新 7x24 财经快讯与产业证据抓取...")
+
+        # 0. 若为历史交易日 (非今日)，优先检查本地 SQLite 是否已有归档证据，坚决杜绝实时流穿越污染历史
+        if current_date < today_str and DB_PATH.exists():
+            conn = sqlite3.connect(str(DB_PATH), timeout=15.0)
+            try:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                self._ensure_tables(cursor)
+                cursor.execute("SELECT * FROM news_curated WHERE trade_date = ? ORDER BY id ASC", (current_date,))
+                rows = cursor.fetchall()
+                if rows:
+                    logger.info(f"✅ 历史交易日 {current_date} 库中已有 {len(rows)} 条权威证据记录，直接复用！")
+                    return [
+                        CuratedNews(
+                            ref_tag=r["ref_tag"],
+                            title=r["title"],
+                            content=r["content"],
+                            source=r["source"],
+                            simhash=r["simhash_fingerprint"] or "hist_fingerprint",
+                            importance_level=r["importance_level"] or 3,
+                            trade_date=current_date,
+                            publish_time=r["publish_time"] or f"{current_date} 15:00:00",
+                            source_url=r["source_url"] or ""
+                        )
+                        for r in rows
+                    ]
+            finally:
+                conn.close()
 
         # 1. 抓取当日原始多源资讯 (严格按当前日期过滤)
         raw_news = self._fetch_raw_news_stream(current_date)
-        logger.info(f"成功获取到当日最新资讯 {len(raw_news)} 条，开始执行 SimHash 90% 去重与降噪...")
+        logger.info(f"成功获取到 {current_date} 最新资讯 {len(raw_news)} 条，开始执行 SimHash 90% 去重与降噪...")
 
         # 2. 文本特征提取与 SimHash 去重过滤
         deduped_news = self._simhash_deduplicate(raw_news)
-        logger.info(f"SimHash 去重完成：原始 {len(raw_news)} 条 -> 保留 {len(deduped_news)} 条当日核心干货！")
+        logger.info(f"SimHash 去重完成：原始 {len(raw_news)} 条 -> 保留 {len(deduped_news)} 条核心干货！")
 
         # 3. 赋予 ref:X 标签并安全持久化入库
         curated_list: list[CuratedNews] = []
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         
-        with sqlite3.connect(str(DB_PATH)) as conn:
-            cursor = conn.cursor()
-            self._ensure_tables(cursor)
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            with conn:
+                cursor = conn.cursor()
+                self._ensure_tables(cursor)
             
             # 清理当日旧记录
             cursor.execute("DELETE FROM news_curated WHERE trade_date = ?", (current_date,))
@@ -139,7 +170,9 @@ class NewsCollector:
                 """, (current_date, r_tag, r_title, r_content, r_src, r_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tech_fingerprint", 3))
 
 
-            conn.commit()
+                conn.commit()
+        finally:
+            conn.close()
 
         logger.info(f"✅ [情报搜集员] 成功收录 {len(curated_list)} 条当日最新核心证据并生成 [ref:1~{len(curated_list)}] 索引！")
         return curated_list
@@ -196,7 +229,37 @@ class NewsCollector:
             return 64
 
     def _fetch_raw_news_stream(self, trade_date: str) -> list[dict]:
-        """抓取当日最新全网财经快讯 (100% 真实来源与真实原文链接，坚决不贴假平台标签)"""
+        """抓取当日最新全网财经快讯 (严格按 trade_date 隔离，历史日期严禁混入当日实时新闻)"""
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        # 0. 若为历史交易日 (trade_date < today_str)，严禁抓取当天的实时流，必须从历史归档中提取
+        if trade_date and trade_date < today_str:
+            if DB_PATH.exists():
+                conn = sqlite3.connect(str(DB_PATH), timeout=15.0)
+                try:
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM news_curated WHERE trade_date = ? ORDER BY id ASC", (trade_date,))
+                    rows = cursor.fetchall()
+                    if rows:
+                        logger.info(f"📰 [历史复盘] 成功从本地数据库提取 {trade_date} 真实归档快讯 {len(rows)} 条")
+                        return [
+                            {
+                                "title": r["title"],
+                                "content": r["content"],
+                                "source": r["source"],
+                                "importance": r["importance_level"] or 3,
+                                "time": r["publish_time"] or f"{trade_date} 15:00:00",
+                                "url": r["source_url"] or ""
+                            }
+                            for r in rows
+                        ]
+                finally:
+                    conn.close()
+
+            logger.info(f"📰 [历史复盘] 历史日期 {trade_date} 无本地归档快讯，如实返回空，坚决不抓取今日实时流冒充！")
+            return []
+
         raw_items = []
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -236,6 +299,11 @@ class NewsCollector:
                 if not doc_url or not doc_url.startswith("http"):
                     doc_url = "https://finance.sina.com.cn/7x24/"
 
+                # 过滤日期：若传入指定 trade_date，快讯发布时间必须匹配该交易日
+                if trade_date and len(time_display) >= 10 and "-" in time_display:
+                    if not time_display.startswith(trade_date):
+                        continue
+
                 # 判定重要度
                 imp = 4 if any(k in rich for k in ["发布", "计划", "重磅", "大涨", "突破", "半导体", "算力", "新高", "工信部", "发改委", "利好", "涨停", "降息"]) else 3
                 raw_items.append({
@@ -262,6 +330,11 @@ class NewsCollector:
                     st = str(item.get("showTime", "")).strip()
                     time_disp = st if len(st) >= 16 else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
+                    # 过滤日期
+                    if trade_date and len(time_disp) >= 10 and "-" in time_disp:
+                        if not time_disp.startswith(trade_date):
+                            continue
+
                     code_val = str(item.get("code") or "").strip()
                     # 上游快讯接口未提供真实文章落地页，仅能按代码拼接近似页；如实标注为兜底链接，杜绝伪装原文
                     if code_val:

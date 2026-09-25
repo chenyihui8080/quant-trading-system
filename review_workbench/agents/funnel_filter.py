@@ -106,13 +106,18 @@ class FunnelFilter:
         current_pool = list(pool)
         
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(str(DB_PATH)) as conn:
-            cursor = conn.cursor()
-            self._ensure_tables(cursor)
-            
-            # 清理当日旧漏斗审计日志
-            cursor.execute("DELETE FROM funnel_logs WHERE trade_date = ?", (current_date,))
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            with conn:
+                cursor = conn.cursor()
+                self._ensure_tables(cursor)
+                
+                # 清理当日旧漏斗审计日志
+                cursor.execute("DELETE FROM funnel_logs WHERE trade_date = ?", (current_date,))
 
+
+            # 收集淘汰标的以生成同日并立的避雷黑榜
+            dropped_candidates = []
 
             # 1. 逐层过滤
             for stage_info in stages_cfg:
@@ -125,6 +130,13 @@ class FunnelFilter:
                 for item in current_pool:
                     if self._match_all_rules(item, rules):
                         next_pool.append(item)
+                    else:
+                        if stage_num in (2, 3, 4):
+                            dropped_candidates.append({
+                                "item": item,
+                                "failed_stage": stage_num,
+                                "stage_name": stage_name
+                            })
 
                 out_cnt = len(next_pool)
                 logger.info(f"  • Stage {stage_num} [{stage_name}]: {in_cnt} 只 -> 保留 {out_cnt} 只 (剔除 {in_cnt - out_cnt} 只)")
@@ -144,14 +156,29 @@ class FunnelFilter:
 
                 current_pool = next_pool
 
-            # 2. 保证核心观察池数量在 40~50 只（PRD 约定约 45 只）
-            # 排序权重：置信度降序 -> 成交额降序
-            current_pool.sort(key=lambda x: (x.get("attribution_confidence", 0), x.get("amount_yi", 0)), reverse=True)
-            final_watchpool = current_pool[:45]
+            # 2. 核心观察池（进攻红榜）铁律：必须收阳且真实上涨（change_pct > 0.0）！严禁任何绿盘下跌或破位跌停票混入进攻池！
+            bull_pool = []
+            for it in current_pool:
+                chg = float(it.get("change_pct", 0.0) or 0.0)
+                if chg > 0.0:
+                    bull_pool.append(it)
+                else:
+                    dropped_candidates.append({
+                        "item": it,
+                        "failed_stage": 3,
+                        "stage_name": "趋势走弱与破位下跌 (绿盘下跌)"
+                    })
 
-            # 3. 持久化最终 45 只核心观察池至 core_watchlists
+            # 排序权重：置信度降序 -> 涨幅健康度 -> 成交额降序
+            bull_pool.sort(key=lambda x: (x.get("attribution_confidence", 0), x.get("change_pct", 0), x.get("amount_yi", 0)), reverse=True)
+            final_watchpool = bull_pool[:45]
+
+            # 3. 持久化最终核心观察池至 core_watchlists (进攻红榜)
             cursor.execute("DELETE FROM core_watchlists WHERE trade_date = ?", (current_date,))
             for it in final_watchpool:
+                # 安全兜底防线：绝对严禁 <= 0 的绿盘下跌票入库
+                if float(it.get("change_pct", 0.0) or 0.0) <= 0.0:
+                    continue
                 stock_code_clean = str(it.get("stock_code", "")).strip().zfill(6)
                 
                 # 动态计算真实置信度与等级 (解决 C-WATCH-002: 去除 0.5 固定兜底)
@@ -197,9 +224,50 @@ class FunnelFilter:
                     it.get("evidence_ref", "ref:0")
                 ))
 
+            # 4. 同步持久化避雷黑榜至 blacklist_watchlists (保证红黑双榜同日并立、数量自洽)
+            cursor.execute("DELETE FROM blacklist_watchlists WHERE trade_date = ?", (current_date,))
+            dropped_candidates.sort(key=lambda x: float(x["item"].get("amount_yi", 0) or 0), reverse=True)
+            black_selected = dropped_candidates[:8]
+            
+            stage_reject_map = {
+                2: ("【流动性严重匮乏/合规隐患】日成交额不足或存在ST/合规瑕疵，深度低于量化安全线，大资金无法全身而退。", "流动性枯竭"),
+                3: ("【筹码天花板压顶/破位】击穿多头防守生命线，放量下跌或阴线破位，套牢抛压沉重，严禁盲目接飞刀。", "严重破位"),
+                4: ("【逻辑归因置信度不足/资金撤离】所属板块热度退潮或主力资金呈现净流出，无实质产业催化支撑。", "主力出货")
+            }
+
+            for bc in black_selected:
+                b_item = bc["item"]
+                b_stage = bc["failed_stage"]
+                b_code = str(b_item.get("stock_code", "")).strip().zfill(6)
+                def_reason, def_risk = stage_reject_map.get(b_stage, ("量化多因子综合筛查未过关，存在较大回撤风险", "中高风险"))
+                
+                cursor.execute("""
+                    INSERT INTO blacklist_watchlists (
+                        trade_date, stock_code, stock_name, sector_name, close_price,
+                        change_pct, turnover_rate, amount_yi, failed_stage, reject_reason,
+                        risk_level, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    current_date,
+                    b_code,
+                    str(b_item.get("stock_name", "")).strip(),
+                    b_item.get("sector_name", ""),
+                    float(b_item.get("close_price", 0.0) or 0.0),
+                    float(b_item.get("change_pct", 0.0) or 0.0),
+                    float(b_item.get("turnover_rate", 0.0) or 0.0),
+                    float(b_item.get("amount_yi", 0.0) or 0.0),
+                    b_stage,
+                    def_reason,
+                    def_risk,
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ))
+
             conn.commit()
 
-        logger.info(f"✅ [深度分析师] 漏斗过滤完成！成功精选产出 【{len(final_watchpool)} 只核心观察池黄金标的】 并已持久化入库！")
+        finally:
+            conn.close()
+
+        logger.info(f"🏆 [深度分析师] 核心观察池入库完成: 共 {len(final_watchpool)} 只进攻红标入库 | 避雷黑榜收集: {len(dropped_candidates)} 只")
         return final_watchpool
 
     def load_core_watchpool(self, trade_date: Optional[str] = None, top_n: int = 45) -> list[WatchlistStock]:
@@ -209,8 +277,9 @@ class FunnelFilter:
         if not DB_PATH.exists():
             return results
 
+        conn = sqlite3.connect(str(DB_PATH))
         try:
-            with sqlite3.connect(str(DB_PATH)) as conn:
+            with conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -239,6 +308,8 @@ class FunnelFilter:
                     ))
         except Exception as e:
             logger.warning(f"读取核心观察池数据异常: {e}")
+        finally:
+            conn.close()
         return results
 
 
@@ -282,11 +353,21 @@ class FunnelFilter:
                     return False
                 elif op == "<=" and float(val) > float(target_val):
                     return False
+                elif op == ">" and float(val) <= float(target_val):
+                    return False
+                elif op == "<" and float(val) >= float(target_val):
+                    return False
                 elif op == "between":
                     num_val = float(val)
                     if not (float(target_val[0]) <= num_val <= float(target_val[1])):
                         return False
                 elif op == "in" and val not in target_val:
+                    return False
+                elif op == "not_in" and val in target_val:
+                    return False
+                elif op not in ("==", "!=", ">=", "<=", ">", "<", "between", "in", "not_in"):
+                    # 未知操作符防御性直接拦截 (Fail-Safe 策略)
+                    logger.warning(f"⚠️ [漏斗引擎] 遇到未知规则操作符 '{op}'，严格拦截该标的")
                     return False
             except (ValueError, TypeError):
                 # 数据类型异常直接判定不匹配

@@ -6,9 +6,13 @@
 import json
 import logging
 import time
+import sqlite3
 import requests
+from pathlib import Path
 from typing import Optional, TypedDict
 from datetime import datetime
+
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "review.db"
 
 
 try:
@@ -68,19 +72,15 @@ class ReviewPipeline:
 
         logger.info(f"🏁 ================= [Pipeline A: 盘后复盘工作流启动 ({current_date})] =================")
 
-        # 0. 严格校验交易日与历史日期：防止休市日与历史空白日冒充实时行情
-        is_holiday = False
-        holiday_reason = ""
+        # 0. 严格校验交易日与官方休市日：权威日历精准核验，防止休市日与历史空白日冒充实时行情
         try:
-            dt = datetime.strptime(current_date, "%Y-%m-%d")
-            if dt.weekday() >= 5:
-                is_holiday = True
-                holiday_reason = "周末休市无交易"
-            elif (dt.month == 1 and dt.day == 1) or (dt.month == 10 and 1 <= dt.day <= 7) or (dt.month == 5 and 1 <= dt.day <= 5):
-                is_holiday = True
-                holiday_reason = "法定节假日休市"
-        except Exception:
-            pass
+            from utils.trading_calendar import check_trading_day
+            is_trade_day, holiday_reason = check_trading_day(current_date)
+            is_holiday = not is_trade_day
+        except Exception as te:
+            logger.warning(f"核验交易日历异常: {te}")
+            is_holiday = False
+            holiday_reason = ""
 
         # 若为休市日，严格返回休市空快照，坚决不抓当天行情冒充！
         if is_holiday:
@@ -104,18 +104,48 @@ class ReviewPipeline:
         # 若为历史日期且非今天，严禁使用今天实时行情冒充历史！
         if current_date < today_str:
             logger.info(f"⏳ 日期 {current_date} 属于历史交易日，检查本地真实归档记录...")
-            # 尝试查库
             archived = None
             if DB_PATH.exists():
+                conn = None
                 try:
-                    with sqlite3.connect(str(DB_PATH)) as conn:
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT raw_json FROM daily_reviews WHERE trade_date = ? LIMIT 1", (current_date,))
-                        row = cursor.fetchone()
-                        if row and row[0]:
-                            archived = json.loads(row[0])
+                    conn = sqlite3.connect(str(DB_PATH))
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM daily_reviews WHERE trade_date = ? LIMIT 1", (current_date,))
+                    row = cursor.fetchone()
+                    if row:
+                        row_dict = dict(row)
+                        # 兼容直接保存的 raw_json 或分散字段组装
+                        if "raw_json" in row_dict and row_dict["raw_json"]:
+                            archived = json.loads(row_dict["raw_json"])
+                        else:
+                            market_stats = json.loads(row_dict.get("market_summary") or "{}")
+                            main_themes = json.loads(row_dict.get("main_themes") or "[]")
+                            citations = json.loads(row_dict.get("citations") or "{}")
+                            degraded_nodes = json.loads(row_dict.get("degraded_nodes") or "[]")
+                            archived = _stamp_state({
+                                "trade_date": current_date,
+                                "market_stats": market_stats,
+                                "volatility_pool": [],
+                                "curated_news": [],
+                                "attributed_pool": [],
+                                "final_watchpool": main_themes,
+                                "review_report": {
+                                    "sentiment_summary": row_dict.get("sentiment_summary") or "",
+                                    "game_plan_tomorrow": row_dict.get("game_plan_tomorrow") or "",
+                                    "citations": citations
+                                },
+                                "degraded_nodes": degraded_nodes,
+                                "execution_time_sec": 0.05
+                            })
                 except Exception as e:
                     logger.warning(f"读取历史复盘归档异常: {e}")
+                finally:
+                    if conn:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
 
             if archived:
                 return archived

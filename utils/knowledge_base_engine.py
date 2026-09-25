@@ -25,7 +25,8 @@ KB_SRC_DIR = Path("/Volumes/Chen外接盘/炒股知识库")
 def init_kb_db():
     """初始化知识库数据库表与全文检索引擎"""
     KB_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(str(KB_DB_PATH), timeout=15.0) as conn:
+    conn = sqlite3.connect(str(KB_DB_PATH), timeout=15.0)
+    try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         cursor = conn.cursor()
@@ -59,6 +60,8 @@ def init_kb_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_kb_category ON knowledge_chunks(category)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_kb_title ON knowledge_chunks(book_title)")
         conn.commit()
+    finally:
+        conn.close()
 
 
 def extract_text_from_file(file_path: Path) -> List[Dict[str, Any]]:
@@ -177,12 +180,12 @@ def search_knowledge(query: str, top_k: int = 4) -> List[Dict[str, Any]]:
         # 构造 FTS 查询词 (MATCH 'word1 OR word2')
         fts_query = " OR ".join(f'"{w}"' for w in words[:6])
 
-        with sqlite3.connect(str(KB_DB_PATH), timeout=15.0) as conn:
+        conn = sqlite3.connect(str(KB_DB_PATH), timeout=15.0)
+        try:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=5000")
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-
 
             # 1. 优先使用 FTS5 毫秒级全文检索
             sql = """
@@ -219,6 +222,8 @@ def search_knowledge(query: str, top_k: int = 4) -> List[Dict[str, Any]]:
                     "page_or_section": r["page_or_section"],
                     "content": content_snippet
                 })
+        finally:
+            conn.close()
 
     except Exception as e:
         logger.warning(f"检索知识库异常: {e}")
@@ -333,7 +338,8 @@ def get_kb_stats() -> Dict[str, Any]:
         return {"total_chunks": 0, "total_books": 0, "categories": []}
 
     try:
-        with sqlite3.connect(str(KB_DB_PATH)) as conn:
+        conn = sqlite3.connect(str(KB_DB_PATH), timeout=15.0)
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*), COUNT(DISTINCT book_title) FROM knowledge_chunks")
             row = cursor.fetchone()
@@ -349,6 +355,8 @@ def get_kb_stats() -> Dict[str, Any]:
                 "total_books": total_books,
                 "categories": categories
             }
+        finally:
+            conn.close()
     except Exception:
         return {"total_chunks": 0, "total_books": 0, "categories": []}
 

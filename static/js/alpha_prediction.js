@@ -9,6 +9,9 @@
 let _judgeCurrentDir = 'buy';
 /** 当前页码 */
 let _judgePage = 1;
+let _judgePageSize = 10; // 全局统一默认每页 10 条
+/** 当前选中的标的分类: 'all' | 'position' | 'watchlist' | 'screened' */
+let _judgeCategory = 'all';
 /** 已选中的标签集合 */
 let _judgeSelectedTags = new Set();
 
@@ -39,6 +42,8 @@ function initJudgeModule() {
 
   // 加载统计指标
   loadJudgeStats();
+  // 加载六大专属战法胜率与自适应看板
+  loadPlaybookStats();
   // 加载记录列表
   loadJudgeRecords();
   // 检查待复盘提醒
@@ -77,7 +82,8 @@ function selectJudgeDir(el, dir) {
  * @param {number} val 1-5
  */
 function setJudgeStar(val) {
-  document.getElementById('judgeConfidence').value = val;
+  const confInput = document.getElementById('judgeConfidence');
+  if (confInput) confInput.value = val;
   document.querySelectorAll('.judge-star').forEach(star => {
     const sv = parseInt(star.getAttribute('data-val'));
     star.style.color = sv <= val ? '#e6a23c' : 'var(--sys-border)';
@@ -218,10 +224,499 @@ async function loadJudgeStats() {
     }
     const avgEl = document.getElementById('statAvgProfit');
     if (avgEl && s.avg_profit_pct != null) {
-      avgEl.style.color = s.avg_profit_pct >= 0 ? '#67c23a' : '#f56c6c';
+      avgEl.style.color = s.avg_profit_pct >= 0 ? '#f85149' : '#3fb950';
     }
   } catch (e) {
     console.warn('加载统计指标失败:', e);
+  }
+}
+
+// 当前正在归因诊断的战法ID
+let _currentAttributionPlaybookId = 'playbook_01_auction_breakout';
+
+/**
+ * 加载六大战法实操胜率排行榜与自适应调优看板 (围绕 7 成胜率目标)
+ */
+async function loadPlaybookStats() {
+  const container = document.getElementById('playbookStatsGrid');
+  if (!container) return;
+
+  try {
+    // 并行读取战法统计与动态生效参数
+    const [statsResp, paramsResp] = await Promise.all([
+      authFetch('/api/prediction/playbook_stats'),
+      authFetch('/api/prediction/custom_params').catch(() => null)
+    ]);
+    const data = await statsResp.json();
+    if (data.code !== 200 || !data.stats) return;
+
+    let customParamsMap = {};
+    if (paramsResp) {
+      try {
+        const pData = await paramsResp.json();
+        if (pData.code === 200 && pData.params) customParamsMap = pData.params;
+      } catch (e) {
+        console.warn('parse paramsResp warn:', e);
+      }
+    }
+
+    const stats = data.stats;
+    const statusBadges = {
+      hot: { text: '🔥 主力推荐', bg: '#fef3c7', color: '#b45309', border: '#fcd34d' },
+      normal: { text: '⚖️ 稳定运行', bg: '#e0e7ff', color: '#3730a3', border: '#c7d2fe' },
+      cooling: { text: '⚠️ 逆风防守', bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' },
+      frozen: { text: '❄️ 战法冷冻', bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' },
+    };
+
+    container.innerHTML = stats.map(s => {
+      const b = statusBadges[s.adaptive_status] || statusBadges.normal;
+      const isFrozen = s.adaptive_status === 'frozen';
+      const isHot = s.adaptive_status === 'hot';
+      const winRateVal = s.win_rate != null ? Number(s.win_rate) : 50.0;
+      
+      // 7 成胜率徽章体系
+      const is70Achieved = winRateVal >= 70.0;
+      const isSprint = winRateVal >= 55.0 && winRateVal < 70.0;
+      const isDanger = winRateVal < 40.0;
+      
+      const cardBorder = is70Achieved 
+        ? '2px solid #f59e0b' 
+        : isDanger 
+        ? '1px solid #ef4444' 
+        : isHot 
+        ? '1px solid #fcd34d' 
+        : '1px solid var(--sys-border)';
+
+      const cardBg = is70Achieved
+        ? 'linear-gradient(180deg, rgba(245,158,11,0.06), rgba(245,158,11,0.02))'
+        : isDanger
+        ? 'linear-gradient(180deg, rgba(239,68,68,0.05), rgba(239,68,68,0.01))'
+        : isFrozen
+        ? 'var(--sys-bg-card-inner)'
+        : 'var(--sys-bg-card)';
+
+      const winColor = is70Achieved ? '#d97706' : winRateVal >= 55 ? '#16a34a' : winRateVal >= 40 ? '#2563eb' : '#dc2626';
+      
+      const customParam = customParamsMap[s.playbook_id] || {};
+      const activeVersion = customParam.active_version || 'v1.0';
+
+      return `
+        <div style="background:${cardBg};border:${cardBorder};border-radius:8px;padding:12px 12px 10px 12px;position:relative;opacity:${isFrozen ? '0.75' : '1'};display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:transform 0.15s, box-shadow 0.15s;cursor:pointer"
+             onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'"
+             onmouseout="this.style.transform='none';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)'"
+             onclick="openPlaybookAttribution('${s.playbook_id}')"
+             title="点击呼出【${escapeHtml(s.playbook_name)}】失败单穿透归因与参数修复工作台">
+          
+          <!-- 顶栏：战法名称 + 版本徽章 + 状态 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:4px;overflow:hidden">
+              <b style="font-size:12px;color:var(--sys-text-title);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                ${escapeHtml(s.playbook_name.split(' ')[1] || s.playbook_name)}
+              </b>
+              <span style="font-size:9.5px;padding:0 4px;border-radius:4px;background:rgba(88,166,255,0.15);color:#58a6ff;font-weight:700">${activeVersion}</span>
+            </div>
+            <span style="font-size:10px;background:${b.bg};color:${b.color};border:1px solid ${b.border};padding:1px 5px;border-radius:10px;font-weight:700;white-space:nowrap">
+              ${b.text}
+            </span>
+          </div>
+
+          <!-- 核心胜率 + 冲击 7 成标尺 -->
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <div>
+              <span style="font-size:22px;font-weight:800;color:${winColor}">${winRateVal}%</span>
+              <span style="font-size:11px;color:var(--sys-text-sub);margin-left:2px">(${s.total_count}单)</span>
+            </div>
+            ${is70Achieved ? `
+              <span style="font-size:10px;background:#fef3c7;color:#b45309;padding:2px 6px;border-radius:10px;font-weight:800;border:1px solid #fcd34d">
+                🏆 7成万能打法
+              </span>
+            ` : isDanger ? `
+              <span style="font-size:10px;background:#fee2e2;color:#b91c1c;padding:2px 6px;border-radius:10px;font-weight:800;border:1px solid #fecaca">
+                🚨 需立即修复
+              </span>
+            ` : `
+              <span style="font-size:10px;color:var(--sys-text-sub)">
+                距7成: <b>70%</b>
+              </span>
+            `}
+          </div>
+
+          <!-- 胜率双层进度条 (带 70% 目标线) -->
+          <div style="background:#e2e8f0;height:5px;border-radius:3px;overflow:hidden;position:relative;margin-bottom:8px">
+            <!-- 70% 标线指示 -->
+            <div style="position:absolute;left:70%;top:0;bottom:0;width:1.5px;background:#d97706;z-index:2" title="7成胜率目标线 (70%)"></div>
+            <!-- 当前胜率 -->
+            <div style="background:${winColor};width:${Math.min(100, Math.max(0, winRateVal))}%;height:100%;border-radius:3px;transition:width 0.3s"></div>
+          </div>
+
+          <!-- 调优参数指标快照 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--sys-text-sub);margin-bottom:8px">
+            <span>仓位: <b style="color:var(--sys-text-title)">${s.adaptive_position_pct}%</b></span>
+            <span>盈亏比: <b style="color:${s.realized_rr >= 1.5 ? '#16a34a' : '#ea580c'}">${s.realized_rr}</b></span>
+          </div>
+
+          <!-- 卡片快捷穿透与履历操作栏 -->
+          <div style="margin-top:auto;padding-top:6px;border-top:1px dashed var(--sys-border);display:flex;gap:6px" onclick="event.stopPropagation()">
+            <button type="button" class="btn btn-outline" style="flex:1;height:22px;padding:0;font-size:10.5px;display:flex;align-items:center;justify-content:center;gap:3px;background:var(--sys-bg-card-inner)" onclick="openPlaybookAttribution('${s.playbook_id}')" title="穿透诊断该战法失败原因与AI修复">
+              <i class="ri-search-eye-line" style="color:var(--sys-accent)"></i> 诊断修复
+            </button>
+            <button type="button" class="btn btn-outline" style="height:22px;padding:0 6px;font-size:10.5px;display:flex;align-items:center;justify-content:center;gap:2px;background:var(--sys-bg-card-inner)" onclick="openPlaybookHistory('${s.playbook_id}')" title="查看战法进化履历时间线">
+              <i class="ri-history-line"></i> 履历
+            </button>
+          </div>
+
+        </div>
+      `;
+    }).join('');
+
+  } catch (e) {
+    console.warn('加载战法看板失败:', e);
+    container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:10px;color:var(--sys-text-sub);font-size:12px">暂无战法统计数据，完成首轮对账后自动生成</div>';
+  }
+}
+
+/**
+ * 打开指定战法的失误穿透归因与 7 成胜率调优工作台
+ */
+async function openPlaybookAttribution(playbookId) {
+  _currentAttributionPlaybookId = playbookId;
+  const modal = document.getElementById('playbookAttributionModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  // 清空/占位
+  document.getElementById('attrTotalCount').textContent = '--';
+  document.getElementById('attrWinCount').textContent = '--';
+  document.getElementById('attrFailCount').textContent = '--';
+  document.getElementById('attrCurrentWinRate').textContent = '--%';
+  document.getElementById('attrNeededWins').textContent = '--';
+  document.getElementById('attrSimulatedWinRate').textContent = '--%';
+  document.getElementById('attrSimRecovered').textContent = '--';
+  document.getElementById('attrRankingList').innerHTML = '<div style="text-align:center;padding:16px;color:var(--sys-text-sub);font-size:12px"><span class="spinner"></span> 正在穿透审计失败单...</div>';
+  document.getElementById('attrFailureRecordsTbody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--sys-text-sub)">正在加载失误记录明细...</td></tr>';
+
+  try {
+    const resp = await authFetch(`/api/prediction/loss_attribution?playbook_id=${encodeURIComponent(playbookId)}`);
+    const data = await resp.json();
+    if (data.code !== 200) {
+      showToast(data.message || '归因分析获取失败', 'error');
+      return;
+    }
+
+    // 填充战法标题与版本 (优雅支持全部战法与单个战法)
+    const isAll = (playbookId === 'all' || !playbookId);
+    const pbName = isAll ? '🎯 全局六大战法失误穿透归因与7成胜率推演' : (data.active_params?.playbook_name || playbookId);
+    document.getElementById('attrModalPlaybookName').textContent = pbName;
+    document.getElementById('attrModalVersionBadge').textContent = isAll ? '全量战法穿透' : `${data.active_params?.active_version || 'v1.0'} 生效中`;
+
+    // 填充统计指标
+    document.getElementById('attrTotalCount').textContent = data.total_count;
+    document.getElementById('attrWinCount').textContent = data.win_count;
+    document.getElementById('attrFailCount').textContent = data.fail_count;
+    
+    const winRate = Number(data.current_win_rate || 0);
+    const winRateEl = document.getElementById('attrCurrentWinRate');
+    winRateEl.textContent = `${winRate}%`;
+    winRateEl.style.color = winRate >= 70 ? '#16a34a' : winRate >= 50 ? '#2563eb' : '#dc2626';
+
+    document.getElementById('attrNeededWins').textContent = data.needed_wins_for_70;
+    document.getElementById('attrSimulatedWinRate').textContent = `${data.simulated_win_rate}%`;
+    document.getElementById('attrSimRecovered').textContent = data.simulated_recovered_count;
+
+    // 达成度徽章与进度条
+    const goalBadge = document.getElementById('attrGoalBadge');
+    const progressBar = document.getElementById('attrProgressBar');
+    const progressPct = Math.min(100, Math.round((winRate / 70.0) * 100));
+    progressBar.style.width = `${progressPct}%`;
+    if (winRate >= 70.0) {
+      goalBadge.textContent = '🏆 7成目标已达成！';
+      goalBadge.style.color = '#16a34a';
+    } else {
+      goalBadge.textContent = `冲刺完成度 ${progressPct}%`;
+      goalBadge.style.color = '#d97706';
+    }
+
+    // 渲染失误排行榜 (穿透排行)
+    const rankingEl = document.getElementById('attrRankingList');
+    if (!data.attribution_ranking || data.attribution_ranking.length === 0) {
+      rankingEl.innerHTML = '<div style="text-align:center;padding:16px;color:#16a34a;font-size:12px;font-weight:700">🎉 当前战法暂无失误单或全部复盘盈利！</div>';
+    } else {
+      rankingEl.innerHTML = data.attribution_ranking.map((r, idx) => `
+        <div style="background:var(--sys-bg-card);border:1px solid var(--sys-border);border-radius:6px;padding:8px 10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <span style="font-size:12px;font-weight:700;color:var(--sys-text-title);display:flex;align-items:center;gap:4px">
+              <span>${r.icon}</span> <span>${escapeHtml(r.name)}</span>
+            </span>
+            <span style="font-size:11.5px;color:#cf222e;font-weight:800">${r.count}笔 (${r.ratio}%)</span>
+          </div>
+          <div style="font-size:11px;color:var(--sys-text-sub);line-height:1.4">
+            <b>对策：</b>${escapeHtml(r.action)}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // 渲染 AI 修复推演方案与表单
+    const prop = data.recommended_proposal || {};
+    const propParams = prop.proposed_params || {};
+    document.getElementById('attrProposalReason').innerHTML = `
+      <div style="font-weight:700;margin-bottom:2px;color:var(--sys-accent)">💡 AI 进化引擎收敛推演：</div>
+      <div>${escapeHtml(prop.reason || '根据失误归因特征自动微调点位')}</div>
+    `;
+
+    // 针对全局模式，默认聚焦到急需修复的战法
+    const effectivePbId = (playbookId && playbookId !== 'all') ? playbookId : 'playbook_04_core_ma20_pullback';
+    document.getElementById('repairPlaybookId').value = effectivePbId;
+    document.getElementById('repairBuyLow').value = propParams.buy_offset_low != null ? propParams.buy_offset_low : -2.5;
+    document.getElementById('repairBuyHigh').value = propParams.buy_offset_high != null ? propParams.buy_offset_high : -1.0;
+    document.getElementById('repairStopLoss').value = propParams.stop_loss_pct != null ? propParams.stop_loss_pct : 2.5;
+    document.getElementById('repairTarget1').value = propParams.target1_pct != null ? propParams.target1_pct : 6.0;
+    document.getElementById('repairTarget2').value = propParams.target2_pct != null ? propParams.target2_pct : 10.0;
+    document.getElementById('repairPosition').value = propParams.position_pct != null ? propParams.position_pct : 25.0;
+    document.getElementById('repairTriggerReason').value = `根据实战失误归因调优：${prop.reason || '收紧止损，优化企稳买点'}`;
+
+    // 渲染失误单明细表格
+    const tbody = document.getElementById('attrFailureRecordsTbody');
+    const fails = data.diagnosed_failures || [];
+    document.getElementById('attrFailureRecordsCount').textContent = fails.length;
+    if (fails.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--sys-text-sub)">暂无失误单</td></tr>';
+    } else {
+      tbody.innerHTML = fails.map(f => {
+        const pnl = Number(f.profit_pct || 0);
+        return `
+          <tr>
+            <td style="padding:8px 10px;font-size:11.5px;color:var(--sys-text-sub);white-space:nowrap">${escapeHtml(f.record_date || '--')}</td>
+            <td style="padding:8px 10px;font-weight:700;white-space:nowrap">
+              ${escapeHtml(f.stock_name || '')} <span style="font-size:11px;color:var(--sys-text-sub)">(${escapeHtml(f.stock_code || '')})</span>
+            </td>
+            <td style="padding:8px 10px;text-align:right;font-family:monospace">${f.entry_price ? f.entry_price.toFixed(2) : '--'}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:monospace;color:#cf222e">${f.actual_low ? f.actual_low.toFixed(2) : '--'}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:monospace">${f.actual_close ? f.actual_close.toFixed(2) : '--'}</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:800;color:#cf222e;font-family:monospace">${pnl.toFixed(2)}%</td>
+            <td style="padding:8px 10px">
+              <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(207,34,46,0.1);color:#cf222e;font-weight:700">
+                ${f.attribution_icon} ${escapeHtml(f.attribution_name)}
+              </span>
+              <div style="font-size:11px;color:var(--sys-text-sub);margin-top:2px">${escapeHtml(f.diagnostic_detail)}</div>
+            </td>
+            <td style="padding:8px 10px;font-size:11px;color:var(--sys-text-primary)">${escapeHtml(f.repair_action)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+  } catch (e) {
+    showToast('归因诊断加载异常: ' + e.message, 'error');
+  }
+}
+
+/**
+ * 关闭战法归因弹窗
+ */
+function closePlaybookAttributionModal() {
+  const modal = document.getElementById('playbookAttributionModal');
+  if (modal) modal.style.display = 'none';
+}
+
+/**
+ * 提交战法修复表单 (修改生效参数并归档至 Changelog)
+ */
+async function submitPlaybookRepair() {
+  const playbookId = document.getElementById('repairPlaybookId').value || _currentAttributionPlaybookId;
+  const reason = (document.getElementById('repairTriggerReason').value || '').trim();
+  if (!reason) {
+    showToast('请填写本次修复进化的原因，便于后续复盘回溯', 'warning');
+    return;
+  }
+
+  const proposed = {
+    buy_offset_low: parseFloat(document.getElementById('repairBuyLow').value) || 0.0,
+    buy_offset_high: parseFloat(document.getElementById('repairBuyHigh').value) || 0.0,
+    stop_loss_pct: parseFloat(document.getElementById('repairStopLoss').value) || 2.5,
+    target1_pct: parseFloat(document.getElementById('repairTarget1').value) || 6.0,
+    target2_pct: parseFloat(document.getElementById('repairTarget2').value) || 10.0,
+    position_pct: parseFloat(document.getElementById('repairPosition').value) || 25.0,
+    min_rr_ratio: 1.6
+  };
+
+  showToast('🛠️ 正在应用参数修复并归档进化履历...', 'info');
+
+  try {
+    const resp = await authFetch('/api/prediction/playbook_repair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playbook_id: playbookId,
+        trigger_reason: reason,
+        proposed_params: proposed,
+        repair_type: 'ai_diagnostic'
+      })
+    });
+    const res = await resp.json();
+    if (res.code === 200) {
+      showToast(`🎉 战法修复成功！已升级为 ${res.version} 并立即热生效`, 'success');
+      loadPlaybookStats();
+      openPlaybookAttribution(playbookId);
+    } else {
+      showToast(res.message || '修复提交失败', 'error');
+    }
+  } catch (e) {
+    showToast('提交修复异常: ' + e.message, 'error');
+  }
+}
+
+/**
+ * 重置当前战法参数为代码原生基准
+ */
+async function resetCurrentPlaybookParams() {
+  const playbookId = document.getElementById('repairPlaybookId').value || _currentAttributionPlaybookId;
+  if (!confirm('确认要重置该战法为代码原生默认参数吗？')) return;
+
+  try {
+    const resp = await authFetch('/api/prediction/custom_params/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playbook_id: playbookId })
+    });
+    const res = await resp.json();
+    if (res.code === 200) {
+      showToast('已重置为代码默认配置', 'success');
+      loadPlaybookStats();
+      openPlaybookAttribution(playbookId);
+    }
+  } catch (e) {
+    showToast('重置失败: ' + e.message, 'error');
+  }
+}
+
+/**
+ * 打开当前战法的进化历史
+ */
+function openCurrentPlaybookHistory() {
+  openPlaybookHistory(_currentAttributionPlaybookId);
+}
+
+/**
+ * 打开战法进化履历时间线抽屉 (Changelog)
+ */
+async function openPlaybookHistory(playbookId) {
+  const drawer = document.getElementById('playbookHistoryDrawer');
+  if (!drawer) return;
+  drawer.style.display = 'flex';
+
+  const container = document.getElementById('playbookTimelineContainer');
+  container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--sys-text-sub);font-size:12px"><span class="spinner"></span> 正在读取进化履历...</div>';
+
+  try {
+    const resp = await authFetch(`/api/prediction/repair_history?playbook_id=${encodeURIComponent(playbookId || 'all')}`);
+    const data = await resp.json();
+    if (data.code !== 200 || !data.history) {
+      container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--sys-text-sub);font-size:12px">暂无历史修复记录</div>';
+      return;
+    }
+
+    const history = data.history;
+    if (history.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:40px 20px;color:var(--sys-text-sub)">
+          <div style="font-size:28px;margin-bottom:8px">🌱</div>
+          <b style="font-size:14px;color:var(--sys-text-title)">当前版本为初始原生版 (v1.0)</b>
+          <p style="font-size:12px;margin-top:4px">尚未发生参数修复或自适应调优，完成首次调优后在此展示版本进化轴</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div style="position:relative;padding-left:24px;border-left:2px solid var(--sys-border);margin-left:14px;display:flex;flex-direction:column;gap:18px">
+        ${history.map((h, idx) => {
+          const isLatest = idx === 0;
+          return `
+            <div style="position:relative">
+              <!-- 时间轴圆点 -->
+              <div style="position:absolute;left:-31px;top:2px;width:12px;height:12px;border-radius:50%;background:${isLatest ? '#10b981' : '#64748b'};border:2px solid var(--sys-bg-card);box-shadow:0 0 0 2px ${isLatest ? 'rgba(16,185,129,0.3)' : 'transparent'}"></div>
+
+              <!-- 履历卡片 -->
+              <div style="background:var(--sys-bg-card);border:1px solid ${isLatest ? 'rgba(16,185,129,0.4)' : 'var(--sys-border)'};border-radius:8px;padding:12px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.04)">
+                
+                <!-- 顶行：版本号 + 修复时间 + 操作人 -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span style="font-size:12px;font-weight:800;background:rgba(16,185,129,0.15);color:#10b981;padding:2px 8px;border-radius:12px">
+                      ${escapeHtml(h.version)}
+                    </span>
+                    <b style="font-size:13px;color:var(--sys-text-title)">${escapeHtml(h.playbook_name)}</b>
+                    ${isLatest ? '<span style="font-size:10px;background:#fef3c7;color:#b45309;padding:1px 5px;border-radius:4px;font-weight:700">当前版本</span>' : ''}
+                  </div>
+                  <div style="font-size:11px;color:var(--sys-text-sub)">
+                    ${escapeHtml(h.repair_time)} · 由 <b>${escapeHtml(h.operator || 'AI')}</b> 提交
+                  </div>
+                </div>
+
+                <!-- 触发原因 -->
+                <div style="font-size:12px;color:var(--sys-text-primary);background:var(--sys-bg-card-inner);padding:8px 10px;border-radius:6px;border:1px dashed var(--sys-border);margin-bottom:8px">
+                  <b>📝 修复原因：</b>${escapeHtml(h.trigger_reason)}
+                </div>
+
+                <!-- 胜率对比与参数变更快照 -->
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--sys-text-sub);flex-wrap:wrap;gap:8px">
+                  <div>
+                    <span>调优前胜率: <b style="color:#cf222e">${h.pre_win_rate != null ? h.pre_win_rate + '%' : '--'}</b></span>
+                    <span style="margin:0 4px">➔</span>
+                    <span>目标胜率: <b style="color:#d97706">70.0%</b></span>
+                  </div>
+                  <div style="display:flex;gap:6px">
+                    <span style="font-size:10.5px;background:rgba(88,166,255,0.1);color:#58a6ff;padding:1px 6px;border-radius:4px">
+                      止损: ${h.param_after?.stop_loss_pct || '--'}%
+                    </span>
+                    <span style="font-size:10.5px;background:rgba(45,164,78,0.1);color:#2da44e;padding:1px 6px;border-radius:4px">
+                      目标1: +${h.param_after?.target1_pct || '--'}%
+                    </span>
+                    <span style="font-size:10.5px;background:rgba(245,158,11,0.1);color:#d97706;padding:1px 6px;border-radius:4px">
+                      仓位: ${h.param_after?.position_pct || '--'}%
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+  } catch (e) {
+    const safeMsg = typeof escapeHtml === 'function' ? escapeHtml(e.message || '') : String(e.message || '');
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:#cf222e;font-size:12px">读取进化履历异常: ' + safeMsg + '</div>';
+  }
+}
+
+/**
+ * 关闭战法历史抽屉
+ */
+function closePlaybookHistoryDrawer() {
+  const drawer = document.getElementById('playbookHistoryDrawer');
+  if (drawer) drawer.style.display = 'none';
+}
+
+/**
+ * 手动强制触发一轮六大战法自适应调优
+ */
+async function triggerPlaybookTuning() {
+  showToast('🔄 正在聚合真实对账数据并重新调优各战法参数...', 'info');
+  try {
+    const resp = await authFetch('/api/prediction/force_tuning', { method: 'POST' });
+    const data = await resp.json();
+    if (data.code === 200) {
+      showToast('✅ 战法自适应调优完成！参数与状态已按最新胜率刷新', 'success');
+      loadPlaybookStats();
+      loadJudgeStats();
+    } else {
+      showToast(data.message || '调优异常', 'error');
+    }
+  } catch (e) {
+    showToast('调优请求失败: ' + e.message, 'error');
   }
 }
 
@@ -260,6 +755,45 @@ function closeJudgeModal() {
 }
 
 /**
+ * 切换标的分类（全部、实盘持仓、核心自选、量化与AI筛选）
+ * @param {string} cat 'all' | 'position' | 'watchlist' | 'screened'
+ */
+function switchJudgeCategory(cat) {
+  _judgeCategory = cat;
+  _judgePage = 1;
+
+  const tabs = [
+    { id: 'tabCatAll', cat: 'all', activeBg: '#2563eb', activeColor: '#fff', badgeBg: 'rgba(255,255,255,0.25)', badgeColor: '#fff', defBadgeBg: 'rgba(255,255,255,0.15)', defBadgeColor: 'var(--sys-text-sub)' },
+    { id: 'tabCatPos', cat: 'position', activeBg: '#2563eb', activeColor: '#fff', badgeBg: 'rgba(255,255,255,0.25)', badgeColor: '#fff', defBadgeBg: 'rgba(64,158,255,0.12)', defBadgeColor: '#409eff' },
+    { id: 'tabCatWatch', cat: 'watchlist', activeBg: '#e6a23c', activeColor: '#fff', badgeBg: 'rgba(255,255,255,0.25)', badgeColor: '#fff', defBadgeBg: 'rgba(230,162,60,0.12)', defBadgeColor: '#e6a23c' },
+    { id: 'tabCatScreened', cat: 'screened', activeBg: '#9333ea', activeColor: '#fff', badgeBg: 'rgba(255,255,255,0.25)', badgeColor: '#fff', defBadgeBg: 'rgba(147,51,234,0.12)', defBadgeColor: '#9333ea' }
+  ];
+
+  tabs.forEach(t => {
+    const el = document.getElementById(t.id);
+    if (!el) return;
+    const badge = el.querySelector('span:last-child');
+    if (t.cat === cat) {
+      el.style.background = t.activeBg;
+      el.style.color = t.activeColor;
+      if (badge) {
+        badge.style.background = t.badgeBg;
+        badge.style.color = t.badgeColor;
+      }
+    } else {
+      el.style.background = 'transparent';
+      el.style.color = 'var(--sys-text-sub)';
+      if (badge) {
+        badge.style.background = t.defBadgeBg;
+        badge.style.color = t.defBadgeColor;
+      }
+    }
+  });
+
+  loadJudgeRecords();
+}
+
+/**
  * 加载记录列表（带筛选与分页，按日期严格倒序）
  */
 async function loadJudgeRecords() {
@@ -271,23 +805,37 @@ async function loadJudgeRecords() {
   const filterReviewed = document.getElementById('judgeFilterReviewed')?.value || '';
   const filterCorrect = document.getElementById('judgeFilterCorrect')?.value || '';
 
-  let url = `/api/prediction/list?page=${_judgePage}&page_size=15`;
+  let url = `/api/prediction/list?page=${_judgePage}&page_size=${_judgePageSize}`;
+  if (_judgeCategory && _judgeCategory !== 'all') url += `&category=${encodeURIComponent(_judgeCategory)}`;
   if (filterDate) url += `&record_date=${filterDate}`;
   if (filterDir) url += `&direction=${filterDir}`;
   if (filterReviewed) url += `&reviewed=${filterReviewed}`;
   if (filterCorrect) url += `&correct=${filterCorrect}`;
 
-  listEl.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--sys-text-sub)"><span class="spinner"></span> 正在按日期倒序加载对比记录...</td></tr>';
+  listEl.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--sys-text-sub)"><span class="spinner"></span> 正在按日期倒序加载对比记录...</td></tr>';
 
   try {
     const resp = await authFetch(url);
     const data = await resp.json();
     if (data.code !== 200) return;
 
+    // 更新三分类统计角标
+    if (data.category_counts) {
+      const cc = data.category_counts;
+      const elAll = document.getElementById('catCountAll');
+      const elPos = document.getElementById('catCountPos');
+      const elWatch = document.getElementById('catCountWatch');
+      const elScreened = document.getElementById('catCountScreened');
+      if (elAll) elAll.textContent = cc.all != null ? cc.all : 0;
+      if (elPos) elPos.textContent = cc.position != null ? cc.position : 0;
+      if (elWatch) elWatch.textContent = cc.watchlist != null ? cc.watchlist : 0;
+      if (elScreened) elScreened.textContent = cc.screened != null ? cc.screened : 0;
+    }
+
     if (!data.records || data.records.length === 0) {
-      listEl.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--sys-text-sub)">
+      listEl.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--sys-text-sub)">
         <i class="ri-inbox-line" style="font-size:32px;display:block;margin-bottom:8px"></i>
-        暂无符合筛选条件的对比记录，点击右上角「手动录入新预测」添加！
+        暂无符合筛选条件的对比记录，点击右上角「手动录入」添加！
       </td></tr>`;
       return;
     }
@@ -295,7 +843,7 @@ async function loadJudgeRecords() {
     listEl.innerHTML = data.records.map(r => renderJudgeTableRow(r)).join('');
     renderJudgePagination(data.total, data.page, data.page_size);
   } catch (e) {
-    listEl.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:26px;color:#64748b">
+    listEl.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:26px;color:#64748b">
       <div style="margin-bottom:8px"><i class="ri-wifi-off-line" style="font-size:24px;color:#94a3b8"></i></div>
       <div style="font-size:13px;color:#64748b;margin-bottom:8px">数据加载中或服务同步中 (${escapeHtml(e.message)})</div>
       <button type="button" class="btn btn-outline" onclick="loadJudgeRecords()" style="font-size:12px;padding:3px 12px">重新加载</button>
@@ -460,11 +1008,32 @@ function renderJudgeTableRow(r) {
     </div>
   `;
 
+  // 标的三分类徽章 (持仓 / 自选 / 筛选)
+  let catBadgeHtml = '';
+  const rCat = r.category || (r.tags && r.tags.includes('持仓') ? 'position' : (r.tags && r.tags.includes('自选') ? 'watchlist' : 'screened'));
+  if (rCat === 'position') {
+    catBadgeHtml = '<span style="display:inline-flex;align-items:center;padding:1px 5px;border-radius:3px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;line-height:1.2">💼 持仓</span>';
+  } else if (rCat === 'watchlist') {
+    catBadgeHtml = '<span style="display:inline-flex;align-items:center;padding:1px 5px;border-radius:3px;font-size:10.5px;font-weight:700;background:#fffbeb;color:#d97706;border:1px solid #fde68a;line-height:1.2">📌 自选</span>';
+  } else {
+    catBadgeHtml = '<span style="display:inline-flex;align-items:center;padding:1px 5px;border-radius:3px;font-size:10.5px;font-weight:700;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;line-height:1.2">🎯 筛选</span>';
+  }
+
+  // 专属战法标签
+  let pbTagHtml = '';
+  if (r.playbook_name) {
+    const pbShort = r.playbook_name.split('（')[0].replace('战法', '');
+    pbTagHtml = `<span style="display:inline-flex;align-items:center;padding:1px 5px;border-radius:3px;font-size:10px;background:rgba(37,99,235,0.06);color:#2563eb;border:1px solid rgba(37,99,235,0.18);line-height:1.2">${escapeHtml(pbShort)}</span>`;
+  }
+
   return `
     <tr style="border-bottom:1px solid var(--sys-border);transition:background 0.15s" onmouseover="this.style.background='var(--sys-bg-hover)'" onmouseout="this.style.background='transparent'">
       <td style="padding:10px 12px;white-space:nowrap">${predTimeHtml}</td>
       <td style="padding:10px 12px;white-space:nowrap">
-
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+          ${catBadgeHtml}
+          ${pbTagHtml}
+        </div>
         <b style="color:var(--sys-text-title);font-size:13.5px">${escapeHtml(r.stock_name)}</b><br>
         <span style="color:var(--sys-text-sub);font-size:11.5px">${escapeHtml(r.stock_code)}</span>
       </td>
@@ -708,22 +1277,38 @@ function closeJudgeDetailModal() {
 
 /**
 /**
- * 渲染 Element Plus 经典分页组件 (el-pagination)
+ * 渲染 Element Plus 经典分页组件 (el-pagination) - 尾页与首页严格置灰禁用
  */
+var _judgeTotal = 0;
 function renderJudgePagination(total, page, pageSize) {
-  const container = document.getElementById('judgePagination');
-  if (!container) return;
-
-  const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) { 
-    container.innerHTML = `<div class="el-pagination"><span class="el-pagination__total">共 ${total} 条</span></div>`; 
-    return; 
+  _judgeTotal = total;
+  if (typeof window.renderElementPlusPagination === 'function') {
+    window.renderElementPlusPagination({
+      mount: '#judgePagination',
+      total: total,
+      page: page,
+      pageSize: pageSize,
+      pageSizes: [10, 20, 50],
+      totalTemplate: '共检索到 <b style="color:#58a6ff">{total}</b> 条诊断推演记录',
+      onPageChange: 'judgeGoPage',
+      onSizeChange: 'changeJudgePageSize'
+    });
+    return;
   }
 
   let html = `<div class="el-pagination is-background">`;
   
   // 1. 总条数
   html += `<span class="el-pagination__total">共 ${total} 条</span>`;
+  html += `
+    <span style="display:inline-flex;align-items:center;margin-right:8px;font-size:12px">
+      <select class="el-input__inner" style="height:26px;font-size:12px;padding:0 6px;width:95px;border-radius:4px" onchange="changeJudgePageSize(this.value)">
+        <option value="10" ${_judgePageSize===10?'selected':''}>10 条/页</option>
+        <option value="20" ${_judgePageSize===20?'selected':''}>20 条/页</option>
+        <option value="50" ${_judgePageSize===50?'selected':''}>50 条/页</option>
+      </select>
+    </span>
+  `;
 
   // 2. 上一页
   const prevDisabled = page <= 1 ? 'disabled' : '';
@@ -772,9 +1357,18 @@ function renderJudgePagination(total, page, pageSize) {
 /**
  * 跳转到指定页
  */
+function changeJudgePageSize(sz) {
+  _judgePageSize = Number(sz) || 10;
+  _judgePage = 1;
+  loadJudgeRecords();
+}
+window.changeJudgePageSize = changeJudgePageSize;
+
 function judgeGoPage(p) {
-  if (p < 1) return;
-  _judgePage = p;
+  const target = parseInt(p) || 1;
+  const totalPages = Math.ceil((_judgeTotal || 1) / _judgePageSize) || 1;
+  if (target < 1 || target > totalPages || target === _judgePage) return;
+  _judgePage = target;
   loadJudgeRecords();
   document.getElementById('tab-alpha-judge')?.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -822,6 +1416,7 @@ async function triggerBatchReview() {
       }
       loadJudgeRecords();
       loadJudgeStats();
+      loadPlaybookStats();
       checkPendingReviews();
     } else {
       showToast(data.detail || '复盘失败', 'error');
@@ -838,6 +1433,33 @@ function judgeFilterPending() {
   const el = document.getElementById('judgeFilterReviewed');
   if (el) { el.value = 'no'; loadJudgeRecords(); }
 }
+
+/**
+ * 检查待复盘提醒：检查是否有未复盘结算的判官预警记录，更新待复盘角标或提示
+ */
+async function checkPendingReviews() {
+  try {
+    const doFetch = typeof window.authFetch === 'function' ? window.authFetch : fetch;
+    const res = await doFetch('/api/prediction/stats');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.code === 200 && data.data) {
+      const pending = data.data.pending_count || 0;
+      const badge = document.getElementById('judgePendingBadge') || document.getElementById('judgePendingCountBadge');
+      if (badge) {
+        if (pending > 0) {
+          badge.textContent = pending > 99 ? '99+' : pending;
+          badge.style.display = 'inline-block';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('checkPendingReviews warn:', err);
+  }
+}
+window.checkPendingReviews = checkPendingReviews;
 
 
 // ==========================================
@@ -1043,7 +1665,7 @@ function renderDailyPlan(data) {
     html += `<div style="grid-column:1/-1;padding:24px;text-align:center;color:#94a3b8;background:#f8fafc;border-radius:8px">今日未扫描到完全满足 4 层漏斗与 1% 盈亏比的激进标的，建议保持轻仓防守</div>`;
   } else {
     passed.forEach(c => {
-      const chgColor = (c.change_pct || 0) >= 0 ? '#16a34a' : '#dc2626';
+      const chgColor = (c.change_pct || 0) >= 0 ? '#f85149' : '#3fb950';
       const chgSign = (c.change_pct || 0) >= 0 ? '+' : '';
       const tags = (c.triggered_rules || []).map(t => `<span style="display:inline-block;padding:1px 6px;background:#e0f2fe;color:#0284c7;border-radius:4px;font-size:11px;font-weight:600">${t}</span>`).join(' ');
 
@@ -1135,7 +1757,7 @@ function renderDailyPlan(data) {
     html += `<tr><td colspan="5" style="padding:20px;text-align:center;color:#94a3b8">观察池所有标的全部通过筛选</td></tr>`;
   } else {
     eliminated.forEach(el => {
-      const chgColor = (el.change_pct || 0) >= 0 ? '#16a34a' : '#dc2626';
+      const chgColor = (el.change_pct || 0) >= 0 ? '#f85149' : '#3fb950';
       const chgSign = (el.change_pct || 0) >= 0 ? '+' : '';
       html += `
         <tr style="border-bottom:1px solid #f1f5f9;transition:background 0.15s" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background='transparent'">
@@ -1254,12 +1876,6 @@ async function batchAddPlanToPredictions() {
   if (typeof loadJudgeStats === 'function') loadJudgeStats();
 }
 
-// 导出到全局
-window.openDailyPlanModal = openDailyPlanModal;
-window.closeDailyPlanModal = closeDailyPlanModal;
-window.loadDailyPlanData = loadDailyPlanData;
-window.batchAddPlanToPredictions = batchAddPlanToPredictions;
-
 // 显式导出全局调用接口，保障所有 HTML 内联事件 100% 正常调用
 window.loadJudgeRecords = loadJudgeRecords;
 window.loadJudgeStats = loadJudgeStats;
@@ -1267,7 +1883,72 @@ window.openJudgeModal = openJudgeModal;
 window.closeJudgeModal = closeJudgeModal;
 window.openDailyPlanModal = openDailyPlanModal;
 window.closeDailyPlanModal = closeDailyPlanModal;
+window.loadDailyPlanData = loadDailyPlanData;
 window.triggerBatchReview = triggerBatchReview;
 window.judgeFilterCorrect = judgeFilterCorrect;
 window.judgeFilterPending = judgeFilterPending;
 window.batchAddPlanToPredictions = batchAddPlanToPredictions;
+
+// 🎯 核心战法归因、调优与进化履历全局导出
+window.openPlaybookAttribution = openPlaybookAttribution;
+window.closePlaybookAttributionModal = closePlaybookAttributionModal;
+window.submitPlaybookRepair = submitPlaybookRepair;
+window.resetCurrentPlaybookParams = resetCurrentPlaybookParams;
+window.openCurrentPlaybookHistory = openCurrentPlaybookHistory;
+window.openPlaybookHistory = openPlaybookHistory;
+window.closePlaybookHistoryDrawer = closePlaybookHistoryDrawer;
+window.loadPlaybookStats = loadPlaybookStats;
+
+// 挂载裁判/预测模块到全局
+if (typeof initJudgeModule === 'function') window.initJudgeModule = initJudgeModule;
+if (typeof selectJudgeDir === 'function') window.selectJudgeDir = selectJudgeDir;
+if (typeof setJudgeStar === 'function') window.setJudgeStar = setJudgeStar;
+if (typeof toggleJudgeTag === 'function') window.toggleJudgeTag = toggleJudgeTag;
+if (typeof submitJudgeRecord === 'function') window.submitJudgeRecord = submitJudgeRecord;
+if (typeof deleteJudgeRecord === 'function') window.deleteJudgeRecord = deleteJudgeRecord;
+if (typeof judgeGoPage === 'function') window.judgeGoPage = judgeGoPage;
+if (typeof judgeFilterPending === 'function') window.judgeFilterPending = judgeFilterPending;
+if (typeof judgeFilterCorrect === 'function') window.judgeFilterCorrect = judgeFilterCorrect;
+if (typeof openJudgeModal === 'function') window.openJudgeModal = openJudgeModal;
+if (typeof closeJudgeModal === 'function') window.closeJudgeModal = closeJudgeModal;
+if (typeof openJudgeDetailModal === 'function') window.openJudgeDetailModal = openJudgeDetailModal;
+if (typeof closeJudgeDetailModal === 'function') window.closeJudgeDetailModal = closeJudgeDetailModal;
+if (typeof saveCalcToPrediction === 'function') window.saveCalcToPrediction = saveCalcToPrediction;
+
+// 全局监听：点击遮罩外围或按 ESC 键自动关闭弹窗和抽屉
+document.addEventListener('DOMContentLoaded', () => {
+  const pModal = document.getElementById('playbookAttributionModal');
+  if (pModal) {
+    pModal.addEventListener('click', (e) => {
+      if (e.target === pModal) closePlaybookAttributionModal();
+    });
+  }
+  const pDrawer = document.getElementById('playbookHistoryDrawer');
+  if (pDrawer) {
+    pDrawer.addEventListener('click', (e) => {
+      if (e.target === pDrawer) closePlaybookHistoryDrawer();
+    });
+  }
+  const jModal = document.getElementById('judgeAddModal');
+  if (jModal) {
+    jModal.addEventListener('click', (e) => {
+      if (e.target === jModal) closeJudgeModal();
+    });
+  }
+  const dModal = document.getElementById('dailyPlanModal');
+  if (dModal) {
+    dModal.addEventListener('click', (e) => {
+      if (e.target === dModal) closeDailyPlanModal();
+    });
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closePlaybookAttributionModal();
+    closePlaybookHistoryDrawer();
+    closeJudgeModal();
+    closeDailyPlanModal();
+  }
+});
+

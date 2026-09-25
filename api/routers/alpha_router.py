@@ -16,6 +16,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from utils.auth import get_current_user
 from utils.alpha_engine import AlphaEngine, AlphaRuleConfig, TradeDecisionResult
 from utils.realtime import get_realtime_quote, get_realtime_kline
+from utils.trading_law_glossary import get_all_laws, get_all_glossary, query_term
+from utils.funnel_screener import screen_by_laws, diagnose_stock_by_laws
 import akshare as ak
 
 logger = logging.getLogger("AlphaRouter")
@@ -54,6 +56,7 @@ class CalculateRequest(BaseModel):
     """单票买卖点测算请求实体"""
     symbol: str
     custom_capital: Optional[float] = None
+    playbook_id: Optional[str] = "auto" # auto=智能自动识别, 或指定 playbook_01 ~ 06
 
 
 def resolve_symbol(query: str) -> tuple[str, str]:
@@ -107,9 +110,9 @@ def resolve_symbol(query: str) -> tuple[str, str]:
 from utils.auth import get_current_user, get_optional_user
 
 @router.get("/config")
-def get_alpha_config(user: Optional[dict] = Depends(get_optional_user)):
-    """获取当前用户的 Alpha 选股与风控规则配置 (多用户强物理隔离，高可用)"""
-    username = user.get("username", "admin") if (user and isinstance(user, dict)) else "admin"
+def get_alpha_config(user: dict = Depends(get_current_user)):
+    """获取当前用户的 Alpha 选股与风控规则配置 (需登录)"""
+    username = user.get("username", "admin")
     from services.alpha_service import global_alpha_service
     user_cfg = global_alpha_service.get_user_config(username)
     cfg = user_cfg
@@ -176,10 +179,82 @@ def save_alpha_config(req: AlphaConfigRequest, user: dict = Depends(get_current_
     }}
 
 
+
+
+def get_stock_catalyst_and_twitter(symbol: str, name: str, change_pct: float, current_price: float) -> dict:
+    """毫秒级检索个股核心概念题材、为什么涨/异动大白话归因与 X (Twitter) 舆情讨论"""
+    import requests
+    from pathlib import Path
+    import sqlite3
+
+    concepts = []
+    try:
+        url = f"https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_F10_CORETHEME_BOARDTYPE&columns=BOARD_NAME,BOARD_TYPE&filter=(SECURITY_CODE%3D%22{symbol}%22)"
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=1.8)
+        if r.status_code == 200:
+            d = r.json()
+            raw_list = [item["BOARD_NAME"] for item in d.get("result", {}).get("data", []) if item.get("BOARD_NAME")]
+            exclude = {"深股通", "融资融券", "富时罗素", "深成500", "浙江板块", "江苏板块", "广东板块", "北京板块", "上海板块", "股权分散", "破增发价股", "小盘股", "小盘成长"}
+            concepts = [c for c in raw_list if c not in exclude][:5]
+    except Exception as e:
+        logger.warning(f"获取 {symbol} 概念异常: {e}")
+
+    if not concepts:
+        concepts = ["前沿高成长赛道", "主力资金轮动概念"]
+
+    concepts_str = "、".join(concepts[:3])
+    is_limit_up = change_pct >= 9.8
+    is_big_rise = change_pct >= 5.0
+
+    if is_limit_up:
+        rise_title = f"🔥 今日封死涨停板 (+{change_pct:.2f}%) 核心主升逻辑"
+        rise_desc = f"受【{concepts_str}】题材爆发催化与量价突破共振。盘口呈现主力资金坚决抢筹封死涨停，突破前期震荡箱体顶部，放量突破形态确立，属于标准的高动量主升启动波段。"
+    elif is_big_rise:
+        rise_title = f"🚀 今日放量大涨 +{change_pct:.2f}% 异动拉升归因"
+        rise_desc = f"受【{concepts_str}】主线板块资金回流与均线多头共振驱动，日内成交量显著放大，短线突破形态良好，具备持续波段攻击动能。"
+    elif change_pct <= -5.0:
+        rise_title = f"⚠️ 今日承压下探 {change_pct:.2f}% 风险排雷提示"
+        rise_desc = f"受短期获利盘兑现与板块轮动分化影响，股价下探回踩均线支撑，需严格执行止损纪律，不可逆势死扛。"
+    else:
+        rise_title = f"📌 当前走势与板块催化透视 ({change_pct:+.2f}%)"
+        rise_desc = f"标的聚焦【{concepts_str}】核心赛道，目前处于蓄势整理与均线均线多空博弈关键期。"
+
+    twitter_hits = []
+    try:
+        db_path = Path(__file__).parent.parent.parent / "data" / "twitter_intel.db"
+        if db_path.exists():
+            conn = sqlite3.connect(db_path)
+            try:
+                c = conn.cursor()
+                query = f"%{name}%"
+                c.execute("SELECT author_name, author_handle, text_translated, created_at, tweet_url FROM twitter_tweets WHERE (text_raw LIKE ? OR text_translated LIKE ? OR text_raw LIKE ?) AND is_noise = 0 ORDER BY id DESC LIMIT 2", (query, query, f"%{symbol}%"))
+                for row in c.fetchall():
+                    twitter_hits.append({
+                        "author_name": row[0],
+                        "author_handle": row[1],
+                        "text": row[2] or "",
+                        "created_at": row[3] or "",
+                        "tweet_url": row[4] or ""
+                    })
+            finally:
+                conn.close()
+    except Exception as e:
+        logger.warning(f"检索推特异常: {e}")
+
+    return {
+        "concepts": concepts,
+        "rise_title": rise_title,
+        "rise_desc": rise_desc,
+        "is_limit_up": is_limit_up,
+        "is_big_rise": is_big_rise,
+        "twitter_hits": twitter_hits
+    }
+
+
 @router.post("/calculate")
 def calculate_trade_levels(req: CalculateRequest, user: Optional[dict] = Depends(get_optional_user)):
     """对单只标的进行即时买卖点、止损、止盈与 1% 风险倒算仓位 (按用户风控隔离，高可用)"""
-    username = user.get("username", "admin") if isinstance(user, dict) else (user or "admin")
+    username = user.get("username", "admin") if isinstance(user, dict) else "admin"
     symbol, name = resolve_symbol(req.symbol)
     if not symbol:
         raise HTTPException(status_code=400, detail=f"未能识别标的代码: {req.symbol}")
@@ -206,8 +281,57 @@ def calculate_trade_levels(req: CalculateRequest, user: Optional[dict] = Depends
     decision.name = real_name
     decision.change_pct = change_pct
 
-    rec_amount = decision.recommended_amount
-    risk_amount = decision.total_risk_amount
+    # 融入六大专属战法引擎算法与历史实操胜率自适应调优
+    from utils.playbook_engine import detect_best_playbook, calculate_playbook_levels, PLAYBOOK_REGISTRY
+    from utils.adaptive_tuner import global_adaptive_tuner
+
+    target_pb_id = req.playbook_id or "auto"
+    if target_pb_id == "auto":
+        target_pb_id = detect_best_playbook(quote, kline)
+
+    pb_stat = global_adaptive_tuner.get_stat(target_pb_id) or {}
+    tuned_pos = pb_stat.get("adaptive_position_pct")
+    tuned_rr = pb_stat.get("adaptive_rr_threshold")
+
+    pb_calc = calculate_playbook_levels(
+        playbook_id=target_pb_id,
+        quote=quote,
+        kline=kline,
+        custom_capital=req.custom_capital,
+        tuned_position_pct=tuned_pos,
+        tuned_rr_threshold=tuned_rr
+    )
+
+    # 包装战法专属信息卡
+    playbook_info = {
+        "playbook_id": pb_calc["playbook_id"],
+        "playbook_name": pb_calc["playbook_name"],
+        "playbook_short_name": pb_calc["playbook_short_name"],
+        "playbook_style": pb_calc["playbook_style"],
+        "rule_rationale": pb_calc["rule_rationale"],
+        "win_rate": pb_stat.get("win_rate", 50.0),
+        "total_count": pb_stat.get("total_count", 0),
+        "win_count": pb_stat.get("win_count", 0),
+        "realized_rr": pb_stat.get("realized_rr", 1.5),
+        "adaptive_status": pb_stat.get("adaptive_status", "normal"),
+        "adaptive_position_pct": pb_calc["position_pct"],
+        "adaptive_rr_threshold": pb_stat.get("adaptive_rr_threshold", 1.5),
+    }
+
+    # 优先使用战法定制买卖点与动态仓位
+    final_buy_low = pb_calc["buy_price_low"]
+    final_buy_high = pb_calc["buy_price_high"]
+    final_p_stop = pb_calc["stop_loss_price"]
+    final_stop_loss_pct = pb_calc["stop_loss_pct"]
+    final_p_target1 = pb_calc["target_price_1"]
+    final_target1_pct = pb_calc["target_profit_pct_1"]
+    final_p_target2 = pb_calc["target_price_2"]
+    final_target2_pct = pb_calc["target_profit_pct_2"]
+    final_rr_ratio = pb_calc["risk_reward_ratio"]
+    final_rec_shares = pb_calc["recommended_shares"]
+    final_rec_amount = pb_calc["recommended_amount"]
+    final_risk_amount = pb_calc["risk_amount"]
+    final_pos_pct = pb_calc["position_pct"]
 
     # 生成包含权威书目、章节出处、长篇原文论述与4步严密推导链条的研报
     from utils.knowledge_base_engine import get_deep_coherent_kb_insight
@@ -217,15 +341,15 @@ def calculate_trade_levels(req: CalculateRequest, user: Optional[dict] = Depends
         stock_code=symbol,
         current_price=price,
         ma5=ma5_val,
-        stop_loss_price=decision.p_stop,
-        stop_loss_pct=decision.stop_loss_pct,
-        target_price=decision.p_target1,
-        target_pct=decision.target1_pct,
-        rr_ratio=decision.rr_ratio
+        stop_loss_price=final_p_stop,
+        stop_loss_pct=final_stop_loss_pct,
+        target_price=final_p_target1,
+        target_pct=final_target1_pct,
+        rr_ratio=final_rr_ratio
     )
 
     # 汇总完整逻辑底稿供打脸对账入库
-    full_coherent_summary = f"{kb_insight['full_coherent_logic']}\n\n【名著出处】{kb_insight['book_title']} · {kb_insight['chapter']}"
+    full_coherent_summary = f"{pb_calc['rule_rationale']}\n\n{kb_insight['full_coherent_logic']}\n\n【名著出处】{kb_insight['book_title']} · {kb_insight['chapter']}"
     is_fallback = bool(quote.get("is_fallback", False))
     return {
         "code": 200,
@@ -236,32 +360,34 @@ def calculate_trade_levels(req: CalculateRequest, user: Optional[dict] = Depends
             "name": decision.name,
             "current_price": decision.current_price,
             "change_pct": decision.change_pct,
-            "buy_price_low": decision.buy_low,
-            "buy_price_high": decision.buy_high,
-            "stop_loss_price": decision.p_stop,
-            "stop_loss_pct": decision.stop_loss_pct,
-            "target_price_1": decision.p_target1,
-            "target_profit_pct_1": decision.target1_pct,
-            "target_price_2": decision.p_target2,
-            "target_profit_pct_2": decision.target2_pct,
-            "risk_reward_ratio": decision.rr_ratio,
-            "recommended_shares": decision.recommended_shares,
-            "recommended_amount": rec_amount,
-            "risk_amount": risk_amount,
+            "buy_price_low": final_buy_low,
+            "buy_price_high": final_buy_high,
+            "stop_loss_price": final_p_stop,
+            "stop_loss_pct": final_stop_loss_pct,
+            "target_price_1": final_p_target1,
+            "target_profit_pct_1": final_target1_pct,
+            "target_price_2": final_p_target2,
+            "target_profit_pct_2": final_target2_pct,
+            "risk_reward_ratio": final_rr_ratio,
+            "recommended_shares": final_rec_shares,
+            "recommended_amount": final_rec_amount,
+            "why_rise": get_stock_catalyst_and_twitter(decision.symbol, decision.name, decision.change_pct, decision.current_price),
+            "risk_amount": final_risk_amount,
+            "position_pct": final_pos_pct,
+            "playbook_info": playbook_info,
             "summary": full_coherent_summary,
             "kb_insight": kb_insight,
-            "buy_low": decision.buy_low,
-            "buy_high": decision.buy_high,
+            "buy_low": final_buy_low,
+            "buy_high": final_buy_high,
             "pin": decision.pin,
-            "p_stop": decision.p_stop,
-            "p_target1": decision.p_target1,
-            "target1_pct": decision.target1_pct,
-            "p_target2": decision.p_target2,
-            "target2_pct": decision.target2_pct,
-            "rr_ratio_t1": decision.rr_ratio_t1,
-            "rr_ratio_t2": decision.rr_ratio_t2,
-            "position_pct": decision.position_pct,
-            "total_risk_amount": risk_amount,
+            "p_stop": final_p_stop,
+            "p_target1": final_p_target1,
+            "target1_pct": final_target1_pct,
+            "p_target2": final_p_target2,
+            "target2_pct": final_target2_pct,
+            "rr_ratio_t1": final_rr_ratio,
+            "rr_ratio_t2": round(final_target2_pct / max(final_stop_loss_pct, 0.1), 2),
+            "total_risk_amount": final_risk_amount,
             "passed_filter": decision.passed_filter,
             "status": decision.status,
             "status_color": decision.status_color,
@@ -270,88 +396,96 @@ def calculate_trade_levels(req: CalculateRequest, user: Optional[dict] = Depends
     }
 
 
+
+@router.get("/glossary")
+def get_trading_laws_and_glossary():
+    """获取五大交易铁律最高宪法与 20+ 个专业行话字典"""
+    return {
+        "code": 200,
+        "laws": get_all_laws(),
+        "glossary": get_all_glossary()
+    }
+
+
+@router.get("/diagnose")
+def diagnose_single_stock(symbol: str, name: Optional[str] = ""):
+    """对任意单只股票或 ETF 进行五大交易铁律全面体检 (含筹码密集峰与上方天花板)"""
+    res = diagnose_stock_by_laws(symbol.strip(), name=name)
+    return res
+
+
 @router.get("/scan")
 def scan_alpha_candidates(user: Optional[dict] = Depends(get_optional_user)):
-    """执行尾盘 14:45 选股全市场扫描 (内置大盘择时过滤，高可用免授权阻断)"""
+    """执行尾盘 14:45 选股全市场大浪淘沙扫描 (五大铁律四级漏斗过滤 + 筹码阻力 + 红黑对比找茬)"""
     from datetime import datetime
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 1. 大盘系统性风险择时过滤 (Market Regime Filter)
-    market_quote = get_realtime_quote("000001") or get_realtime_quote("sh000001")
-    market_change = float(market_quote.get("change_pct", 0.0)) if market_quote else 0.0
-    is_market_weak = market_change <= -1.0
-    market_status = (
-        f"⚠️ 上证指数跌幅达 {market_change}%，触发大盘系统性风险熔断，启动防守机制，暂停激进开仓"
-        if is_market_weak else
-        f"🟢 大盘环境平稳（上证涨跌: {market_change:+.2f}%），量化多因子正常推进"
-    )
-
-    # 预设全市场活跃龙头观察池
-    universe = [
-        ("300024", "机器人"),
-        ("300308", "中际旭创"),
-        ("001330", "博纳影业"),
-        ("601127", "赛力斯"),
-        ("300750", "宁德时代"),
-        ("000977", "浪潮信息"),
-        ("601138", "工业富联"),
-        ("603019", "中科曙光"),
-        ("002594", "比亚迪"),
-    ]
-
+    # 运行大浪淘沙流水线
+    screener_res = screen_by_laws()
+    
+    # 构造向前兼容的 candidates 结构
     candidates = []
-    # 若大盘处于单边暴跌期，直接执行空仓防守，拒绝逆势盲目推票
-    if not is_market_weak:
-        for sym, name in universe:
-            res = _global_alpha_engine.evaluate_stock(sym, name)
-            quote = get_realtime_quote(sym)
-            fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            if res and getattr(res, "passed_filter", True):
-                candidates.append({
-                    "symbol": res.symbol,
-                    "name": res.name,
-                    "current_price": res.current_price,
-                    "change_pct": res.change_pct,
-                    "buy_price_low": res.buy_low,
-                    "buy_price_high": res.buy_high,
-                    "stop_loss_price": res.p_stop,
-                    "stop_loss_pct": res.stop_loss_pct,
-                    "target_price_1": res.p_target1,
-                    "target_profit_pct_1": res.target1_pct,
-                    "target_price_2": res.p_target2,
-                    "target_profit_pct_2": res.target2_pct,
-                    "risk_reward_ratio": res.rr_ratio,
-                    "recommended_shares": res.recommended_shares,
-                    "recommended_amount": res.recommended_amount,
-                    "risk_amount": res.total_risk_amount,
-                    "triggered_rules": res.triggered_rules or ["均线多头排列", "缩量回踩企稳"],
-                    "status": res.status,
-                    "status_color": res.status_color,
-                    "summary": res.reason,
-                    "reason": res.reason,
-                    "data_source": "tencent_official" if quote else "realtime_quote",
-                    "fetched_at": fetched_at,
-                    "quote_available": quote is not None,
-                })
+    for w in screener_res.get("winners", []):
+        sym = w["symbol"]
+        quote = get_realtime_quote(sym)
+        cur_p = w["current_price"]
+        stop_p = w["stop_loss_price"]
+        target_p = w["target_price"]
+        rr = w["risk_reward_ratio"]
+        
+        # 算命定仓 (基于用户真实资产与单笔 R 风险比例动态倒算)
+        cfg = _global_alpha_engine.config
+        risk_r_amt = max(float(getattr(cfg, "total_capital", 100000.0)) * float(getattr(cfg, "risk_r_pct", 0.01) or 0.01), 100.0)
+        risk_gap = max(cur_p - stop_p, 0.01)
+        shares = int((risk_r_amt / risk_gap) // 100 * 100)
+        rec_amt = round(shares * cur_p, 2)
+        
+        candidates.append({
+            "symbol": sym,
+            "name": w["name"],
+            "current_price": cur_p,
+            "change_pct": w["change_pct"],
+            "buy_price_low": cur_p,
+            "buy_price_high": round(cur_p * 1.008, 2),
+            "stop_loss_price": stop_p,
+            "stop_loss_pct": round(((cur_p - stop_p) / cur_p) * 100, 2),
+            "target_price_1": target_p,
+            "target_profit_pct_1": round(((target_p - cur_p) / cur_p) * 100, 2),
+            "target_price_2": round(target_p * 1.08, 2),
+            "target_profit_pct_2": round(((target_p * 1.08 - cur_p) / cur_p) * 100, 2),
+            "risk_reward_ratio": rr,
+            "recommended_shares": shares,
+            "recommended_amount": rec_amt,
+            "risk_amount": 1000.0,
+            "triggered_rules": ["流动性充沛(≥3.5亿)", "大势共振良好", "无密集套牢峰压顶", f"盈亏比{rr}:1优厚"],
+            "status": "BUY",
+            "status_color": "#10B981",
+            "summary": f"通过五大交易铁律检验，头顶阻力空间 {w.get('resistance_margin', 15)}%，攻防比优异",
+            "reason": w.get("chips_desc", "筹码结构优良"),
+            "data_source": "tencent_official" if quote else "realtime_quote",
+            "fetched_at": now_str,
+            "quote_available": quote is not None,
+            "chips_desc": w.get("chips_desc", ""),
+            "resistance_margin": w.get("resistance_margin", 0)
+        })
+
+    market_info = screener_res.get("market_regime", {})
+    market_status = market_info.get("status", "🟢 大盘环境平稳")
 
     return {
         "code": 200,
         "updated_at": now_str,
-        "market_regime": "defensive" if is_market_weak else "offensive",
         "market_status": market_status,
-        "market_change_pct": market_change,
-        "passed_count": len(candidates),
-        "total": len(candidates),
-        "results": candidates,
+        "is_market_weak": market_info.get("is_meltdown", False),
         "candidates": candidates,
-        "card": {
-            "markdown": {
-                "text": f"### 🎯 尾盘 14:45 决战简报 ({now_str})\n"
-                        f"- 共筛选出 **{len(candidates)}** 只待执行标的\n"
-                        + "\n".join([f"• **{c['name']}** ({c['symbol']}): 现价 ¥{c['current_price']:.2f}, 建议买入区间 ¥{c['buy_price_low']:.2f}~¥{c['buy_price_high']:.2f}, 止损价 ¥{c['stop_loss_price']:.2f}, 盈亏比 {c['risk_reward_ratio']}:1" for c in candidates])
-            }
-        }
+        "funnel_stats": screener_res.get("funnel_stats", {}),
+        "red_black_arena": screener_res.get("red_black_arena", {}),
+        "empty_defense_badge": screener_res.get("empty_defense_badge", {}),
+        "total_scanned": screener_res.get("total_start", 0),
+        "total_candidates": len(candidates),
+        "tips": "尾盘 14:45 确认信号，严格执行 1% 风险头寸纪律与防守止损"
     }
+
 
 
 @router.post("/push-alert")
@@ -397,16 +531,26 @@ def get_daily_action_plan(user: Optional[dict] = Depends(get_optional_user)):
             portfolio_store.load("default")
         raw_positions = portfolio_store.positions or {}
         
-        # 默认展示标准持仓或从真实持仓提取
-        if not raw_positions:
-            default_demo_positions = {
-                "600519": {"symbol": "600519", "name": "贵州茅台", "shares": 300, "cost_price": 1420.0},
-                "300750": {"symbol": "300750", "name": "宁德时代", "shares": 800, "cost_price": 185.0}
-            }
+        # 优先从用户实盘读取持仓，若为空则联动全真模拟盘持仓，绝不虚构假持仓数据
+        target_positions = {}
+        if raw_positions:
+            target_positions = raw_positions
         else:
-            default_demo_positions = raw_positions
+            try:
+                from services.paper_portfolio_service import paper_portfolio_service
+                paper_status = paper_portfolio_service.get_portfolio_status()
+                for p in paper_status.get("positions", []):
+                    target_positions[p["code"]] = {
+                        "symbol": p["code"],
+                        "name": p["name"],
+                        "shares": p["shares"],
+                        "cost_price": p["entry_price"]
+                    }
+            except Exception as _pe_err:
+                logger.warning(f"联动模拟盘持仓异常: {_pe_err}")
+                target_positions = {}
 
-        for sym, pos in default_demo_positions.items():
+        for sym, pos in target_positions.items():
             cost_p = getattr(pos, "cost_price", None) if not isinstance(pos, dict) else pos.get("cost_price")
             pos_name = getattr(pos, "name", None) if not isinstance(pos, dict) else pos.get("name")
             pos_shares = getattr(pos, "shares", None) if not isinstance(pos, dict) else pos.get("shares")

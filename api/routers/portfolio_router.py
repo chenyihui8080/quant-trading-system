@@ -8,8 +8,9 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import re
+import requests
 
-from utils.auth import get_current_user
+from utils.auth import get_current_user, get_optional_user
 from utils.portfolio_advisor import portfolio_store
 from utils.realtime import get_realtime_quote
 from utils.database import log_audit
@@ -47,10 +48,10 @@ from utils.realtime import get_realtime_quote
 from utils.auth import get_current_user, get_optional_user
 
 @router.get("/api/portfolio/list")
-def get_portfolio_list(user: Optional[dict] = Depends(get_optional_user)):
-    """获取用户全部实盘持仓、量化深度诊断及实时财务统计 (单次并发批量极速版)"""
+def get_portfolio_list(user: dict = Depends(get_current_user)):
+    """获取用户全部实盘持仓、量化深度诊断及实时财务统计 (需登录)"""
     try:
-        username = user.get("username", "admin") if isinstance(user, dict) else "admin"
+        username = user.get("username", "admin")
         portfolio_store.load(username)
 
         # 1. 一次性打包收集持仓与自选的所有代码
@@ -67,21 +68,53 @@ def get_portfolio_list(user: Optional[dict] = Depends(get_optional_user)):
         summary_info = portfolio_advisor.get_portfolio_summary(preloaded_quotes=quotes_dict)
         positions_data = [d.__dict__ for d in diagnose_list]
 
-        # 4. 组装自选池数据
+        # 4. 组装自选池数据 (联动推特大V热评与多维共振)
+        sym_name_map = {}
+        for sym, w in portfolio_store.watchlist.items():
+            sym_name_map[str(sym).strip()] = (w.name or "").strip()
+
+        twitter_summaries = {}
+        try:
+            from utils.twitter_monitor import global_twitter_monitor
+            twitter_summaries = global_twitter_monitor.get_watchlist_twitter_summary(sym_name_map)
+        except Exception:
+            pass
+
         watchlist_data = []
         for sym, w in portfolio_store.watchlist.items():
-            q = quotes_dict.get(sym) or {}
+            clean_sym = str(sym).strip()
+            q = quotes_dict.get(clean_sym) or {}
             current_price = float(q.get("price", 0.0)) if q else (w.current_price or 0.0)
             change_pct = float(q.get("change_pct", 0.0)) if q else (w.change_pct or 0.0)
-            name = (q.get("name") if q and q.get("name") else w.name) or sym
-            
+            name = (q.get("name") if q and q.get("name") else w.name) or clean_sym
+
+            tw_data = twitter_summaries.get(clean_sym, {"hits_count": 0, "latest_tweet": None})
+            hits_cnt = tw_data.get("hits_count", 0)
+            latest_tw = tw_data.get("latest_tweet")
+
+            from utils.stock_movement_profiler import analyze_stock_movement
+            profiler_res = analyze_stock_movement(clean_sym, name, change_pct, current_price, hits_cnt)
+            status_tag = profiler_res["status_tag"]
+            status_tag_type = profiler_res["status_tag_type"]
+            movement_reason = profiler_res["reason"]
+            concept = profiler_res["concept"]
+            is_resonance = profiler_res["is_resonance"]
+
             watchlist_data.append({
-                "symbol": sym,
+                "symbol": clean_sym,
                 "name": name,
                 "current_price": current_price,
                 "change_pct": change_pct,
                 "add_date": getattr(w, "add_date", ""),
-                "notes": getattr(w, "notes", "自选监控") or "自选监控"
+                "notes": getattr(w, "notes", "自选监控") or "自选监控",
+                "twitter_hits_count": hits_cnt,
+                "latest_tweet": latest_tw,
+                "is_resonance": is_resonance,
+                "resonance_tag": status_tag,
+                "status_tag": status_tag,
+                "status_tag_type": status_tag_type,
+                "movement_reason": movement_reason,
+                "concept": concept
             })
 
         history_trades = getattr(portfolio_store, "history_trades", []) or []
@@ -269,84 +302,180 @@ def set_portfolio_capital(req: CapitalSetRequest, user: dict = Depends(get_curre
 
 
 @router.get("/api/portfolio/watchlist")
-def get_watchlist(user: dict = Depends(get_current_user)):
-    """获取自选监控池"""
+def get_watchlist(user: Optional[dict] = Depends(get_optional_user)):
+    """获取自选监控池 (深度联动推特大V热评舆情与多维共振信号)"""
     try:
-        username = user.get("username", "admin") if isinstance(user, dict) else str(user)
+        username = "admin"
+        if user and isinstance(user, dict):
+            username = user.get("username") or "admin"
         portfolio_store.load(username)
+
+        sym_name_map = {}
+        for sym, w in portfolio_store.watchlist.items():
+            sym_name_map[str(sym).strip()] = (w.name or "").strip()
+
+        twitter_summaries = {}
+        try:
+            from utils.twitter_monitor import global_twitter_monitor
+            twitter_summaries = global_twitter_monitor.get_watchlist_twitter_summary(sym_name_map)
+        except Exception:
+            pass
+
         items = []
         for sym, w in portfolio_store.watchlist.items():
-            q = get_realtime_quote(sym)
+            clean_sym = str(sym).strip()
+            q = get_realtime_quote(clean_sym)
+            c_price = float(q.get("price", 0)) if q else 0.0
+            chg_pct = float(q.get("change_pct", 0)) if q else 0.0
+            name_val = w.name or (q.get("name") if q else clean_sym)
+
+            tw_data = twitter_summaries.get(clean_sym, {"hits_count": 0, "latest_tweet": None})
+            hits_cnt = tw_data.get("hits_count", 0)
+            latest_tw = tw_data.get("latest_tweet")
+
+            from utils.stock_movement_profiler import analyze_stock_movement
+            profiler_res = analyze_stock_movement(clean_sym, name_val, chg_pct, c_price, hits_cnt)
+            status_tag = profiler_res["status_tag"]
+            status_tag_type = profiler_res["status_tag_type"]
+            movement_reason = profiler_res["reason"]
+            concept = profiler_res["concept"]
+            is_resonance = profiler_res["is_resonance"]
+
             items.append({
-                "symbol": sym,
-                "name": w.name or (q.get("name") if q else sym),
-                "current_price": float(q.get("price", 0)) if q else 0.0,
-                "change_pct": float(q.get("change_pct", 0)) if q else 0.0,
-                "notes": w.notes or "自选监控"
+                "symbol": clean_sym,
+                "name": name_val,
+                "current_price": c_price,
+                "change_pct": chg_pct,
+                "notes": w.notes or "自选监控",
+                "twitter_hits_count": hits_cnt,
+                "latest_tweet": latest_tw,
+                "is_resonance": is_resonance,
+                "resonance_tag": status_tag,
+                "status_tag": status_tag,
+                "status_tag_type": status_tag_type,
+                "movement_reason": movement_reason,
+                "concept": concept
             })
         return {"code": 200, "data": items}
     except Exception as e:
         return {"code": 500, "detail": str(e)}
 
 
-@router.post("/api/portfolio/parse-free-text")
-def parse_free_text(payload: FreeTextInput, user: dict = Depends(get_current_user)):
-    """自由自然语言文本持仓极速识别与入库"""
-    from utils.text_holding_parser import parse_holding_text
+# ==================== 5 个持仓/自选多源导入与一键管理端点 ====================
+from fastapi import UploadFile, File
+from utils.broker_importer import broker_importer, ImageParser
+
+
+class CubeSyncRequest(BaseModel):
+    cube_symbol: str
+
+
+@router.post("/api/portfolio/clear")
+def clear_portfolio_data(user: dict = Depends(get_current_user)):
+    """一键清空用户当前的持仓、自选及流水明细"""
     try:
-        results = parse_holding_text(payload.text, payload.target_type)
-        return {"code": 200, "message": f"成功识别并导入 {len(results)} 条标的", "data": results}
+        username = user.get("username", "admin") if isinstance(user, dict) else str(user)
+        portfolio_store.load(username)
+        portfolio_store.positions.clear()
+        portfolio_store.watchlist.clear()
+        portfolio_store.history_trades = []
+        portfolio_store.save(force=True)
+        log_audit(username, "clear_portfolio", "一键清空全部持仓与自选")
+        return {"code": 200, "status": "success", "message": "已成功清空当前全部持仓与自选数据！"}
     except Exception as e:
-        return {"code": 500, "detail": f"解析异常: {str(e)}"}
+        return {"code": 500, "detail": f"清空持仓数据失败: {str(e)}"}
+
+
+@router.post("/api/portfolio/parse-text")
+def parse_portfolio_text(req: FreeTextInput, user: dict = Depends(get_current_user)):
+    """自然语言自由文本/聊天记录智能语义提取持仓或自选标的"""
+    try:
+        text = (req.text or "").strip()
+        if not text:
+            return {"code": 400, "detail": "请输入有效的文本内容", "items": []}
+        
+        parsed = broker_importer.parse_free_text(text)
+        return {
+            "code": 200,
+            "status": "success",
+            "raw_text": text,
+            "parsed_count": len(parsed),
+            "items": parsed
+        }
+    except Exception as e:
+        return {"code": 500, "detail": f"语义提取失败: {str(e)}", "items": []}
+
+
+@router.post("/api/portfolio/import-file")
+async def import_portfolio_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """券商 Excel / CSV 导出的持仓表格秒级自动解析"""
+    try:
+        file_bytes = await file.read()
+        filename = file.filename or "portfolio.xlsx"
+        parsed = broker_importer.parse_excel_or_csv(file_bytes, filename)
+        return {
+            "code": 200,
+            "status": "success",
+            "filename": filename,
+            "parsed_count": len(parsed),
+            "items": parsed
+        }
+    except Exception as e:
+        return {"code": 400, "detail": f"表格解析失败: {str(e)}", "items": []}
 
 
 @router.post("/api/portfolio/upload-image")
-async def upload_portfolio_image(request: Request, user: dict = Depends(get_current_user)):
-    """上传券商持仓/交割单截图并智能提取股票持仓 (原生Request无依赖模式)"""
+async def upload_portfolio_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """券商 App 持仓截屏高精度 OCR 识别与量化反推"""
     try:
-        content = await request.body()
-        raw_text = ""
-        items = []
+        file_bytes = await file.read()
+        raw_text = ImageParser.extract_text_from_image(file_bytes)
+        items = ImageParser.parse_holding_text(raw_text) if raw_text else []
+        return {
+            "code": 200,
+            "status": "success",
+            "filename": file.filename or "screenshot.png",
+            "raw_text": raw_text or "（图片文字清晰度较低或未安装OCR引擎）",
+            "parsed_count": len(items),
+            "items": items
+        }
+    except Exception as e:
+        return {"code": 400, "detail": f"图片识别失败: {str(e)}", "items": []}
 
-        # 尝试使用 OCR
+
+@router.post("/api/portfolio/sync-cube")
+def sync_portfolio_cube(req: CubeSyncRequest, user: dict = Depends(get_current_user)):
+    """雪球/同花顺实盘投资组合 (Cube) 只读直连同步"""
+    try:
+        cube_code = (req.cube_symbol or "").strip().upper()
+        if not cube_code:
+            return {"code": 400, "detail": "组合代码不能为空"}
+        
+        # 兼容模拟组合或从公开数据解析
+        items = []
         try:
-            import io
-            from PIL import Image
-            img = Image.open(io.BytesIO(content))
-            
-            try:
-                import pytesseract
-                raw_text = pytesseract.image_to_string(img, lang='chi_sim+eng')
-            except Exception:
-                pass
-                
-            if not raw_text:
-                try:
-                    import easyocr
-                    import numpy as np
-                    reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
-                    results = reader.readtext(np.array(img))
-                    raw_text = "\n".join([r[1] for r in results])
-                except Exception:
-                    pass
+            # 尝试从雪球开放页抓取公开组合配比
+            headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+            r = requests.get(f"https://xueqiu.com/service/v5/stock/portfolio/stock/list?cube_symbol={cube_code}", headers=headers, timeout=5)
+            if r.status_code == 200:
+                d = r.json()
+                for stock in d.get("data", {}).get("stocks", []):
+                    items.append({
+                        "symbol": stock.get("stock_symbol", "").replace("SH", "").replace("SZ", ""),
+                        "name": stock.get("stock_name", ""),
+                        "shares": 1000,
+                        "cost_price": float(stock.get("price", 0.0) or 0.0)
+                    })
         except Exception:
             pass
 
-        if raw_text and raw_text.strip():
-            from utils.text_holding_parser import parse_holding_text
-            items = parse_holding_text(raw_text, target_type="position")
-
         return {
             "code": 200,
-            "items": items,
-            "raw_text": raw_text or "（图片已接收，建议直接使用【文本极速识别】粘贴文字）"
+            "status": "success",
+            "cube_symbol": cube_code,
+            "parsed_count": len(items),
+            "items": items
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "detail": f"图片识别处理异常: {str(e)}",
-            "items": [],
-            "raw_text": ""
-        }
-
+        return {"code": 500, "detail": f"同步组合失败: {str(e)}"}
 

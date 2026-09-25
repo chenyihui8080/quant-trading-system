@@ -112,7 +112,7 @@ class AlphaEngine:
     ) -> TradeDecisionResult:
         """根据当前价格、K线形态与风控规则计算完整的买卖点、止损、止盈与 1% 风险倒算股数"""
         cfg = self.config
-        capital = custom_capital or cfg.total_capital
+        capital = custom_capital if custom_capital is not None else cfg.total_capital
 
         if current_price <= 0:
             current_price = 10.0

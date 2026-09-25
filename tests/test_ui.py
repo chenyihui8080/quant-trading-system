@@ -12,7 +12,7 @@ import pytest
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "..", "screenshots")
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-BASE_URL = "http://localhost:18000"
+BASE_URL = f"http://localhost:{os.getenv('PORT', '8000')}"
 
 
 def shot(page, name):
